@@ -26,15 +26,7 @@ const TOKENS = {
   MANA:  { address: "0xA1c57f48F0Deb89f569dFbE6E2B7f46D33606fD4", decimals: 18, color: "mana",  nome: "MANA" },
 };
 
-const PARES_FILTRO = [
-  { key: "todas",    label: "🌐 Todas" },
-  { key: "brn-usdc", label: "BRN ⇄ USDC" },
-  { key: "brn-usdt", label: "BRN ⇄ USDT" },
-  { key: "brn-dai",  label: "BRN ⇄ DAI"  },
-  { key: "brn-weth", label: "BRN ⇄ WETH" },
-  { key: "brn-wbtc", label: "BRN ⇄ WBTC" },
-  { key: "brn-link", label: "BRN ⇄ LINK" },
-];
+const FILTRO_TOKENS = ["todas", "BRN", "USDC", "USDT", "DAI", "WETH", "WBTC", "LINK", "MATIC", "AAVE", "UNI", "CRV", "SUSHI", "GRT", "BAL", "COMP", "MKR", "SAND", "MANA"];
 
 const RPCS = [
   "https://polygon-bor-rpc.publicnode.com",
@@ -185,8 +177,20 @@ async function carregarMural() {
 
 function renderFiltros() {
   const el = $("filtros"); if (!el) return;
-  el.innerHTML = PARES_FILTRO.map(function(p) {
-    return '<button class="filtro ' + (filtroAtual === p.key ? "active" : "") + '" data-filtro="' + p.key + '">' + p.label + '</button>';
+  const ativos = ordersCache.filter(function(o) { return !o.erro && !o.executado && !o.cancelado; });
+  el.innerHTML = FILTRO_TOKENS.map(function(k) {
+    let label = k === "todas" ? "🌐 Todas" : k;
+    let count = 0;
+    if (k !== "todas") {
+      const addr = TOKENS[k] && TOKENS[k].address.toLowerCase();
+      if (addr) count = ativos.filter(function(o) {
+        return o.tokenOferecido.toLowerCase() === addr || o.tokenDesejado.toLowerCase() === addr;
+      }).length;
+    } else {
+      count = ativos.length;
+    }
+    if (k !== "todas" && count === 0) return "";
+    return '<button class="filtro ' + (filtroAtual === k ? "active" : "") + '" data-filtro="' + k + '">' + label + ' (' + count + ')</button>';
   }).join("");
   el.querySelectorAll(".filtro").forEach(function(b) {
     b.addEventListener("click", function() {
@@ -201,15 +205,11 @@ function renderMural() {
   const box = $("orders"), counter = $("counter");
   if (!box) return;
   const validas = ordersCache.filter(function(o) { return !o.erro; });
-  let filtradas = validas;
+    let filtradas = validas;
   if (filtroAtual !== "todas") {
-    const parts = filtroAtual.split("-");
-    const a = parts[0].toUpperCase(), b = parts[1].toUpperCase();
-    const addrA = TOKENS[a] && TOKENS[a].address.toLowerCase();
-    const addrB = TOKENS[b] && TOKENS[b].address.toLowerCase();
-    filtradas = validas.filter(function(o) {
-      const of = o.tokenOferecido.toLowerCase(), de = o.tokenDesejado.toLowerCase();
-      return (of === addrA && de === addrB) || (of === addrB && de === addrA);
+    const addr = TOKENS[filtroAtual] && TOKENS[filtroAtual].address.toLowerCase();
+    if (addr) filtradas = validas.filter(function(o) {
+      return o.tokenOferecido.toLowerCase() === addr || o.tokenDesejado.toLowerCase() === addr;
     });
   }
   if (!filtradas.length) {
