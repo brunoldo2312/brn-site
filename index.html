@@ -6,7 +6,7 @@
 <title>BRN — Carteira & Trocas</title>
 <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 <style>
-:root { color-scheme: dark; --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --brn:#f5d000; --usdc:#2775ca; --usdt:#26a17b; --ok:#3fb950; --err:#f85149; --warn:#d29922; }
+:root { color-scheme: dark; --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --brn:#f5d000; --usdc:#2775ca; --usdt:#26a17b; --dai:#f5ac37; --weth:#627eea; --wbtc:#f09242; --link:#2a5ada; --ok:#3fb950; --err:#f85149; --warn:#d29922; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 20px; line-height: 1.5; }
 .container { max-width: 900px; margin: 0 auto; }
@@ -26,15 +26,20 @@ header p { color: var(--muted); margin-top: 5px; }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
 .card h2 { font-size: 1.1rem; margin-bottom: 15px; color: var(--brn); }
 .wallet-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
-.wallet-info { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
-.addr { font-family: monospace; font-size: 0.9rem; color: var(--muted); }
-.balance { font-weight: 600; font-size: 0.9rem; }
-.balance span { color: var(--brn); }
+.wallet-info { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
+.addr { font-family: monospace; font-size: 0.85rem; color: var(--muted); }
+.balance { font-weight: 600; font-size: 0.85rem; }
+.balance span { color: inherit; }
+.balance.brn span { color: var(--brn); }
 .balance.usdc span { color: var(--usdc); }
 .balance.usdt span { color: var(--usdt); }
+.balance.dai span { color: var(--dai); }
+.balance.weth span { color: var(--weth); }
+.balance.wbtc span { color: var(--wbtc); }
+.balance.link span { color: var(--link); }
 .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
-input, button { padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.95rem; }
-input:focus { outline: none; border-color: var(--brn); }
+input, select, button { padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.95rem; }
+input:focus, select:focus { outline: none; border-color: var(--brn); }
 input[type="number"], input[type="text"] { flex: 1; min-width: 140px; }
 button { cursor: pointer; font-weight: 500; transition: all 0.2s; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -46,9 +51,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-sm { padding: 6px 10px; font-size: 0.85rem; }
 .btn-refresh { background: transparent; border-color: var(--muted); color: var(--muted); }
 .hint { margin-top: 10px; padding: 8px 12px; background: rgba(39,117,202,0.1); border-radius: 6px; font-size: 0.9rem; color: var(--usdc); }
-.hint-usdt { background: rgba(38,161,123,0.1); color: var(--usdt); }
 .rate-info { margin-top: 10px; padding: 8px 12px; background: rgba(245,208,0,0.1); border-radius: 6px; font-size: 0.9rem; display: none; }
 .counter { margin-bottom: 15px; font-size: 0.95rem; color: var(--muted); }
+.filtros { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 15px; }
+.filtro { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; font-size: 0.85rem; }
+.filtro.active { background: var(--brn); color: #000; border-color: var(--brn); font-weight: 600; }
 .order { border: 1px solid var(--border); border-radius: 8px; padding: 15px; margin-bottom: 12px; background: rgba(0,0,0,0.15); transition: border-color 0.2s; }
 .order:hover { border-color: var(--brn); }
 .order.cancelled { opacity: 0.6; }
@@ -61,10 +68,14 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .tag.cancelled { background: rgba(248,81,73,0.15); color: var(--err); }
 .swap { display: flex; align-items: center; justify-content: space-around; text-align: center; margin: 15px 0; }
 .side .lbl { font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
-.amt { font-size: 1.3rem; font-weight: 700; }
+.amt { font-size: 1.2rem; font-weight: 700; }
 .amt.brn { color: var(--brn); }
 .amt.usdc { color: var(--usdc); }
 .amt.usdt { color: var(--usdt); }
+.amt.dai { color: var(--dai); }
+.amt.weth { color: var(--weth); }
+.amt.wbtc { color: var(--wbtc); }
+.amt.link { color: var(--link); }
 .arrow { font-size: 1.5rem; color: var(--muted); }
 .order-meta { display: flex; justify-content: space-between; flex-wrap: wrap; font-size: 0.8rem; color: var(--muted); margin: 10px 0; }
 .order-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
@@ -78,15 +89,15 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .toast.err { border-left: 4px solid var(--err); }
 .toast.warn { border-left: 4px solid var(--warn); }
 .toast.info { border-left: 4px solid var(--usdc); }
-.contract-info { margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.15); border-radius: 8px; font-size: 0.8rem; color: var(--muted); }
-.contract-info code { font-family: monospace; font-size: 0.75rem; }
+.contract-info { margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.15); border-radius: 8px; font-size: 0.78rem; color: var(--muted); line-height: 1.7; }
+.contract-info code { font-family: monospace; font-size: 0.72rem; }
 </style>
 </head>
 <body>
 <div class="container">
   <header>
     <h1>🔄 BRN — Carteira & Trocas</h1>
-    <p>Troque BRN ⇄ USDC ou BRN ⇄ USDT na blockchain Polygon</p>
+    <p>Troque BRN por USDC, USDT, DAI, WETH, WBTC ou LINK na Polygon</p>
     <div class="net-status">
       <div id="netDot" class="dot load"></div>
       <span id="netText">Conectando…</span>
@@ -101,74 +112,63 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
       </div>
       <div id="walletInfo" class="wallet-info" style="display:none;">
         <span class="addr" id="addr"></span>
-        <span class="balance"><span id="balBRN">—</span> BRN</span>
-        <span class="balance usdc"><span id="balUSDC">—</span> USDC</span>
-        <span class="balance usdt"><span id="balUSDT">—</span> USDT</span>
+        <span id="balances"></span>
       </div>
     </div>
   </div>
 
   <div class="tabs">
-    <button class="tab active" data-tab="brn-usdc">🟡 Mural BRN ⇄ USDC</button>
-    <button class="tab" data-tab="usdt-brn">🟢 Mural USDT ⇄ BRN</button>
+    <button class="tab active" data-tab="mural">📋 Mural</button>
+    <button class="tab" data-tab="criar">➕ Criar Ordem</button>
     <button class="tab" data-tab="send">📤 Enviar BRN</button>
   </div>
 
-  <!-- ========== MURAL 1: BRN ⇄ USDC ========== -->
-  <div class="tab-content active" id="tab-brn-usdc">
-    <div class="card">
-      <h2>🟡 Criar ordem de venda de BRN</h2>
-      <p class="hint">Você oferece <b>BRN</b> e pede <b>USDC</b>. Os BRN ficam travados no contrato até alguém executar ou você cancelar.</p>
-      <div class="form-row">
-        <input type="number" id="inBRN1" placeholder="Oferece (BRN)" step="0.0001" min="0">
-        <input type="number" id="inUSDC1" placeholder="Pede (USDC)" step="0.0001" min="0">
-      </div>
-      <div class="form-row">
-        <button id="btnApprove1" disabled>✅ Aprovar BRN</button>
-        <button id="btnCreate1" class="btn-primary" disabled>📤 Criar Ordem</button>
-      </div>
-      <div id="rate1" class="rate-info"></div>
-    </div>
+  <div class="tab-content active" id="tab-mural">
     <div class="card">
       <div class="wallet-bar">
-        <h2>📋 Ordens BRN ⇄ USDC</h2>
-        <button id="btnRefresh1" class="btn-refresh">🔄 Atualizar</button>
+        <h2>📋 Mural de Ordens</h2>
+        <button id="btnRefresh" class="btn-refresh">🔄 Atualizar</button>
       </div>
-      <div class="counter" id="counter1">⏳ Consultando blockchain…</div>
-      <div id="orders1"></div>
+      <div class="filtros" id="filtros"></div>
+      <div class="counter" id="counter">⏳ Consultando blockchain…</div>
+      <div id="orders"></div>
     </div>
   </div>
 
-  <!-- ========== MURAL 2: USDT ⇄ BRN ========== -->
-  <div class="tab-content" id="tab-usdt-brn">
+  <div class="tab-content" id="tab-criar">
     <div class="card">
-      <h2>🟢 Criar ordem de venda de USDT</h2>
-      <p class="hint hint-usdt">Você oferece <b>USDT</b> e pede <b>BRN</b>. Os USDT ficam travados no contrato até alguém executar ou você cancelar.</p>
+      <h2>➕ Criar Ordem de Troca</h2>
+      <p class="hint">Você oferece um token e pede outro. Os tokens oferecidos ficam travados no contrato até alguém executar ou você cancelar.</p>
       <div class="form-row">
-        <input type="number" id="inUSDT2" placeholder="Oferece (USDT)" step="0.0001" min="0">
-        <input type="number" id="inBRN2" placeholder="Pede (BRN)" step="0.0001" min="0">
+        <div style="flex:1;">
+          <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:4px;">Ofereço</label>
+          <select id="selOferece" style="width:100%;"></select>
+        </div>
+        <div style="flex:1;">
+          <input type="number" id="inOferece" placeholder="Quantidade" step="0.0001" min="0">
+        </div>
       </div>
       <div class="form-row">
-        <button id="btnApprove2" disabled>✅ Aprovar USDT</button>
-        <button id="btnCreate2" class="btn-primary" disabled>📤 Criar Ordem</button>
+        <div style="flex:1;">
+          <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:4px;">Quero receber</label>
+          <select id="selQuero" style="width:100%;"></select>
+        </div>
+        <div style="flex:1;">
+          <input type="number" id="inQuero" placeholder="Quantidade" step="0.0001" min="0">
+        </div>
       </div>
-      <div id="rate2" class="rate-info"></div>
-    </div>
-    <div class="card">
-      <div class="wallet-bar">
-        <h2>📋 Ordens USDT ⇄ BRN</h2>
-        <button id="btnRefresh2" class="btn-refresh">🔄 Atualizar</button>
+      <div class="form-row">
+        <button id="btnApprove" disabled>✅ Aprovar</button>
+        <button id="btnCreate" class="btn-primary" disabled>📤 Criar Ordem</button>
       </div>
-      <div class="counter" id="counter2">⏳ Consultando blockchain…</div>
-      <div id="orders2"></div>
+      <div id="rateInfo" class="rate-info"></div>
     </div>
   </div>
 
-  <!-- ========== ENVIAR BRN ========== -->
   <div class="tab-content" id="tab-send">
     <div class="card">
       <h2>📤 Transferir BRN</h2>
-      <p class="hint">Envie BRN diretamente de sua carteira para qualquer endereço Polygon.</p>
+      <p class="hint">Envie BRN diretamente para qualquer endereço Polygon.</p>
       <div class="form-row" style="flex-direction: column; align-items: stretch;">
         <input type="text" id="destAddress" placeholder="Endereço de destino (ex: 0x...)">
         <input type="number" id="sendAmount" placeholder="Quantidade de BRN" step="0.0001" min="0">
@@ -182,9 +182,13 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   <div class="contract-info">
     <strong>📌 Endereços:</strong><br>
     Escrow Factory: <code>0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8</code><br>
-    Token BRN: <code>0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210</code><br>
-    Token USDC: <code>0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174</code><br>
-    Token USDT: <code>0xc2132D05D31c914a87C6611C10748AEb04B58e8F</code>
+    BRN:  <code>0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210</code> (18)<br>
+    USDC: <code>0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174</code> (6)<br>
+    USDT: <code>0xc2132D05D31c914a87C6611C10748AEb04B58e8F</code> (6)<br>
+    DAI:  <code>0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063</code> (18)<br>
+    WETH: <code>0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619</code> (18)<br>
+    WBTC: <code>0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6</code> (8)<br>
+    LINK: <code>0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39</code> (18)
   </div>
 </div>
 
