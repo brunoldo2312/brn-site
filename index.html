@@ -3,219 +3,495 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BRN — Carteira & Trocas</title>
+<title>BRN DApp — Polygon</title>
 <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 <style>
-:root { color-scheme: dark; --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --brn:#f5d000; --usdc:#2775ca; --usdt:#26a17b; --dai:#f5ac37; --weth:#627eea; --wbtc:#f09242; --link:#2a5ada; --ok:#3fb950; --err:#f85149; --warn:#d29922; }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 20px; line-height: 1.5; }
-.container { max-width: 900px; margin: 0 auto; }
-header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
-header h1 { font-size: 1.8rem; color: var(--brn); }
-header p { color: var(--muted); margin-top: 5px; }
-.net-status { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; font-size: 0.9rem; color: var(--muted); }
-.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); }
-.dot.off { background: var(--err); }
-.dot.load { background: var(--warn); animation: pulse 1s infinite; }
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-.tabs { display: flex; gap: 5px; margin-bottom: 20px; border-bottom: 1px solid var(--border); overflow-x: auto; }
-.tab { padding: 10px 20px; background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 0.95rem; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
-.tab.active { color: var(--brn); border-bottom-color: var(--brn); }
-.tab-content { display: none; }
-.tab-content.active { display: block; }
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
-.card h2 { font-size: 1.1rem; margin-bottom: 15px; color: var(--brn); }
-.wallet-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
-.wallet-info { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
-.addr { font-family: monospace; font-size: 0.85rem; color: var(--muted); }
-.balance { font-weight: 600; font-size: 0.85rem; }
-.balance span { color: inherit; }
-.balance.brn span { color: var(--brn); }
-.balance.usdc span { color: var(--usdc); }
-.balance.usdt span { color: var(--usdt); }
-.balance.dai span { color: var(--dai); }
-.balance.weth span { color: var(--weth); }
-.balance.wbtc span { color: var(--wbtc); }
-.balance.link span { color: var(--link); }
-.form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
-input, select, button { padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.95rem; }
-input:focus, select:focus { outline: none; border-color: var(--brn); }
-input[type="number"], input[type="text"] { flex: 1; min-width: 140px; }
-button { cursor: pointer; font-weight: 500; transition: all 0.2s; }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: var(--brn); color: #000; border: none; }
-.btn-primary:hover:not(:disabled) { filter: brightness(0.9); }
-.btn-send { background: var(--ok); color: #000; border: none; }
-.btn-ok { background: var(--ok); color: #000; border: none; }
-.btn-err { background: var(--err); color: #fff; border: none; }
-.btn-sm { padding: 6px 10px; font-size: 0.85rem; }
-.btn-refresh { background: transparent; border-color: var(--muted); color: var(--muted); }
-.hint { margin-top: 10px; padding: 8px 12px; background: rgba(39,117,202,0.1); border-radius: 6px; font-size: 0.9rem; color: var(--usdc); }
-.rate-info { margin-top: 10px; padding: 8px 12px; background: rgba(245,208,0,0.1); border-radius: 6px; font-size: 0.9rem; display: none; }
-.counter { margin-bottom: 15px; font-size: 0.95rem; color: var(--muted); }
-.filtros { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 15px; }
-.filtro { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; font-size: 0.85rem; }
-.filtro.active { background: var(--brn); color: #000; border-color: var(--brn); font-weight: 600; }
-.order { border: 1px solid var(--border); border-radius: 8px; padding: 15px; margin-bottom: 12px; background: rgba(0,0,0,0.15); transition: border-color 0.2s; }
-.order:hover { border-color: var(--brn); }
-.order.cancelled { opacity: 0.6; }
-.order.done { opacity: 0.7; border-style: dashed; }
-.order-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.order-id { font-family: monospace; font-size: 0.85rem; color: var(--muted); }
-.tag { padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
-.tag.active { background: rgba(63,185,80,0.15); color: var(--ok); }
-.tag.done { background: rgba(39,117,202,0.15); color: var(--usdc); }
-.tag.cancelled { background: rgba(248,81,73,0.15); color: var(--err); }
-.swap { display: flex; align-items: center; justify-content: space-around; text-align: center; margin: 15px 0; }
-.side .lbl { font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
-.amt { font-size: 1.2rem; font-weight: 700; }
-.amt.brn { color: var(--brn); }
-.amt.usdc { color: var(--usdc); }
-.amt.usdt { color: var(--usdt); }
-.amt.dai { color: var(--dai); }
-.amt.weth { color: var(--weth); }
-.amt.wbtc { color: var(--wbtc); }
-.amt.link { color: var(--link); }
-
-.balance.matic span { color: #8247E5; }
-.balance.aave span  { color: #B6509E; }
-.balance.uni span   { color: #FF007A; }
-.balance.crv span   { color: #3465A4; }
-.balance.sushi span { color: #FA52A0; }
-.balance.grt span   { color: #6747ED; }
-.balance.bal span   { color: #888888; }
-.balance.comp span  { color: #00D395; }
-.balance.mkr span   { color: #1AAB9B; }
-.balance.sand span  { color: #00ADEF; }
-.balance.mana span  { color: #FF2D55; }
-.amt.matic { color: #8247E5; }
-.amt.aave  { color: #B6509E; }
-.amt.uni   { color: #FF007A; }
-.amt.crv   { color: #3465A4; }
-.amt.sushi { color: #FA52A0; }
-.amt.grt   { color: #6747ED; }
-.amt.bal   { color: #888888; }
-.amt.comp  { color: #00D395; }
-.amt.mkr   { color: #1AAB9B; }
-.amt.sand  { color: #00ADEF; }
-.amt.mana  { color: #FF2D55; }
-.arrow { font-size: 1.5rem; color: var(--muted); }
-.order-meta { display: flex; justify-content: space-between; flex-wrap: wrap; font-size: 0.8rem; color: var(--muted); margin: 10px 0; }
-.order-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-.state, .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
-.big { font-size: 3rem; margin-bottom: 10px; }
-.spinner { display: inline-block; width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--brn); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 10px; }
-@keyframes spin { to { transform: rotate(360deg); } }
-#toasts { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 9999; }
-.toast { padding: 12px 18px; border-radius: 8px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.3); max-width: 350px; transition: opacity 0.3s, transform 0.3s; }
-.toast.ok { border-left: 4px solid var(--ok); }
-.toast.err { border-left: 4px solid var(--err); }
-.toast.warn { border-left: 4px solid var(--warn); }
-.toast.info { border-left: 4px solid var(--usdc); }
-.contract-info { margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.15); border-radius: 8px; font-size: 0.78rem; color: var(--muted); line-height: 1.7; }
-.contract-info code { font-family: monospace; font-size: 0.72rem; }
+  :root{
+    --bg:#0b0f1a; --card:#121828; --border:#1f2940; --txt:#e6ecff;
+    --muted:#8892a8; --primary:#7c3aed; --primary2:#a855f7;
+    --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Segoe UI',system-ui,sans-serif;
+    background:radial-gradient(circle at top,#1a1035 0%,var(--bg) 60%);
+    color:var(--txt);min-height:100vh;padding:24px;
+  }
+  .wrap{max-width:760px;margin:0 auto}
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+  h1{font-size:1.5rem;background:linear-gradient(90deg,var(--primary2),#22d3ee);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .btn{
+    padding:10px 18px;border-radius:10px;border:1px solid var(--border);
+    background:var(--card);color:var(--txt);cursor:pointer;font-weight:600;
+    transition:.2s;font-size:.9rem;
+  }
+  .btn:hover{background:#1a2138;transform:translateY(-1px)}
+  .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+  .btn-primary{background:linear-gradient(135deg,var(--primary),var(--primary2));border:none}
+  .btn-primary:hover{filter:brightness(1.1)}
+  .card{
+    background:var(--card);border:1px solid var(--border);border-radius:16px;
+    padding:24px;margin-bottom:16px;box-shadow:0 10px 30px rgba(0,0,0,.3);
+  }
+  .card h2{font-size:1.1rem;margin-bottom:8px}
+  .hint{font-size:.85rem;color:var(--muted);margin-bottom:16px}
+  .balance-row{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:14px 0;border-bottom:1px solid var(--border);
+  }
+  .balance-row:last-child{border-bottom:none}
+  .balance-label{color:var(--muted);font-size:.9rem}
+  .balance-value{font-weight:700;font-size:1.05rem;font-family:monospace}
+  .tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+  .tab{
+    padding:10px 16px;border-radius:10px;background:transparent;border:1px solid var(--border);
+    color:var(--muted);cursor:pointer;font-weight:600;font-size:.9rem;transition:.2s;
+  }
+  .tab:hover{color:var(--txt);border-color:var(--primary)}
+  .tab.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+  .tab-content{display:none}
+  .tab-content.active{display:block}
+  .form-row{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .form-row > *{flex:1;min-width:0}
+  label{font-size:.8rem;color:var(--muted);display:block;margin-bottom:6px;font-weight:600}
+  input, select{
+    width:100%;padding:12px 14px;border-radius:10px;
+    background:#0a0f1c;border:1px solid var(--border);color:var(--txt);
+    font-size:.95rem;outline:none;transition:.2s;
+  }
+  input:focus, select:focus{border-color:var(--primary2);box-shadow:0 0 0 3px rgba(168,85,247,.15)}
+  .btn-send{
+    width:100%;padding:14px;border-radius:10px;border:none;cursor:pointer;
+    background:linear-gradient(135deg,var(--primary),var(--primary2));
+    color:#fff;font-weight:700;font-size:1rem;transition:.2s;
+  }
+  .btn-send:hover{filter:brightness(1.1)}
+  .btn-send:disabled{opacity:.5;cursor:not-allowed}
+  #walletInfo{font-size:.85rem;color:var(--muted);font-family:monospace;
+    padding:6px 10px;background:var(--card);border-radius:8px;border:1px solid var(--border)}
+  #toast{
+    position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;
+    gap:8px;z-index:1000;max-width:340px;
+  }
+  .toast{
+    padding:12px 16px;border-radius:10px;background:var(--card);
+    border:1px solid var(--border);color:var(--txt);font-size:.9rem;
+    box-shadow:0 10px 30px rgba(0,0,0,.4);animation:slideIn .3s ease;
+  }
+  .toast.ok{border-color:var(--ok)}
+  .toast.warn{border-color:var(--warn)}
+  .toast.err{border-color:var(--err)}
+  @keyframes slideIn{from{transform:translateX(120%);opacity:0}to{transform:translateX(0);opacity:1}}
+  .row-actions{display:flex;gap:8px;margin-top:4px}
+  .row-actions button{flex:1}
+  .mono{font-family:monospace;font-size:.8rem;word-break:break-all}
 </style>
 </head>
 <body>
-<div class="container">
+<div class="wrap">
   <header>
-    <h1>🔄 BRN — Carteira & Trocas</h1>
-    <p>Troque BRN por 17 outras moedas na Polygon</p>
-    <div class="net-status">
-      <div id="netDot" class="dot load"></div>
-      <span id="netText">Conectando…</span>
+    <h1>💎 BRN DApp</h1>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span id="walletInfo">não conectado</span>
+      <button id="btnConnect" class="btn btn-primary">🔌 Conectar</button>
     </div>
   </header>
 
+  <!-- SALDOS -->
   <div class="card">
-    <div class="wallet-bar">
-      <div>
-        <button id="btnConnect">🔌 Conectar carteira</button>
-        <button id="btnDisconnect" class="btn-refresh" style="display:none;">✖ Desconectar</button>
-      </div>
-      <div id="walletInfo" class="wallet-info" style="display:none;">
-        <span class="addr" id="addr"></span>
-        <span id="balances"></span>
-      </div>
+    <h2>💰 Saldos</h2>
+    <p class="hint">Rede: Polygon (chainId 137)</p>
+    <div class="balance-row">
+      <span class="balance-label">BRN (ERC-20)</span>
+      <span class="balance-value" id="balBRN">—</span>
+    </div>
+    <div class="balance-row">
+      <span class="balance-label">POL (nativo)</span>
+      <span class="balance-value" id="balPOL">—</span>
     </div>
   </div>
 
+  <!-- ABAS -->
   <div class="tabs">
-    <button class="tab active" data-tab="mural">📋 Mural</button>
-    <button class="tab" data-tab="criar">➕ Criar Ordem</button>
-    <button class="tab" data-tab="send">📤 Enviar BRN</button>
+    <button class="tab active" data-tab="send">📤 Transferir</button>
+    <button class="tab" data-tab="receive">📥 Receber</button>
+    <button class="tab" data-tab="info">ℹ️ Info</button>
   </div>
 
-  <div class="tab-content active" id="tab-mural">
+  <!-- ABA TRANSFERIR -->
+  <div class="tab-content active" id="tab-send">
     <div class="card">
-      <div class="wallet-bar">
-        <h2>📋 Mural de Ordens</h2>
-        <button id="btnRefresh" class="btn-refresh">🔄 Atualizar</button>
+      <h2>📤 Transferir</h2>
+      <p class="hint">Envie BRN ou POL para qualquer endereço na rede Polygon.</p>
+
+      <div style="margin-bottom:12px">
+        <label for="selTokenEnvio">Token</label>
+        <select id="selTokenEnvio">
+          <option value="BRN">BRN (ERC-20)</option>
+          <option value="POL">POL — nativo (MATIC)</option>
+        </select>
       </div>
-      <div class="filtros" id="filtros"></div>
-      <div class="counter" id="counter">⏳ Consultando blockchain…</div>
-      <div id="orders"></div>
+
+      <div style="margin-bottom:12px">
+        <label for="destAddress">Endereço de destino</label>
+        <input type="text" id="destAddress" placeholder="0x..." autocomplete="off">
+      </div>
+
+      <div style="margin-bottom:16px">
+        <label for="sendAmount">Quantidade</label>
+        <input type="number" id="sendAmount" placeholder="0.0" step="0.0001" min="0">
+      </div>
+
+      <button id="btnSendToken" class="btn-send" disabled>📤 Enviar</button>
     </div>
   </div>
 
-  <div class="tab-content" id="tab-criar">
+  <!-- ABA RECEBER -->
+  <div class="tab-content" id="tab-receive">
     <div class="card">
-      <h2>➕ Criar Ordem de Troca</h2>
-      <p class="hint">Você oferece um token e pede outro. Os tokens oferecidos ficam travados no contrato até alguém executar ou você cancelar.</p>
-      <div class="form-row">
-        <div style="flex:1;">
-          <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:4px;">Ofereço</label>
-          <select id="selOferece" style="width:100%;"></select>
-        </div>
-        <div style="flex:1;">
-          <input type="number" id="inOferece" placeholder="Quantidade" step="0.0001" min="0">
-        </div>
+      <h2>📥 Receber</h2>
+      <p class="hint">Compartilhe seu endereço para receber BRN ou POL.</p>
+      <div style="margin-bottom:12px">
+        <label>Seu endereço</label>
+        <input type="text" id="myAddress" class="mono" readonly placeholder="Conecte a carteira...">
       </div>
-      <div class="form-row">
-        <div style="flex:1;">
-          <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:4px;">Quero receber</label>
-          <select id="selQuero" style="width:100%;"></select>
-        </div>
-        <div style="flex:1;">
-          <input type="number" id="inQuero" placeholder="Quantidade" step="0.0001" min="0">
-        </div>
-      </div>
-      <div class="form-row">
-        <button id="btnApprove" disabled>✅ Aprovar</button>
-        <button id="btnCreate" class="btn-primary" disabled>📤 Criar Ordem</button>
-      </div>
-      <div id="rateInfo" class="rate-info"></div>
-    </div>
-  </div>
-
-  <div class="tab-content" id="tab-send">
-    <div class="card">
-      <h2>📤 Transferir BRN</h2>
-      <p class="hint">Envie BRN diretamente para qualquer endereço Polygon.</p>
-      <div class="form-row" style="flex-direction: column; align-items: stretch;">
-        <input type="text" id="destAddress" placeholder="Endereço de destino (ex: 0x...)">
-        <input type="number" id="sendAmount" placeholder="Quantidade de BRN" step="0.0001" min="0">
-      </div>
-      <div class="form-row">
-        <button id="btnSendBRN" class="btn-send" disabled>📤 Enviar BRN</button>
+      <div class="row-actions">
+        <button class="btn" id="btnCopyAddr">📋 Copiar endereço</button>
       </div>
     </div>
   </div>
 
-  <div class="contract-info">
-    <strong>📌 Endereços:</strong><br>
-    Escrow Factory: <code>0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8</code><br>
-    BRN:  <code>0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210</code> (18)<br>
-    USDC: <code>0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174</code> (6)<br>
-    USDT: <code>0xc2132D05D31c914a87C6611C10748AEb04B58e8F</code> (6)<br>
-    DAI:  <code>0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063</code> (18)<br>
-    WETH: <code>0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619</code> (18)<br>
-    WBTC: <code>0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6</code> (8)<br>
-    LINK: <code>0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39</code> (18)
+  <!-- ABA INFO -->
+  <div class="tab-content" id="tab-info">
+    <div class="card">
+      <h2>ℹ️ Sobre</h2>
+      <p class="hint">
+        DApp para interagir com o token BRN e enviar POL diretamente
+        da sua MetaMask na rede Polygon.
+      </p>
+      <div class="balance-row">
+        <span class="balance-label">Rede</span>
+        <span class="balance-value">Polygon Mainnet (137)</span>
+      </div>
+      <div class="balance-row">
+        <span class="balance-label">Símbolo nativo</span>
+        <span class="balance-value">POL</span>
+      </div>
+      <div class="balance-row">
+        <span class="balance-label">Contrato BRN</span>
+        <span class="balance-value mono" id="infoBRN">—</span>
+      </div>
+      <div class="balance-row">
+        <span class="balance-label">Explorer</span>
+        <span class="balance-value mono">
+          <a href="https://polygonscan.com" target="_blank" style="color:var(--primary2)">polygonscan.com</a>
+        </span>
+      </div>
+    </div>
   </div>
 </div>
 
-<div id="toasts"></div>
-<script src="app.js"></script>
+<div id="toast"></div>
+
+<script>
+/* ============================================================
+   ⚙️ CONFIGURAÇÃO — AJUSTE AQUI
+   ============================================================ */
+const BRN_ADDRESS = "0x0000000000000000000000000000000000000000"; // 👈 ENDEREÇO DO CONTRATO BRN
+const BRN_ABI = [
+  "function balanceOf(address) view returns (uint256)",
+  "function transfer(address to, uint256 amount) returns (bool)",
+  "function decimals() view returns (uint8)",
+  "function symbol() view returns (string)",
+  "function name() view returns (string)"
+];
+
+const POLYGON_CHAIN_ID = "0x89"; // 137
+const POLYGON_PARAMS = {
+  chainId: POLYGON_CHAIN_ID,
+  chainName: "Polygon Mainnet",
+  nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
+  rpcUrls: ["https://polygon-rpc.com"],
+  blockExplorerUrls: ["https://polygonscan.com"]
+};
+
+/* ============================================================
+   ESTADO
+   ============================================================ */
+let provider, signer, userAddress;
+let brnDecimals = 18;
+let brnSymbol = "BRN";
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+const $ = (id) => document.getElementById(id);
+
+function toast(msg, type = "info", ms = 4500) {
+  const el = document.createElement("div");
+  el.className = "toast " + type;
+  el.textContent = msg;
+  $("toast").appendChild(el);
+  setTimeout(() => el.remove(), ms);
+}
+
+function isValidAddress(addr) {
+  try { return ethers.utils.isAddress(addr); } catch { return false; }
+}
+
+function shortAddr(a) {
+  return a ? a.slice(0, 6) + "…" + a.slice(-4) : "não conectado";
+}
+
+function fmt(valueBN, decimals, precision = 4) {
+  try {
+    const s = ethers.utils.formatUnits(valueBN, decimals);
+    const n = Number(s);
+    if (isNaN(n)) return s;
+    return n.toLocaleString("pt-BR", { maximumFractionDigits: precision });
+  } catch { return "—"; }
+}
+
+/* ============================================================
+   CONEXÃO COM METAMASK + TROCA PARA POLYGON
+   ============================================================ */
+async function conectarCarteira() {
+  if (!window.ethereum) {
+    toast("MetaMask não encontrada. Instale a extensão.", "err", 6000);
+    return;
+  }
+
+  try {
+    provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+    await provider.send("eth_requestAccounts", []);
+
+    // Forçar Polygon
+    try {
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: POLYGON_CHAIN_ID }]
+      });
+    } catch (e) {
+      if (e.code === 4902) {
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [POLYGON_PARAMS]
+        });
+      } else if (e.code !== 4001) {
+        throw e;
+      }
+    }
+
+    signer = provider.getSigner();
+    userAddress = await signer.getAddress();
+
+    $("walletInfo").textContent = shortAddr(userAddress);
+    $("myAddress").value = userAddress;
+    $("btnConnect").textContent = "✅ Conectado";
+    $("btnConnect").classList.remove("btn-primary");
+    $("btnConnect").disabled = true;
+    $("btnSendToken").disabled = false;
+
+    toast("✅ Carteira conectada!", "ok");
+    await carregarSaldos();
+  } catch (e) {
+    console.error(e);
+    toast("Erro ao conectar: " + (e?.message || e), "err", 6000);
+  }
+}
+
+/* ============================================================
+   SALDOS (BRN + POL)
+   ============================================================ */
+async function carregarSaldos() {
+  if (!provider || !userAddress) return;
+
+  // --- POL (nativo) ---
+  try {
+    const balWei = await provider.getBalance(userAddress);
+    $("balPOL").textContent = fmt(balWei, 18, 4) + " POL";
+  } catch (e) {
+    console.warn("Erro saldo POL:", e);
+    $("balPOL").textContent = "—";
+  }
+
+  // --- BRN (ERC-20) ---
+  if (BRN_ADDRESS && BRN_ADDRESS !== "0x0000000000000000000000000000000000000000") {
+    try {
+      const contrato = new ethers.Contract(BRN_ADDRESS, BRN_ABI, provider);
+      try { brnDecimals = await contrato.decimals(); } catch {}
+      try { brnSymbol = await contrato.symbol(); } catch {}
+      const bal = await contrato.balanceOf(userAddress);
+      $("balBRN").textContent = fmt(bal, brnDecimals, 4) + " " + brnSymbol;
+      $("infoBRN").textContent = BRN_ADDRESS;
+    } catch (e) {
+      console.warn("Erro saldo BRN:", e);
+      $("balBRN").textContent = "—";
+      $("infoBRN").textContent = BRN_ADDRESS + " (erro ao ler)";
+    }
+  } else {
+    $("balBRN").textContent = "não configurado";
+    $("infoBRN").textContent = "não configurado";
+  }
+}
+
+/* ============================================================
+   ENVIO DE POL (NATIVO)
+   ============================================================ */
+async function enviarPOL() {
+  const dest = $("destAddress").value.trim();
+  const val = $("sendAmount").value;
+
+  if (!isValidAddress(dest)) return toast("Endereço inválido", "warn");
+  if (dest.toLowerCase() === userAddress.toLowerCase()) return toast("Destino igual à sua carteira", "warn");
+  if (!val || Number(val) <= 0) return toast("Valor inválido", "warn");
+
+  try {
+    const valorWei = ethers.utils.parseEther(val);
+    const saldo = await provider.getBalance(userAddress);
+
+    // Deixar margem para gas (~0.005 POL)
+    const gasReserva = ethers.utils.parseEther("0.005");
+    if (valorWei.add(gasReserva).gt(saldo)) {
+      return toast("Saldo insuficiente (lembre-se do gas)", "err", 6000);
+    }
+
+    toast("⏳ Enviando " + val + " POL…", "info");
+    const tx = await signer.sendTransaction({ to: dest, value: valorWei });
+    toast("⏳ Aguardando confirmação…", "info");
+    await tx.wait();
+
+    toast("✅ " + val + " POL enviado! Hash: " + tx.hash.slice(0, 10) + "…", "ok", 8000);
+    $("destAddress").value = "";
+    $("sendAmount").value = "";
+    await carregarSaldos();
+  } catch (e) {
+    console.error(e);
+    toast("Falha: " + (e?.error?.message || e?.data?.message || e.message), "err", 8000);
+  }
+}
+
+/* ============================================================
+   ENVIO DE BRN (ERC-20)
+   ============================================================ */
+async function enviarBRN() {
+  if (BRN_ADDRESS === "0x0000000000000000000000000000000000000000") {
+    return toast("Contrato BRN não configurado", "err");
+  }
+
+  const dest = $("destAddress").value.trim();
+  const val = $("sendAmount").value;
+
+  if (!isValidAddress(dest)) return toast("Endereço inválido", "warn");
+  if (dest.toLowerCase() === userAddress.toLowerCase()) return toast("Destino igual à sua carteira", "warn");
+  if (!val || Number(val) <= 0) return toast("Valor inválido", "warn");
+
+  try {
+    const contrato = new ethers.Contract(BRN_ADDRESS, BRN_ABI, signer);
+    const valorWei = ethers.utils.parseUnits(val, brnDecimals);
+
+    // Checar saldo BRN
+    const saldoBRN = await contrato.balanceOf(userAddress);
+    if (valorWei.gt(saldoBRN)) return toast("Saldo de BRN insuficiente", "err");
+
+    // Checar saldo POL para gas
+    const saldoPOL = await provider.getBalance(userAddress);
+    if (saldoPOL.lt(ethers.utils.parseEther("0.001"))) {
+      return toast("Saldo de POL muito baixo para o gas", "warn", 6000);
+    }
+
+    toast("⏳ Enviando " + val + " " + brnSymbol + "…", "info");
+    const tx = await contrato.transfer(dest, valorWei);
+    toast("⏳ Aguardando confirmação…", "info");
+    await tx.wait();
+
+    toast("✅ " + val + " " + brnSymbol + " enviado!", "ok", 8000);
+    $("destAddress").value = "";
+    $("sendAmount").value = "";
+    await carregarSaldos();
+  } catch (e) {
+    console.error(e);
+    toast("Falha: " + (e?.error?.message || e?.data?.message || e.message), "err", 8000);
+  }
+}
+
+/* ============================================================
+   DISPATCHER
+   ============================================================ */
+async function enviarToken() {
+  if (!signer) return toast("Conecte a carteira primeiro", "warn");
+  const token = $("selTokenEnvio").value;
+  if (token === "POL") return enviarPOL();
+  return enviarBRN();
+}
+
+/* ============================================================
+   ABAS
+   ============================================================ */
+function initTabs() {
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+      tab.classList.add("active");
+      $("tab-" + tab.dataset.tab).classList.add("active");
+    });
+  });
+}
+
+/* ============================================================
+   EVENTOS METAMASK
+   ============================================================ */
+function initWalletEvents() {
+  if (!window.ethereum) return;
+
+  window.ethereum.on("accountsChanged", (accounts) => {
+    if (accounts.length === 0) {
+      location.reload();
+    } else {
+      userAddress = accounts[0];
+      $("walletInfo").textContent = shortAddr(userAddress);
+      $("myAddress").value = userAddress;
+      carregarSaldos();
+    }
+  });
+
+  window.ethereum.on("chainChanged", () => location.reload());
+}
+
+/* ============================================================
+   COPIAR ENDEREÇO
+   ============================================================ */
+async function copiarEndereco() {
+  if (!userAddress) return toast("Conecte a carteira primeiro", "warn");
+  try {
+    await navigator.clipboard.writeText(userAddress);
+    toast("📋 Endereço copiado!", "ok");
+  } catch {
+    toast("Não foi possível copiar", "err");
+  }
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+function init() {
+  initTabs();
+  initWalletEvents();
+
+  $("btnConnect").addEventListener("click", conectarCarteira);
+  $("btnSendToken").addEventListener("click", enviarToken);
+  $("btnCopyAddr").addEventListener("click", copiarEndereco);
+
+  // Auto-conectar se já autorizado
+  if (window.ethereum) {
+    window.ethereum.request({ method: "eth_accounts" }).then(accounts => {
+      if (accounts.length > 0) conectarCarteira();
+    });
+  }
+}
+
+document.addEventListener("DOMContentLoaded", init);
+</script>
 </body>
 </html>
