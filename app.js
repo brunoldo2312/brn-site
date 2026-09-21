@@ -1,6 +1,6 @@
 // ============================================================
-// APP.JS — BRN Carteira & Trocas — Multi-token (v4)
-// Simulação prévia (callStatic) + gas manual de fallback
+// APP.JS — BRN Carteira & Trocas — Multi-token (v6)
+// Adicionado WMATIC (MATIC empacotado em ERC-20)
 // ============================================================
 const ESCROW_FACTORY_ADDRESS = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
@@ -9,24 +9,24 @@ const POLYGON_CHAIN_HEX = "0x89";
 const POL_NATIVO = { symbol: "POL", nome: "POL", decimals: 18, native: true };
 
 const TOKENS = {
-  BRN:  { address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18, color: "brn",  nome: "BRN"  },
-  USDC: { address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6,  color: "usdc", nome: "USDC" },
-  USDT: { address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6,  color: "usdt", nome: "USDT" },
-  DAI:  { address: "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063", decimals: 18, color: "dai",  nome: "DAI"  },
-  WETH: { address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18, color: "weth", nome: "WETH" },
-  WBTC: { address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8,  color: "wbtc", nome: "WBTC" },
-  LINK: { address: "0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39", decimals: 18, color: "link", nome: "LINK" },
-  MATIC:{ address: "0x0000000000000000000000000000000000001010", decimals: 18, color: "matic",nome: "MATIC"},
-  AAVE: { address: "0xD6DF932A45C0f255f85145f286eA0b292B21C90B", decimals: 18, color: "aave", nome: "AAVE" },
-  UNI:  { address: "0xb33EaAd8d922B1083446DC23f610c2567fB5180f", decimals: 18, color: "uni",  nome: "UNI"  },
-  CRV:  { address: "0x172370d5Cd63279eFa6d502DAB29171933a610AF", decimals: 18, color: "crv",  nome: "CRV"  },
-  SUSHI:{ address: "0x0b3F868E0BE5597D5DB7fEB59E1CADBb0fdDa50a", decimals: 18, color: "sushi",nome: "SUSHI"},
-  GRT:  { address: "0x5fe2B58c013d7601147DcdD68C143A77499f5531", decimals: 18, color: "grt",  nome: "GRT"  },
-  BAL:  { address: "0x9a71012B13CA4d3D0Cdc72A177DF3ef03b0E76A3", decimals: 18, color: "bal",  nome: "BAL"  },
-  COMP: { address: "0x8505b9d2254A7Ae468c0E9dd10Ccea3A837aef5c", decimals: 18, color: "comp", nome: "COMP" },
-  MKR:  { address: "0x6f7C932e7684666C9fd1d44527765433e01fF61d", decimals: 18, color: "mkr",  nome: "MKR"  },
-  SAND: { address: "0xBbba073C31bF03b8ACf7c28EF0738DeCF3695683", decimals: 18, color: "sand", nome: "SAND" },
-  MANA: { address: "0xA1c57f48F0Deb89f569dFbE6E2B7f46D33606fD4", decimals: 18, color: "mana", nome: "MANA" },
+  BRN:   { address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18, color: "brn",   nome: "BRN"   },
+  USDC:  { address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6,  color: "usdc",  nome: "USDC"  },
+  USDT:  { address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6,  color: "usdt",  nome: "USDT"  },
+  DAI:   { address: "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063", decimals: 18, color: "dai",   nome: "DAI"   },
+  WETH:  { address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18, color: "weth",  nome: "WETH"  },
+  WBTC:  { address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8,  color: "wbtc",  nome: "WBTC"  },
+  WMATIC:{ address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18, color: "matic", nome: "WMATIC"},
+  LINK:  { address: "0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39", decimals: 18, color: "link",  nome: "LINK"  },
+  AAVE:  { address: "0xD6DF932A45C0f255f85145f286eA0b292B21C90B", decimals: 18, color: "aave",  nome: "AAVE"  },
+  UNI:   { address: "0xb33EaAd8d922B1083446DC23f610c2567fB5180f", decimals: 18, color: "uni",   nome: "UNI"   },
+  CRV:   { address: "0x172370d5Cd63279eFa6d502DAB29171933a610AF", decimals: 18, color: "crv",   nome: "CRV"   },
+  SUSHI: { address: "0x0b3F868E0BE5597D5DB7fEB59E1CADBb0fdDa50a", decimals: 18, color: "sushi", nome: "SUSHI" },
+  GRT:   { address: "0x5fe2B58c013d7601147DcdD68C143A77499f5531", decimals: 18, color: "grt",   nome: "GRT"   },
+  BAL:   { address: "0x9a71012B13CA4d3D0Cdc72A177DF3ef03b0E76A3", decimals: 18, color: "bal",   nome: "BAL"   },
+  COMP:  { address: "0x8505b9d2254A7Ae468c0E9dd10Ccea3A837aef5c", decimals: 18, color: "comp",  nome: "COMP"  },
+  MKR:   { address: "0x6f7C932e7684666C9fd1d44527765433e01fF61d", decimals: 18, color: "mkr",   nome: "MKR"   },
+  SAND:  { address: "0xBbba073C31bF03b8ACf7c28EF0738DeCF3695683", decimals: 18, color: "sand",  nome: "SAND"  },
+  MANA:  { address: "0xA1c57f48F0Deb89f569dFbE6E2B7f46D33606fD4", decimals: 18, color: "mana",  nome: "MANA"  },
 };
 
 const FILTRO_TOKENS = ["todas", ...Object.keys(TOKENS)];
@@ -138,7 +138,6 @@ async function withTimeout(p, ms, msg) {
 async function pickProvider() {
   const erros = [];
 
-  // 1) MetaMask
   if (window.ethereum) {
     try {
       const mmProvider = new ethers.providers.Web3Provider(window.ethereum);
@@ -156,7 +155,6 @@ async function pickProvider() {
     } catch (e) { erros.push("MetaMask"); }
   }
 
-  // 2) RPCs públicos
   for (const url of RPCS) {
     const curto = url.replace(/^https?:\/\//, "").split("/")[0];
     try {
@@ -196,18 +194,15 @@ function acharTokenPorEndereco(addr) {
 
 /* ============================================================
    SIMULAÇÃO PRÉVIA + ENVIO COM GAS RESERVA
-   ============================================================
-   O erro "UNPREDICTABLE_GAS_LIMIT" acontece quando o contrato
-   reverte silenciosamente. Aqui simulamos com callStatic e, se
-   passar, mandamos com gas fixo para não depender da MetaMask.
    ============================================================ */
 async function simular(to, data, value) {
   const p = await getProvider();
   try {
-    await p.call({ to: to, data: data, value: value || 0 });
+    const args = { to: to, data: data, value: value || 0 };
+    if (userAddress) args.from = userAddress;
+    await p.call(args);
     return { ok: true };
   } catch (e) {
-    // Tenta extrair motivo do revert
     const msg =
       (e.data && e.data.message) ||
       (e.error && e.error.message) ||
@@ -219,13 +214,10 @@ async function simular(to, data, value) {
 }
 
 async function enviarTx(to, data, value, gasEstimado) {
-  // 1) Simula primeiro para pegar revert
   const sim = await simular(to, data, value);
   if (!sim.ok) {
     throw new Error("A transação vai reverter: " + sim.motivo);
   }
-
-  // 2) Envia com gas fixo (evita UNPREDICTABLE_GAS_LIMIT)
   const gas = gasEstimado || 500000;
   const tx = await signer.sendTransaction({ to: to, data: data, value: value || 0, gasLimit: gas });
   return tx;
@@ -611,26 +603,22 @@ async function criarOrdem() {
   const valorQ  = ethers.utils.parseUnits(vQ,  tQ.decimals);
 
   try {
-    // 1) Checa saldo
     const saldoOf = await lerSaldo(tOf.address, userAddress);
     if (saldoOf < valorOf) {
       toast("❌ Saldo insuficiente de " + kOf + " (tem " + fmt(saldoOf, tOf.decimals) + ")", "err", 8000);
       return;
     }
 
-    // 2) Checa allowance
     const allow = await lerAllowance(tOf.address, userAddress, ESCROW_FACTORY_ADDRESS);
     if (allow < valorOf) {
       toast("⚠️ Aprove " + kOf + " primeiro (allowance insuficiente)", "warn", 7000);
       return;
     }
 
-    // 3) Monta calldata
     const data = "0x" + SEL_FACTORY.criarOrdem
       + encAddress(tOf.address) + encAddress(tQ.address)
       + encUint(valorOf) + encUint(valorQ);
 
-    // 4) Simula + envia (com gas manual)
     toast("⏳ Simulando transação…", "info");
     const tx = await enviarTx(ESCROW_FACTORY_ADDRESS, data, 0, 800000);
     toast("📤 TX: " + short(tx.hash), "info");
@@ -675,14 +663,12 @@ async function executarOrdem(escrowAddr) {
     const o = ordersCache.find(x => x.endereco.toLowerCase() === escrowAddr.toLowerCase());
     if (!o) { toast("Ordem não encontrada", "err"); return; }
 
-    // 1) Saldo do token desejado
     const saldo = await lerSaldo(o.tokenDesejado, userAddress);
     if (saldo < o.valorDesejado) {
       toast("❌ Você não tem saldo suficiente do token desejado", "err", 8000);
       return;
     }
 
-    // 2) Allowance para o escrow
     const allow = await lerAllowance(o.tokenDesejado, userAddress, escrowAddr);
     if (allow < o.valorDesejado) {
       toast("⏳ Aprovando token desejado para o escrow…", "info");
@@ -691,7 +677,6 @@ async function executarOrdem(escrowAddr) {
       await txA.wait();
     }
 
-    // 3) Executa
     toast("⏳ Executando troca…", "info");
     const tx = await enviarTx(escrowAddr, "0x" + SEL_ESCROW.executar, 0, 400000);
     await tx.wait();
