@@ -142,7 +142,60 @@
 
 <div id="toasts"></div>
 
-<script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
-<script src="app.js"></script>
+<!-- ============================================================
+     CARREGADOR DO ETHERS.JS COM MÚLTIPLOS CDNs
+     Tenta em sequência: jsDelivr → unpkg → cdnjs
+     Só carrega app.js depois que o ethers estiver disponível
+     ============================================================ -->
+<script>
+(function carregarEthers() {
+  var cdns = [
+    "https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js",
+    "https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"
+  ];
+  var i = 0;
+
+  function tentar() {
+    if (i >= cdns.length) {
+      document.body.insertAdjacentHTML("beforeend",
+        '<div style="position:fixed;inset:0;background:#0b0b12;color:#ef4444;display:grid;place-items:center;text-align:center;padding:24px;font-family:sans-serif;z-index:99999;">' +
+          '<div>' +
+            '<h2 style="margin-bottom:12px;">⚠️ Falha ao carregar ethers.js</h2>' +
+            '<p style="color:#9a9ab5;max-width:400px;">Nenhum CDN respondeu. Verifique sua conexão ou adicione o arquivo ethers.umd.min.js localmente.</p>' +
+          '</div>' +
+        '</div>');
+      return;
+    }
+
+    var url = cdns[i++];
+    var s = document.createElement("script");
+    s.src = url;
+    s.async = false;
+
+    s.onload = function () {
+      if (typeof ethers !== "undefined") {
+        console.log("✅ ethers.js carregado de:", url);
+        var app = document.createElement("script");
+        app.src = "app.js";
+        document.body.appendChild(app);
+      } else {
+        console.warn("❌ CDN respondeu mas ethers não ficou global:", url);
+        tentar();
+      }
+    };
+
+    s.onerror = function () {
+      console.warn("❌ CDN falhou:", url);
+      s.remove();
+      tentar();
+    };
+
+    document.head.appendChild(s);
+  }
+
+  tentar();
+})();
+</script>
 </body>
 </html>
