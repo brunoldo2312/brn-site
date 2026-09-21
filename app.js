@@ -1,16 +1,17 @@
 // ============================================================
-// APP.JS — Carteira BRN P2P (versão revisada)
+// APP.JS — Carteira BRN P2P (v3)
 // Compatível com o EscrowFactory JÁ DEPLOYADO (sem alterar .sol)
 //
-// Correções desta versão:
-//  1. Sem scripts de terceiros (ver index.html)
-//  2. Só permite executar ordens BRN/USDC (tokens falsos bloqueados)
-//  3. Verifica se a ordem é realmente executável:
-//     ativa, escrow com saldo, comprador com saldo, simulação (eth_call)
-//  4. Bloqueia qualquer transação fora da Polygon (chainId 137)
-//  5. Valida todas as respostas de RPC e elimina innerHTML/onclick
-//     com dados externos (XSS); valores críticos são relidos pelo
-//     RPC da própria carteira antes de assinar
+// Novidades desta versão:
+//  - Menu por abas: Mural · Vender · Enviar · Como funciona
+//  - Mural com filtros (status, token oferecido, token pedido, minhas)
+//  - Ordens de venda para QUALQUER par da lista de tokens suportados
+//  - Enviar POL (nativo) e qualquer token suportado (BRN incluso)
+//  - Cada token da lista é conferido on-chain (decimais/símbolo)
+//
+// Mantém as proteções da v2: sem scripts de terceiros, só tokens
+// suportados, checagem de executabilidade, rede Polygon obrigatória,
+// simulação antes de enviar, respostas de RPC validadas, sem XSS.
 //
 // IMPORTANTE: o contrato NÃO está verificado no PolygonScan.
 // Os selectors vêm do bytecode. Teste com valores pequenos.
@@ -18,12 +19,23 @@
 
 // --- CONFIGURACOES (POLYGON MAINNET) ---
 const ESCROW_FACTORY_ADDRESS = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
-const TOKEN_BRN_ADDRESS      = "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210";
-const TOKEN_USDC_ADDRESS     = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
-
-const BRN_DECIMALS   = 18;
-const USDC_DECIMALS  = 6;
 const POLYGON_CHAIN_ID = 137;
+
+// ------------------------------------------------------------
+// LISTA DE TOKENS SUPORTADOS (única fonte de verdade)
+// Para suportar outro token, basta adicionar uma linha aqui.
+//   decimals : conferido on-chain; se diferente, o token é desativado
+//   symbols  : símbolos aceitos on-chain (null = não conferir)
+// ------------------------------------------------------------
+const NATIVO = { symbol: "POL", name: "POL (nativo)", decimals: 18, native: true };
+const TOKENS = [
+  { symbol: "BRN",    name: "BRN",                 address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18, symbols: null },
+  { symbol: "USDC.e", name: "USD Coin (PoS)",      address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6,  symbols: ["USDC"] },
+  { symbol: "USDC",   name: "USD Coin (nativo)",   address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6,  symbols: ["USDC"] },
+  { symbol: "USDT",   name: "Tether USD",          address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6,  symbols: ["USDT"] },
+  { symbol: "WPOL",   name: "Wrapped POL",         address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18, symbols: ["WPOL", "WMATIC"] },
+  { symbol: "WETH",   name: "Wrapped Ether",       address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18, symbols: ["WETH"] },
+];
 
 // RPCs públicos com fallback
 const RPCS = [
@@ -36,8 +48,7 @@ const RPC_TIMEOUT_MS = 8000;
 const MAX_ORDENS = 1000;   // limite de segurança para a lista do factory
 const CONCORRENCIA = 5;    // chamadas paralelas máximas aos RPCs públicos
 
-// --- SELECTORS (extraídos do bytecode) ---
-// FACTORY
+// --- SELECTORS (extraídos do bytecode / padrão ERC-20) ---
 const SEL_FACTORY = {
   criarOrdem:   "ceff4da6", // ordem dos argumentos NÃO confirmada (contrato não verificado)
   ordensDe:     "0dc80995",
@@ -45,7 +56,6 @@ const SEL_FACTORY = {
   totalOrdens:  "8275d6fa",
   todasOrdens:  "e9b1e327",
 };
-// ESCROW
 const SEL_ESCROW = {
   criador:        "041c797c",
   tokenDesejado:  "0cd59b77",
@@ -55,15 +65,17 @@ const SEL_ESCROW = {
   cancelado:      "7766a742",
   tokenOferecido: "8a337bdc",
   cancelar:       "8ffb1ccf", // cancelar()
-  executar:       "b2d44d08", // na verdade é executarTroca() (verificado com keccak256)
+  executar:       "b2d44d08", // é executarTroca() (verificado com keccak256)
   factory:        "c45a0155",
   valorOferecido: "f6c467b7",
 };
-// ERC-20
 const SEL_ERC20 = {
   balanceOf: "70a08231",
   allowance: "dd62ed3e",
   approve:   "095ea7b3",
+  transfer:  "a9059cbb", // transfer(address,uint256)
+  decimals:  "313ce567",
+  symbol:    "95d89b41",
 };
 
 // --- ESTADO GLOBAL ---
@@ -77,13 +89,24 @@ let ordersCache = [];
 let carregando = false;
 let emTransacao = false;
 let listenersRegistrados = false;
+const saldos = {};           // "POL" ou endereço do token -> BigInt
+const filtro = { status: "todas", oferece: "", pede: "", minhas: false };
+const ABAS = ["mural", "vender", "enviar", "ajuda"];
+const IDS_ACOES = ["btnCreate", "btnApprove", "btnSend", "btnMaxOf", "btnMaxSend"];
 
 // ============================================================
 // UTILITÁRIOS
 // ============================================================
 function $(id) { return document.getElementById(id); }
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
 function isAddr(a) { return typeof a === "string" && /^0x[0-9a-fA-F]{40}$/.test(a); }
 function short(a) { return isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—"; }
+function shortHash(h) { return typeof h === "string" && /^0x[0-9a-fA-F]{64}$/.test(h) ? h.slice(0, 10) + "…" + h.slice(-6) : "—"; }
 function mesmoEndereco(a, b) { return !!a && !!b && a.toLowerCase() === b.toLowerCase(); }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -107,20 +130,25 @@ function fmt(value, decimals, maxFrac = 6) {
   } catch (e) { return String(value); }
 }
 
-// mostra o valor com o token certo; tokens desconhecidos ficam em unidades brutas
-function fmtToken(valor, tokenAddr) {
-  if (mesmoEndereco(tokenAddr, TOKEN_BRN_ADDRESS))  return fmt(valor, BRN_DECIMALS) + " BRN";
-  if (mesmoEndereco(tokenAddr, TOKEN_USDC_ADDRESS)) return fmt(valor, USDC_DECIMALS) + " USDC";
-  return valor.toString() + " unid. de " + short(tokenAddr);
+// valor -> texto para colocar de volta num <input> (ponto decimal)
+function paraInput(valor, decimals) {
+  const s = ethers.utils.formatUnits(valor.toString(), decimals);
+  return s.replace(/\.0+$/, "");
 }
 
-function toast(msg, type = "info", ms = 5000) {
+function toast(msg, type = "info", ms = 5000, href = null) {
   const box = $("toasts");
-  const el = document.createElement("div");
-  el.className = "toast " + type;
-  el.textContent = msg;               // textContent: nunca interpreta HTML
-  box.appendChild(el);
-  setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 300); }, ms);
+  const t = el("div", "toast " + type, msg);      // textContent: nunca interpreta HTML
+  if (href && /^https:\/\/polygonscan\.com\/tx\/0x[0-9a-fA-F]{64}$/.test(href)) {
+    const a = el("a", "", " · ver no PolygonScan ↗");
+    a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer";
+    t.appendChild(a);
+  }
+  box.appendChild(t);
+  setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, ms);
+}
+function toastTx(msg, hash, type = "info") {
+  toast(msg + " " + shortHash(hash), type, 12000, "https://polygonscan.com/tx/" + hash);
 }
 
 function setNet(state, text) {
@@ -189,6 +217,16 @@ function decAddressArray(hex) {
   return arr;
 }
 
+// decodifica um retorno string (ex.: symbol()) com checagem de limites
+function decString(hex) {
+  const w = splitWords(hex);
+  if (w.length < 2 || Number(decUint(w[0])) !== 32) throw new Error("String inválida.");
+  const len = Number(decUint(w[1]));
+  if (!Number.isSafeInteger(len) || len > 64 || 2 + Math.ceil(len / 32) > w.length) throw new Error("String inválida.");
+  const dados = w.slice(2).join("").slice(0, len * 2);
+  return ethers.utils.toUtf8String("0x" + dados);
+}
+
 // lê "1,5" ou "1.5" e devolve BigInt em unidades mínimas
 function lerValor(txt, dec, nome) {
   const s = String(txt || "").trim().replace(",", ".");
@@ -212,6 +250,68 @@ async function mapLimit(items, limit, fn) {
   });
   await Promise.all(workers);
   return out;
+}
+
+// ============================================================
+// TOKENS SUPORTADOS
+// ============================================================
+function normalizarTokens() {
+  for (const t of TOKENS) {
+    try { t.address = ethers.utils.getAddress(t.address.toLowerCase()); }
+    catch (e) { t.ok = false; t.definitivo = true; t.aviso = "endereço inválido na lista"; }
+    if (t.ok === undefined) t.ok = false;
+  }
+}
+function tokenPorEndereco(addr) { return TOKENS.find(t => mesmoEndereco(t.address, addr)) || null; }
+function tokenOk(addr) { const t = tokenPorEndereco(addr); return t && t.ok ? t : null; }
+function tokensOk() { return TOKENS.filter(t => t.ok); }
+function ativoPorId(id) { return id === "POL" ? NATIVO : tokenOk(id); }
+
+// confere on-chain decimais e símbolo de cada token da lista
+async function verificarTokens() {
+  await mapLimit(TOKENS, CONCORRENCIA, async (t) => {
+    if (t.ok || t.definitivo) return;
+    try {
+      const rd = await rawCall(t.address, "0x" + SEL_ERC20.decimals);
+      const dec = Number(decUint(splitWords(rd)[0]));
+      let simbolo = null;
+      try { simbolo = decString(await rawCall(t.address, "0x" + SEL_ERC20.symbol)); } catch (e) { /* símbolo opcional */ }
+      const decOk = dec === t.decimals;
+      const symOk = !t.symbols || (simbolo !== null && t.symbols.includes(simbolo.toUpperCase()));
+      t.ok = decOk && symOk;
+      if (!t.ok) {
+        t.definitivo = true;
+        t.aviso = "on-chain: " + dec + " decimais, símbolo " + (simbolo || "?");
+      } else { t.aviso = null; }
+    } catch (e) { t.ok = false; t.aviso = "não foi possível verificar agora"; }
+  });
+  for (const t of TOKENS) {
+    if (!t.ok && t.definitivo && !t.avisado) {
+      t.avisado = true;
+      toast("Token " + t.symbol + " desativado: " + t.aviso, "warn", 9000);
+    }
+  }
+}
+
+async function garantirTokens() {
+  if (TOKENS.some(t => !t.ok && !t.definitivo)) {
+    await verificarTokens();
+    montarSelects();
+  }
+}
+
+// mostra o valor com o token certo; tokens desconhecidos ficam em unidades brutas
+function fmtToken(valor, tokenAddr) {
+  const t = tokenOk(tokenAddr);
+  if (t) return fmt(valor, t.decimals) + " " + t.symbol;
+  return valor.toString() + " unid. de " + short(tokenAddr);
+}
+
+function chipClasse(symbol) {
+  if (symbol === "BRN") return "brn";
+  if (symbol === "POL" || symbol === "WPOL") return "pol";
+  if (symbol.indexOf("USD") === 0) return "usdc";
+  return "other";
 }
 
 // ============================================================
@@ -265,6 +365,15 @@ async function lerAllowance(token, owner, spender, caller = rawCall) {
   const r = await caller(token, "0x" + SEL_ERC20.allowance + encAddress(owner) + encAddress(spender));
   return decUint(splitWords(r)[0]);
 }
+// saldo de POL (nativo) ou de um token da lista
+async function saldoDe(ativo, addr, caller = callWallet) {
+  if (ativo.native) {
+    if (!walletProvider) throw new Error("Carteira não conectada.");
+    const b = await withTimeout(walletProvider.getBalance(addr), RPC_TIMEOUT_MS * 2);
+    return BigInt(b.toString());
+  }
+  return lerSaldo(ativo.address, addr, caller);
+}
 
 // lê e valida os dados de um escrow
 async function lerOrdem(addr, caller = rawCall) {
@@ -286,14 +395,103 @@ async function lerOrdem(addr, caller = rawCall) {
 
 // avalia se a ordem é segura/executável (regras do app)
 function avaliar(o) {
-  const suportada = mesmoEndereco(o.tokenOferecido, TOKEN_BRN_ADDRESS) &&
-                    mesmoEndereco(o.tokenDesejado, TOKEN_USDC_ADDRESS);
+  const tOf = tokenOk(o.tokenOferecido);
+  const tDe = tokenOk(o.tokenDesejado);
+  const suportada = !!tOf && !!tDe && tOf.address !== tDe.address;
   const ativa = !o.executado && !o.cancelado;
   // true/false se soubermos o saldo do escrow; null se não foi possível ler
   const financiada = o.saldoEscrow === null || o.saldoEscrow === undefined
     ? null : o.saldoEscrow >= o.valorOferecido;
   const executavel = ativa && suportada && financiada !== false;
-  return { suportada, ativa, financiada, executavel };
+  return { suportada, ativa, financiada, executavel, tOf, tDe };
+}
+
+// ============================================================
+// MENU (ABAS)
+// ============================================================
+function mostrarAba(nome, atualizarHash = true) {
+  if (!ABAS.includes(nome)) nome = "mural";
+  document.querySelectorAll("[data-tab]").forEach(b => b.classList.toggle("active", b.dataset.tab === nome));
+  document.querySelectorAll("[data-panel]").forEach(p => { p.hidden = p.dataset.panel !== nome; });
+  if (atualizarHash) { try { history.replaceState(null, "", "#" + nome); } catch (e) { /* file:// */ } }
+  if (nome === "enviar" || nome === "vender") atualizarHints();
+}
+
+// ============================================================
+// FILTROS DO MURAL
+// ============================================================
+function aplicarFiltro(orders) {
+  return orders.filter(o => {
+    if (o.erro) return filtro.status === "todas" && !filtro.oferece && !filtro.pede && !filtro.minhas;
+    const av = avaliar(o);
+    if (filtro.status === "ativas" && !av.ativa) return false;
+    if (filtro.status === "executaveis" && !av.executavel) return false;
+    if (filtro.status === "executadas" && !o.executado) return false;
+    if (filtro.status === "canceladas" && !o.cancelado) return false;
+    if (filtro.oferece && !mesmoEndereco(o.tokenOferecido, filtro.oferece)) return false;
+    if (filtro.pede && !mesmoEndereco(o.tokenDesejado, filtro.pede)) return false;
+    if (filtro.minhas && !mesmoEndereco(o.criador, userAddress)) return false;
+    return true;
+  });
+}
+
+function lerFiltrosDaTela() {
+  filtro.status = $("fStatus").value || "todas";
+  filtro.oferece = $("fOferece").value || "";
+  filtro.pede = $("fPede").value || "";
+  filtro.minhas = $("fMinhas").checked;
+  renderMural(ordersCache);
+}
+
+function limparFiltros() {
+  $("fStatus").value = "todas"; $("fOferece").value = ""; $("fPede").value = ""; $("fMinhas").checked = false;
+  lerFiltrosDaTela();
+}
+
+// ============================================================
+// SELECTS / LISTAS DINÂMICAS
+// ============================================================
+function preencherSelect(sel, opcoes, valorAtual) {
+  sel.replaceChildren(...opcoes.map(([v, txt]) => {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = txt;
+    return o;
+  }));
+  if (valorAtual && opcoes.some(([v]) => v === valorAtual)) sel.value = valorAtual;
+}
+
+function montarSelects() {
+  const toks = tokensOk();
+  const opts = toks.map(t => [t.address, t.symbol]);
+  preencherSelect($("fOferece"), [["", "Todos os tokens"], ...opts], filtro.oferece);
+  preencherSelect($("fPede"),    [["", "Todos os tokens"], ...opts], filtro.pede);
+  preencherSelect($("vTokOf"), opts, $("vTokOf").value);
+  preencherSelect($("vTokDe"), opts, $("vTokDe").value);
+  if (opts.length > 1 && $("vTokOf").value === $("vTokDe").value) {
+    $("vTokDe").value = opts.find(([v]) => v !== $("vTokOf").value)[0];
+  }
+  preencherSelect($("sAtivo"), [["POL", "POL (nativo)"], ...toks.map(t => [t.address, t.symbol + " — " + t.name])], $("sAtivo").value);
+  renderListaTokens();
+  atualizarHints();
+}
+
+function renderListaTokens() {
+  const ul = $("listaTokens");
+  if (!ul) return;
+  const itens = [{ symbol: "POL", name: "POL (nativo)", decimals: 18, native: true, ok: true }, ...TOKENS].map(t => {
+    const li = el("li");
+    li.appendChild(el("b", "", t.symbol));
+    li.appendChild(document.createTextNode(" — " + t.name + " · " + t.decimals + " decimais · "));
+    if (t.native) { li.appendChild(document.createTextNode("uso: envio")); return li; }
+    li.appendChild(document.createTextNode(t.ok ? "✅ verificado " : "⚠️ desativado (" + (t.aviso || "aguardando verificação") + ") "));
+    if (isAddr(t.address)) {
+      const a = el("a", "", short(t.address) + " ↗");
+      a.href = "https://polygonscan.com/token/" + t.address; a.target = "_blank"; a.rel = "noopener noreferrer";
+      li.appendChild(a);
+    }
+    return li;
+  });
+  ul.replaceChildren(...itens);
 }
 
 // ============================================================
@@ -317,6 +515,8 @@ async function carregarMural(silencioso = false) {
   }
 
   try {
+    await garantirTokens(); // sem tokens verificados, nenhuma ordem é "suportada"
+
     // 1) lista de escrows
     let addrs = [];
     try {
@@ -369,12 +569,22 @@ async function carregarMural(silencioso = false) {
 
 function renderMural(orders) {
   const box = $("orders");
+  const info = $("muralInfo");
   if (!orders.length) {
-    box.innerHTML = `<div class="empty"><div class="big">📭</div>Nenhuma ordem no mural ainda.<br>Crie a primeira ordem de venda acima.</div>`;
+    info.textContent = "";
+    box.innerHTML = `<div class="empty"><div class="big">📭</div>Nenhuma ordem no mural ainda.<br>Crie a primeira na aba Vender.</div>`;
     return;
   }
+  const visiveis = aplicarFiltro(orders);
+  info.textContent = `Mostrando ${visiveis.length} de ${orders.length} ordem(ns)` +
+    (filtro.minhas && !userAddress ? " · conecte a carteira para ver as suas" : "");
+  if (!visiveis.length) {
+    box.innerHTML = `<div class="empty"><div class="big">🔎</div>Nenhuma ordem com esses filtros.</div>`;
+    return;
+  }
+
   const rank = o => o.erro ? 3 : o.cancelado ? 2 : o.executado ? 1 : 0;
-  const sorted = [...orders].sort((a, b) => rank(a) - rank(b) || a.indice - b.indice);
+  const sorted = [...visiveis].sort((a, b) => rank(a) - rank(b) || a.indice - b.indice);
 
   box.innerHTML = sorted.map(o => {
     if (o.erro) {
@@ -387,7 +597,7 @@ function renderMural(orders) {
     let classe, tagTxt;
     if (o.cancelado)      { classe = "cancelled"; tagTxt = "Cancelada"; }
     else if (o.executado) { classe = "done";      tagTxt = "Executada"; }
-    else if (!av.suportada)          { classe = "blocked"; tagTxt = "Token não suportado"; }
+    else if (!av.suportada)           { classe = "blocked"; tagTxt = "Token não suportado"; }
     else if (av.financiada === false) { classe = "blocked"; tagTxt = "Sem fundos"; }
     else                  { classe = "active";    tagTxt = "Ativa"; }
 
@@ -396,12 +606,14 @@ function renderMural(orders) {
 
     let aviso = "";
     if (av.ativa && !av.suportada) {
-      aviso = `<div class="note">⚠️ Esta ordem usa tokens diferentes de BRN/USDC (possível token falso). O app não permite executá-la.</div>`;
+      aviso = `<div class="note">⚠️ Esta ordem usa token fora da lista de suportados (possível token falso). O app não permite executá-la.</div>`;
     } else if (av.ativa && av.financiada === false) {
       aviso = `<div class="note">⚠️ O escrow não possui os tokens da ordem — ela não pode ser executada.</div>`;
     }
 
-    const addr = esc(o.endereco); // já validado como endereço, escapado por garantia
+    const addr = esc(o.endereco);
+    const clsOf = av.tOf ? chipClasse(av.tOf.symbol) : "";
+    const clsDe = av.tDe ? chipClasse(av.tDe.symbol) : "";
     return `
       <div class="order ${classe}">
         <div class="order-top">
@@ -411,12 +623,12 @@ function renderMural(orders) {
         <div class="swap">
           <div class="side">
             <div class="lbl">Oferece</div>
-            <div class="amt ${mesmoEndereco(o.tokenOferecido, TOKEN_BRN_ADDRESS) ? "brn" : ""}">${esc(fmtToken(o.valorOferecido, o.tokenOferecido))}</div>
+            <div class="amt ${clsOf}">${esc(fmtToken(o.valorOferecido, o.tokenOferecido))}</div>
           </div>
           <div class="arrow">⇄</div>
           <div class="side">
             <div class="lbl">Pede</div>
-            <div class="amt ${mesmoEndereco(o.tokenDesejado, TOKEN_USDC_ADDRESS) ? "usdc" : ""}">${esc(fmtToken(o.valorDesejado, o.tokenDesejado))}</div>
+            <div class="amt ${clsDe}">${esc(fmtToken(o.valorDesejado, o.tokenDesejado))}</div>
           </div>
         </div>
         <div class="order-meta">
@@ -453,8 +665,7 @@ async function garantirPolygon() {
 
 function setBotoes(habilitar) {
   const ok = habilitar && !!signer;
-  $("btnCreate").disabled = !ok;
-  $("btnApproveBRN").disabled = !ok;
+  IDS_ACOES.forEach(id => { const b = $(id); if (b) b.disabled = !ok; });
 }
 
 async function conectarCarteira() {
@@ -497,29 +708,40 @@ async function conectarCarteira() {
 
 function desconectar() {
   userAddress = null; signer = null; walletProvider = null;
+  for (const k of Object.keys(saldos)) delete saldos[k];
   $("walletInfo").style.display = "none";
   $("btnConnect").textContent = "🔌 Conectar carteira";
   $("btnConnect").disabled = false;
   setBotoes(false);
   renderMural(ordersCache);
+  atualizarHints();
   toast("Carteira desconectada.", "info");
+}
+
+function renderSaldos(ativos) {
+  const box = $("balances");
+  box.replaceChildren(...ativos.map(a => {
+    const card = el("div", "bal");
+    const t = el("div", "t");
+    t.appendChild(el("span", "chip " + chipClasse(a.symbol), a.symbol.slice(0, 1)));
+    t.appendChild(document.createTextNode(" " + a.symbol));
+    card.appendChild(t);
+    const id = a.native ? "POL" : a.address;
+    card.appendChild(el("div", "v", saldos[id] === undefined ? "—" : fmt(saldos[id], a.decimals)));
+    return card;
+  }));
 }
 
 async function carregarSaldos() {
   if (!userAddress) return;
-  const caller = walletProvider ? callWallet : rawCall;
-  try {
-    const [b, u] = await Promise.all([
-      lerSaldo(TOKEN_BRN_ADDRESS, userAddress, caller),
-      lerSaldo(TOKEN_USDC_ADDRESS, userAddress, caller),
-    ]);
-    $("balBRN").textContent = fmt(b, BRN_DECIMALS);
-    $("balUSDC").textContent = fmt(u, USDC_DECIMALS);
-  } catch (e) {
-    console.error(e);
-    $("balBRN").textContent = "—";
-    $("balUSDC").textContent = "—";
-  }
+  const ativos = [NATIVO, ...tokensOk()];
+  await mapLimit(ativos, CONCORRENCIA, async (a) => {
+    const id = a.native ? "POL" : a.address;
+    try { saldos[id] = await saldoDe(a, userAddress, walletProvider ? callWallet : rawCall); }
+    catch (e) { delete saldos[id]; }
+  });
+  renderSaldos(ativos);
+  atualizarHints();
 }
 
 // ============================================================
@@ -543,9 +765,25 @@ async function enviarTx(to, data, rotulo) {
     throw new Error("A simulação falhou (" + rotulo + "): " + erroLegivel(e) + " — nada foi enviado.");
   }
   const tx = await signer.sendTransaction({ to, data });
-  toast("Transação enviada: " + short(tx.hash) + " — aguardando…", "info");
+  toastTx("Transação enviada — aguardando…", tx.hash);
   const rc = await tx.wait();
   if (!rc || rc.status !== 1) throw new Error("A transação foi revertida on-chain (" + rotulo + ").");
+  return rc;
+}
+
+// envio de POL (nativo): estima gas (simula) e envia
+async function enviarPOL(destino, valor) {
+  await garantirPolygon();
+  const hexValor = "0x" + valor.toString(16);
+  try {
+    await withTimeout(walletProvider.estimateGas({ from: userAddress, to: destino, value: hexValor }), RPC_TIMEOUT_MS * 2);
+  } catch (e) {
+    throw new Error("A simulação falhou (envio de POL): " + erroLegivel(e) + " — nada foi enviado.");
+  }
+  const tx = await signer.sendTransaction({ to: destino, value: hexValor });
+  toastTx("Transação enviada — aguardando…", tx.hash);
+  const rc = await tx.wait();
+  if (!rc || rc.status !== 1) throw new Error("A transação foi revertida on-chain (envio de POL).");
   return rc;
 }
 
@@ -555,51 +793,159 @@ async function recarregarApos() {
   await carregarMural(false);
 }
 
-// ---------------- CRIAR ORDEM (approve BRN + criarOrdem) ----------------
-async function aprovarBRN() {
-  await comTransacao(async () => {
-    const vOf = lerValor($("inBRN").value, BRN_DECIMALS, "BRN");
-    await garantirPolygon();
-    const saldo = await lerSaldo(TOKEN_BRN_ADDRESS, userAddress, callWallet);
-    if (saldo < vOf) throw new Error("Saldo de BRN insuficiente para esse valor.");
+// reserva de gás para o botão "Máx" de POL (transferência simples x2 de margem)
+async function reservaGasPOL() {
+  try {
+    const fd = await walletProvider.getFeeData();
+    const preco = fd.maxFeePerGas || fd.gasPrice;
+    if (preco) return BigInt(preco.toString()) * 21000n * 2n;
+  } catch (e) { /* usa o padrão */ }
+  return 10n ** 16n; // 0,01 POL
+}
 
-    toast("Aprovando BRN… confirme na MetaMask.", "info");
+// ---------------- ENVIAR POL / TOKENS ----------------
+function enderecosBloqueados() {
+  const s = new Set(["0x0000000000000000000000000000000000000000", ESCROW_FACTORY_ADDRESS.toLowerCase()]);
+  TOKENS.forEach(t => { if (isAddr(t.address)) s.add(t.address.toLowerCase()); });
+  ordersCache.forEach(o => { if (o.endereco) s.add(o.endereco.toLowerCase()); });
+  return s;
+}
+
+// valida o destino: formato, checksum (se misto), bloqueios de segurança
+function validarDestino(txt, meuEndereco = userAddress) {
+  const s = String(txt || "").trim();
+  if (!isAddr(s)) throw new Error("Endereço de destino inválido (use 0x + 40 caracteres).");
+  const misto = s.slice(2) !== s.slice(2).toLowerCase() && s.slice(2) !== s.slice(2).toUpperCase();
+  if (misto) {
+    try { ethers.utils.getAddress(s); }
+    catch (e) { throw new Error("Checksum do endereço inválido — possível erro de digitação."); }
+  }
+  const norm = ethers.utils.getAddress("0x" + s.slice(2).toLowerCase());
+  if (mesmoEndereco(norm, meuEndereco)) throw new Error("O destino é o seu próprio endereço.");
+  if (enderecosBloqueados().has(norm.toLowerCase())) {
+    throw new Error("Destino bloqueado: é o zero-address, um contrato de token ou o factory/escrow. Os fundos seriam perdidos.");
+  }
+  return norm;
+}
+
+async function enviarAtivo() {
+  await comTransacao(async () => {
+    const ativo = ativoPorId($("sAtivo").value);
+    if (!ativo) throw new Error("Escolha o que enviar.");
+    const destino = validarDestino($("sDestino").value);
+    const valor = lerValor($("sValor").value, ativo.decimals, ativo.symbol);
+    await garantirPolygon();
+
+    const saldo = await saldoDe(ativo, userAddress, callWallet);
+    if (saldo < valor) throw new Error("Saldo insuficiente de " + ativo.symbol + ".");
+
+    let ehContrato = false;
+    try { ehContrato = (await walletProvider.getCode(destino)) !== "0x"; } catch (e) { /* ignora */ }
+
+    const ok = window.confirm(
+      "Enviar " + fmt(valor, ativo.decimals) + " " + ativo.symbol + "\n\n" +
+      "Para:\n" + destino + "\n\n" +
+      "Rede: Polygon" +
+      (ehContrato ? "\n\n⚠️ O destino é um CONTRATO. Confirme que ele aceita receber " + ativo.symbol + "." : "") +
+      "\n\nEssa ação não pode ser desfeita.");
+    if (!ok) return;
+
+    toast("Enviando " + ativo.symbol + "… confirme na MetaMask.", "info");
+    let rc;
+    if (ativo.native) {
+      rc = await enviarPOL(destino, valor);
+    } else {
+      const data = "0x" + SEL_ERC20.transfer + encAddress(destino) + encUint(valor);
+      rc = await enviarTx(ativo.address, data, "transferência de " + ativo.symbol);
+    }
+    toastTx("✅ " + ativo.symbol + " enviado!", rc.transactionHash, "ok");
+    $("sValor").value = "";
+    await sleep(2000);
+    await carregarSaldos();
+  });
+}
+
+async function maxEnviar() {
+  try {
+    const ativo = ativoPorId($("sAtivo").value);
+    if (!ativo || !userAddress) return;
+    let saldo = await saldoDe(ativo, userAddress, callWallet);
+    if (ativo.native) {
+      const reserva = await reservaGasPOL();
+      saldo = saldo > reserva ? saldo - reserva : 0n;
+    }
+    if (saldo <= 0n) { toast("Sem saldo disponível de " + ativo.symbol + ".", "warn"); return; }
+    $("sValor").value = paraInput(saldo, ativo.decimals);
+  } catch (e) { toast(erroLegivel(e), "err"); }
+}
+
+// ---------------- VENDER (approve + criarOrdem) ----------------
+function tokensDaVenda() {
+  const tOf = tokenOk($("vTokOf").value);
+  const tDe = tokenOk($("vTokDe").value);
+  if (!tOf || !tDe) throw new Error("Escolha tokens suportados.");
+  if (tOf.address === tDe.address) throw new Error("Escolha tokens diferentes para oferecer e pedir.");
+  return { tOf, tDe };
+}
+
+async function aprovarToken() {
+  await comTransacao(async () => {
+    const { tOf } = tokensDaVenda();
+    const vOf = lerValor($("inOf").value, tOf.decimals, tOf.symbol);
+    await garantirPolygon();
+    const saldo = await lerSaldo(tOf.address, userAddress, callWallet);
+    if (saldo < vOf) throw new Error("Saldo de " + tOf.symbol + " insuficiente para esse valor.");
+
+    toast("Aprovando " + tOf.symbol + "… confirme na MetaMask.", "info");
     const data = "0x" + SEL_ERC20.approve + encAddress(ESCROW_FACTORY_ADDRESS) + encUint(vOf);
-    await enviarTx(TOKEN_BRN_ADDRESS, data, "approve BRN");
-    toast("✅ BRN aprovado!", "ok");
+    await enviarTx(tOf.address, data, "approve " + tOf.symbol);
+    toast("✅ " + tOf.symbol + " aprovado!", "ok");
   });
 }
 
 async function criarOrdem() {
   await comTransacao(async () => {
-    const vOf = lerValor($("inBRN").value, BRN_DECIMALS, "BRN");
-    const vDe = lerValor($("inUSDC").value, USDC_DECIMALS, "USDC");
+    const { tOf, tDe } = tokensDaVenda();
+    const vOf = lerValor($("inOf").value, tOf.decimals, tOf.symbol);
+    const vDe = lerValor($("inDe").value, tDe.decimals, tDe.symbol);
     await garantirPolygon();
 
     const [saldo, allow] = await Promise.all([
-      lerSaldo(TOKEN_BRN_ADDRESS, userAddress, callWallet),
-      lerAllowance(TOKEN_BRN_ADDRESS, userAddress, ESCROW_FACTORY_ADDRESS, callWallet),
+      lerSaldo(tOf.address, userAddress, callWallet),
+      lerAllowance(tOf.address, userAddress, ESCROW_FACTORY_ADDRESS, callWallet),
     ]);
-    if (saldo < vOf) throw new Error("Saldo de BRN insuficiente.");
-    if (allow < vOf) throw new Error("Aprove o BRN primeiro (botão 'Aprovar BRN').");
+    if (saldo < vOf) throw new Error("Saldo de " + tOf.symbol + " insuficiente.");
+    if (allow < vOf) throw new Error("Aprove o " + tOf.symbol + " primeiro (botão 'Aprovar').");
 
     const ok = window.confirm(
       "Criar ordem de venda?\n\n" +
-      "Você trava " + fmt(vOf, BRN_DECIMALS) + " BRN e pede " + fmt(vDe, USDC_DECIMALS) + " USDC.\n\n" +
+      "Você trava " + fmt(vOf, tOf.decimals) + " " + tOf.symbol + " e pede " + fmt(vDe, tDe.decimals) + " " + tDe.symbol + ".\n\n" +
       "O contrato não é verificado: use valores pequenos.");
     if (!ok) return;
 
     const data = "0x" + SEL_FACTORY.criarOrdem +
-      encAddress(TOKEN_BRN_ADDRESS) + encAddress(TOKEN_USDC_ADDRESS) +
+      encAddress(tOf.address) + encAddress(tDe.address) +
       encUint(vOf) + encUint(vDe);
 
     toast("Criando ordem… confirme na MetaMask.", "info");
     await enviarTx(ESCROW_FACTORY_ADDRESS, data, "criar ordem");
     toast("✅ Ordem criada on-chain!", "ok");
-    $("inBRN").value = ""; $("inUSDC").value = "";
+    $("inOf").value = ""; $("inDe").value = "";
     atualizarCotacao();
     await recarregarApos();
+    mostrarAba("mural");
   });
+}
+
+async function maxVender() {
+  try {
+    const { tOf } = tokensDaVenda();
+    if (!userAddress) return;
+    const saldo = await lerSaldo(tOf.address, userAddress, callWallet);
+    if (saldo <= 0n) { toast("Sem saldo de " + tOf.symbol + ".", "warn"); return; }
+    $("inOf").value = paraInput(saldo, tOf.decimals);
+    atualizarCotacao();
+  } catch (e) { toast(erroLegivel(e), "err"); }
 }
 
 // ---------------- EXECUTAR ORDEM ----------------
@@ -615,7 +961,8 @@ async function executarOrdem(escrowAddr) {
     if (mesmoEndereco(o.criador, userAddress)) throw new Error("Você não pode executar a sua própria ordem.");
 
     const av = avaliar(o);
-    if (!av.suportada) throw new Error("Ordem bloqueada: os tokens não são BRN/USDC.");
+    if (!av.suportada) throw new Error("Ordem bloqueada: token fora da lista de suportados.");
+    const { tOf, tDe } = av;
 
     if (!conhecida.erro &&
         (conhecida.valorOferecido !== o.valorOferecido || conhecida.valorDesejado !== o.valorDesejado)) {
@@ -623,28 +970,28 @@ async function executarOrdem(escrowAddr) {
       throw new Error("Os valores da ordem mudaram. Confira o mural atualizado.");
     }
 
-    // 1) o escrow realmente tem os BRN?
-    const saldoEscrow = await lerSaldo(o.tokenOferecido, escrowAddr, callWallet);
-    if (saldoEscrow < o.valorOferecido) throw new Error("O escrow não tem os BRN da ordem — não é executável.");
+    // 1) o escrow realmente tem os tokens?
+    const saldoEscrow = await lerSaldo(tOf.address, escrowAddr, callWallet);
+    if (saldoEscrow < o.valorOferecido) throw new Error("O escrow não tem os " + tOf.symbol + " da ordem — não é executável.");
 
-    // 2) o comprador tem USDC?
-    const saldoUSDC = await lerSaldo(TOKEN_USDC_ADDRESS, userAddress, callWallet);
-    if (saldoUSDC < o.valorDesejado) throw new Error("Saldo de USDC insuficiente.");
+    // 2) o comprador tem o token pedido?
+    const saldoComprador = await lerSaldo(tDe.address, userAddress, callWallet);
+    if (saldoComprador < o.valorDesejado) throw new Error("Saldo de " + tDe.symbol + " insuficiente.");
 
     // 3) confirmação explícita com os valores relidos
     const ok = window.confirm(
       "Executar ordem " + short(escrowAddr) + "?\n\n" +
-      "Você paga: " + fmt(o.valorDesejado, USDC_DECIMALS) + " USDC\n" +
-      "Você recebe: " + fmt(o.valorOferecido, BRN_DECIMALS) + " BRN");
+      "Você paga: " + fmt(o.valorDesejado, tDe.decimals) + " " + tDe.symbol + "\n" +
+      "Você recebe: " + fmt(o.valorOferecido, tOf.decimals) + " " + tOf.symbol);
     if (!ok) return;
 
     // 4) approve EXATO do valor relido (só se necessário)
-    const allow = await lerAllowance(TOKEN_USDC_ADDRESS, userAddress, escrowAddr, callWallet);
+    const allow = await lerAllowance(tDe.address, userAddress, escrowAddr, callWallet);
     if (allow < o.valorDesejado) {
-      toast("Aprovando USDC para o escrow… confirme na MetaMask.", "info");
+      toast("Aprovando " + tDe.symbol + " para o escrow… confirme na MetaMask.", "info");
       const dataA = "0x" + SEL_ERC20.approve + encAddress(escrowAddr) + encUint(o.valorDesejado);
-      await enviarTx(TOKEN_USDC_ADDRESS, dataA, "approve USDC");
-      toast("✅ USDC aprovado!", "ok");
+      await enviarTx(tDe.address, dataA, "approve " + tDe.symbol);
+      toast("✅ " + tDe.symbol + " aprovado!", "ok");
       await sleep(1500);
     }
 
@@ -678,32 +1025,87 @@ async function cancelarOrdem(escrowAddr) {
 }
 
 // ============================================================
-// COTAÇÃO (informativo)
+// HINTS (saldos nas abas) E COTAÇÃO
 // ============================================================
+function textoSaldo(ativo) {
+  if (!ativo) return "";
+  const id = ativo.native ? "POL" : ativo.address;
+  return "Saldo: " + (saldos[id] === undefined ? "—" : fmt(saldos[id], ativo.decimals)) + " " + ativo.symbol;
+}
+
+function atualizarHints() {
+  const tOf = tokenOk($("vTokOf").value);
+  const tDe = tokenOk($("vTokDe").value);
+  $("btnApprove").textContent = tOf ? "✅ Aprovar " + tOf.symbol : "✅ Aprovar";
+  $("vSaldoOf").textContent = textoSaldo(tOf);
+  $("vSaldoDe").textContent = textoSaldo(tDe);
+  $("sSaldo").textContent = textoSaldo(ativoPorId($("sAtivo").value));
+  atualizarCotacao();
+}
+
 function atualizarCotacao() {
-  const b = Number($("inBRN").value);
-  const u = Number($("inUSDC").value);
+  const tOf = tokenOk($("vTokOf").value);
+  const tDe = tokenOk($("vTokDe").value);
+  const b = Number(String($("inOf").value).replace(",", "."));
+  const u = Number(String($("inDe").value).replace(",", "."));
   const info = $("rateInfo");
-  if (b > 0 && u > 0) {
+  if (tOf && tDe && b > 0 && u > 0) {
     const preco = u / b;
     info.style.display = "block";
-    info.textContent = "💱 Preço: 1 BRN = " + preco.toLocaleString("pt-BR", { maximumFractionDigits: 8 }) + " USDC";
+    info.textContent = "💱 Preço: 1 " + tOf.symbol + " = " +
+      preco.toLocaleString("pt-BR", { maximumFractionDigits: 8 }) + " " + tDe.symbol;
   } else {
     info.style.display = "none";
   }
+}
+
+// evita escolher o mesmo token nos dois lados da venda
+function evitarIguais(mudou) {
+  const a = $("vTokOf"), b = $("vTokDe");
+  if (a.value && a.value === b.value) {
+    const outro = mudou === "of" ? b : a;
+    const alt = tokensOk().find(t => t.address !== (mudou === "of" ? a.value : b.value));
+    if (alt) outro.value = alt.address;
+  }
+  atualizarHints();
 }
 
 // ============================================================
 // INIT
 // ============================================================
 window.addEventListener("DOMContentLoaded", () => {
+  normalizarTokens();
+
+  // menu
+  $("tabs").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-tab]");
+    if (b) mostrarAba(b.dataset.tab);
+  });
+  window.addEventListener("hashchange", () => mostrarAba(location.hash.replace("#", ""), false));
+  mostrarAba(location.hash.replace("#", ""), false);
+
+  // carteira
   $("btnConnect").addEventListener("click", conectarCarteira);
   $("btnDisconnect").addEventListener("click", desconectar);
+
+  // mural + filtros
   $("btnRefresh").addEventListener("click", () => carregarMural(false));
-  $("btnApproveBRN").addEventListener("click", aprovarBRN);
+  ["fStatus", "fOferece", "fPede", "fMinhas"].forEach(id => $(id).addEventListener("change", lerFiltrosDaTela));
+  $("fLimpar").addEventListener("click", limparFiltros);
+
+  // vender
+  $("btnApprove").addEventListener("click", aprovarToken);
   $("btnCreate").addEventListener("click", criarOrdem);
-  $("inBRN").addEventListener("input", atualizarCotacao);
-  $("inUSDC").addEventListener("input", atualizarCotacao);
+  $("btnMaxOf").addEventListener("click", maxVender);
+  $("vTokOf").addEventListener("change", () => evitarIguais("of"));
+  $("vTokDe").addEventListener("change", () => evitarIguais("de"));
+  $("inOf").addEventListener("input", atualizarCotacao);
+  $("inDe").addEventListener("input", atualizarCotacao);
+
+  // enviar
+  $("btnSend").addEventListener("click", enviarAtivo);
+  $("btnMaxSend").addEventListener("click", maxEnviar);
+  $("sAtivo").addEventListener("change", atualizarHints);
 
   // delegação de eventos: sem onclick inline montado com dados externos
   $("orders").addEventListener("click", (ev) => {
@@ -715,7 +1117,8 @@ window.addEventListener("DOMContentLoaded", () => {
     else if (btn.dataset.action === "cancelar") cancelarOrdem(addr);
   });
 
-  carregarMural(false);
+  renderListaTokens();
+  carregarMural(false); // verifica os tokens, monta os selects e lê o mural
   // atualização automática silenciosa (sem piscar o spinner)
   setInterval(() => { if (!emTransacao && !document.hidden) carregarMural(true); }, 60000);
 });
