@@ -42,7 +42,6 @@
     <button class="tab" data-tab="mural">📋 Mural</button>
   </div>
 
-  <!-- SALDOS -->
   <div id="tab-saldos" class="tab-content active">
     <div class="card">
       <div class="card-head">
@@ -58,7 +57,6 @@
     </div>
   </div>
 
-  <!-- TRANSFERIR -->
   <div id="tab-transferir" class="tab-content">
     <div class="card">
       <h2>➤ Transferir</h2>
@@ -79,7 +77,6 @@
     </div>
   </div>
 
-  <!-- RECEBER -->
   <div id="tab-receber" class="tab-content">
     <div class="card">
       <h2>📥 Receber</h2>
@@ -92,7 +89,6 @@
     </div>
   </div>
 
-  <!-- VENDER -->
   <div id="tab-vender" class="tab-content">
     <div class="card">
       <h2>📤 Enviar Ordem de Venda</h2>
@@ -120,7 +116,6 @@
     </div>
   </div>
 
-  <!-- MURAL -->
   <div id="tab-mural" class="tab-content">
     <div class="card">
       <div class="card-head">
@@ -142,11 +137,6 @@
 
 <div id="toasts"></div>
 
-<!-- ============================================================
-     CARREGADOR DO ETHERS.JS COM MÚLTIPLOS CDNs
-     Tenta em sequência: jsDelivr → unpkg → cdnjs
-     Só carrega app.js depois que o ethers estiver disponível
-     ============================================================ -->
 <script>
 (function carregarEthers() {
   var cdns = [
@@ -167,12 +157,10 @@
         '</div>');
       return;
     }
-
     var url = cdns[i++];
     var s = document.createElement("script");
     s.src = url;
     s.async = false;
-
     s.onload = function () {
       if (typeof ethers !== "undefined") {
         console.log("✅ ethers.js carregado de:", url);
@@ -184,16 +172,13 @@
         tentar();
       }
     };
-
     s.onerror = function () {
       console.warn("❌ CDN falhou:", url);
       s.remove();
       tentar();
     };
-
     document.head.appendChild(s);
   }
-
   tentar();
 })();
 </script>
