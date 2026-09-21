@@ -1,8 +1,10 @@
 // ============================================================
-// APP.JS — BRN Carteira & Trocas — Multi-token (COMPLETO v2)
+// APP.JS — BRN Carteira & Trocas — Multi-token (v4)
+// Simulação prévia (callStatic) + gas manual de fallback
 // ============================================================
 const ESCROW_FACTORY_ADDRESS = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
+const POLYGON_CHAIN_HEX = "0x89";
 
 const POL_NATIVO = { symbol: "POL", nome: "POL", decimals: 18, native: true };
 
@@ -29,21 +31,14 @@ const TOKENS = {
 
 const FILTRO_TOKENS = ["todas", ...Object.keys(TOKENS)];
 
-/* ============================================================
-   RPCs — lista ampliada e testada (a maioria aceita CORS)
-   ============================================================ */
 const RPCS = [
   "https://polygon-rpc.com",
   "https://polygon.llamarpc.com",
+  "https://rpc.ankr.com/polygon",
   "https://polygon-bor-rpc.publicnode.com",
   "https://polygon.drpc.org",
-  "https://rpc.ankr.com/polygon",
-  "https://polygon.blockpi.network/v1/rpc/public",
-  "https://1rpc.io/matic",
-  "https://polygon.mainnet.rpc.thirdweb.com",
 ];
-
-const RPC_TIMEOUT_MS = 12000;
+const RPC_TIMEOUT_MS = 20000;
 
 const SEL_FACTORY = {
   criarOrdem:  "ceff4da6",
@@ -68,7 +63,7 @@ const SEL_ERC20 = {
 let provider = null, signer = null, userAddress = null;
 let ordersCache = [];
 let filtroAtual = "todas";
-let rpcAtual = "";
+let providerDescricao = "";
 
 /* ============ HELPERS ============ */
 function $(id) { return document.getElementById(id); }
@@ -132,7 +127,7 @@ function decAddressArray(hex) {
 }
 
 /* ============================================================
-   PROVIDER — versão robusta
+   PROVIDER
    ============================================================ */
 async function withTimeout(p, ms, msg) {
   let t;
@@ -142,54 +137,98 @@ async function withTimeout(p, ms, msg) {
 
 async function pickProvider() {
   const erros = [];
-  for (const url of RPCS) {
+
+  // 1) MetaMask
+  if (window.ethereum) {
     try {
-      // StaticJsonRpcProvider: pula eth_chainId (mais rápido e evita bloqueios)
-      const p = new ethers.providers.StaticJsonRpcProvider(
-        { url: url, timeout: 8000 },
-        { chainId: POLYGON_CHAIN_ID, name: "polygon" }
-      );
+      const mmProvider = new ethers.providers.Web3Provider(window.ethereum);
+      const net = await withTimeout(mmProvider.getNetwork(), 5000);
+      if (Number(net.chainId) === POLYGON_CHAIN_ID) {
+        const bn = await withTimeout(mmProvider.getBlockNumber(), 5000);
+        if (bn > 0) {
+          providerDescricao = "MetaMask";
+          console.log("✅ Provider: MetaMask | bloco:", bn);
+          return mmProvider;
+        }
+      } else {
+        erros.push("MetaMask (chainId " + Number(net.chainId) + ")");
+      }
+    } catch (e) { erros.push("MetaMask"); }
+  }
 
-      // Teste real: pedir o número do bloco
-      const bn = await withTimeout(p.getBlockNumber(), 7000, "timeout em " + url);
-
-      if (bn && bn > 0) {
-        console.log("✅ RPC conectado:", url, "| bloco:", bn);
-        rpcAtual = url;
+  // 2) RPCs públicos
+  for (const url of RPCS) {
+    const curto = url.replace(/^https?:\/\//, "").split("/")[0];
+    try {
+      const p = new ethers.providers.JsonRpcProvider({ url: url, timeout: 8000 }, POLYGON_CHAIN_ID);
+      const bn = await withTimeout(p.getBlockNumber(), 9000);
+      if (bn > 0) {
+        providerDescricao = curto;
+        console.log("✅ Provider: RPC " + curto);
         return p;
       }
-    } catch (e) {
-      console.warn("❌ RPC falhou:", url, "→", e.message);
-      erros.push(url.replace(/^https?:\/\//, "").split("/")[0]);
-    }
+    } catch (e) { erros.push(curto); }
   }
-  const msg = "Nenhum RPC respondeu. Testados: " + erros.join(", ");
-  console.error(msg);
-  throw new Error(msg);
+
+  throw new Error("Nenhum provider disponível: " + erros.join(", "));
 }
 
 async function getProvider() {
   if (provider) return provider;
+  setNet("load", "Conectando…");
   provider = await pickProvider();
+  setNet("ok", "Polygon · " + providerDescricao);
   return provider;
 }
 
-function resetProvider() {
-  provider = null;
-  rpcAtual = "";
-}
+function resetProvider() { provider = null; providerDescricao = ""; }
 
 async function rawCall(to, data) {
   const p = await getProvider();
-  const args = { to: to, data: data };
-  if (userAddress) args.from = userAddress;
-  return await withTimeout(p.call(args), RPC_TIMEOUT_MS, "eth_call timeout");
+  return await withTimeout(p.call({ to: to, data: data }), RPC_TIMEOUT_MS, "eth_call");
 }
 
 function acharTokenPorEndereco(addr) {
   const a = addr.toLowerCase();
   for (const k in TOKENS) if (TOKENS[k].address.toLowerCase() === a) return { key: k, meta: TOKENS[k] };
   return null;
+}
+
+/* ============================================================
+   SIMULAÇÃO PRÉVIA + ENVIO COM GAS RESERVA
+   ============================================================
+   O erro "UNPREDICTABLE_GAS_LIMIT" acontece quando o contrato
+   reverte silenciosamente. Aqui simulamos com callStatic e, se
+   passar, mandamos com gas fixo para não depender da MetaMask.
+   ============================================================ */
+async function simular(to, data, value) {
+  const p = await getProvider();
+  try {
+    await p.call({ to: to, data: data, value: value || 0 });
+    return { ok: true };
+  } catch (e) {
+    // Tenta extrair motivo do revert
+    const msg =
+      (e.data && e.data.message) ||
+      (e.error && e.error.message) ||
+      e.reason ||
+      e.message ||
+      "revert sem mensagem";
+    return { ok: false, motivo: String(msg) };
+  }
+}
+
+async function enviarTx(to, data, value, gasEstimado) {
+  // 1) Simula primeiro para pegar revert
+  const sim = await simular(to, data, value);
+  if (!sim.ok) {
+    throw new Error("A transação vai reverter: " + sim.motivo);
+  }
+
+  // 2) Envia com gas fixo (evita UNPREDICTABLE_GAS_LIMIT)
+  const gas = gasEstimado || 500000;
+  const tx = await signer.sendTransaction({ to: to, data: data, value: value || 0, gasLimit: gas });
+  return tx;
 }
 
 /* ============================================================
@@ -202,12 +241,12 @@ async function carregarMural() {
   setNet("load", "Consultando…");
 
   try {
+    await getProvider();
     let addrs = [];
     try {
       const r = await rawCall(ESCROW_FACTORY_ADDRESS, "0x" + SEL_FACTORY.todasOrdens);
       addrs = decAddressArray(r);
     } catch (e) {
-      console.warn("todasOrdens falhou, tentando totalOrdens:", e.message);
       const rT = await rawCall(ESCROW_FACTORY_ADDRESS, "0x" + SEL_FACTORY.totalOrdens);
       const n = Number(decUint(splitWords(rT)[0]));
       if (n > 0 && n < 200) {
@@ -237,19 +276,14 @@ async function carregarMural() {
 
     ordersCache = det;
     renderMural();
-    setNet("ok", "Polygon · online");
+    setNet("ok", "Polygon · " + providerDescricao);
   } catch (e) {
     console.error("Mural falhou:", e);
     resetProvider();
-    if (box) {
-      box.innerHTML =
-        '<div class="empty">' +
-          '<div class="big">⚠️</div>' +
-          'Não foi possível consultar a rede.<br>' +
-          '<small style="display:block;margin-top:8px;color:var(--muted);">' + e.message + '</small>' +
-          '<button id="btnRetryMural" class="btn-warn btn-sm" style="margin-top:16px;" onclick="carregarMural()">🔄 Tentar novamente</button>' +
-        '</div>';
-    }
+    if (box) box.innerHTML =
+      '<div class="empty"><div class="big">⚠️</div>Não foi possível consultar.<br>' +
+      '<small>' + e.message + '</small><br>' +
+      '<button class="btn-warn btn-sm" style="margin-top:16px;" onclick="resetProvider();carregarMural();">🔄 Tentar novamente</button></div>';
     if (counter) counter.textContent = "❌ Offline";
     setNet("off", "Offline");
   }
@@ -259,7 +293,6 @@ function renderFiltros() {
   const el = $("filtros"); if (!el) return;
   const ativos = ordersCache.filter(o => !o.erro && !o.executado && !o.cancelado);
   el.innerHTML = FILTRO_TOKENS.map(function (k) {
-    let label = k === "todas" ? "🌐 Todas" : k;
     let count = 0;
     if (k === "todas") count = ativos.length;
     else {
@@ -269,9 +302,8 @@ function renderFiltros() {
       ).length;
     }
     return '<button class="filtro ' + (filtroAtual === k ? "active" : "") +
-      '" data-filtro="' + k + '">' + label + ' (' + count + ')</button>';
+      '" data-filtro="' + k + '">' + (k === "todas" ? "🌐 Todas" : k) + ' (' + count + ')</button>';
   }).join("");
-
   el.querySelectorAll(".filtro").forEach(b => b.addEventListener("click", function () {
     filtroAtual = b.dataset.filtro; renderFiltros(); renderMural();
   }));
@@ -281,7 +313,6 @@ function renderMural() {
   renderFiltros();
   const box = $("orders"), counter = $("counter");
   if (!box) return;
-
   const validas = ordersCache.filter(o => !o.erro);
   let filtradas = validas;
   if (filtroAtual !== "todas") {
@@ -290,17 +321,15 @@ function renderMural() {
       o.tokenOferecido.toLowerCase() === addr || o.tokenDesejado.toLowerCase() === addr
     );
   }
-
   if (!filtradas.length) {
     box.innerHTML = '<div class="empty"><div class="big">📭</div>Nenhuma ordem neste par.</div>';
     if (counter) counter.textContent = "📋 0 ordens";
     return;
   }
-
   const rank = o => o.cancelado ? 2 : o.executado ? 1 : 0;
   const sorted = filtradas.slice().sort((a, b) => rank(a) - rank(b));
   const ativas = sorted.filter(o => !o.executado && !o.cancelado).length;
-  if (counter) counter.textContent = "📋 " + ativas + " ativa(s) · " + sorted.length + " no total";
+  if (counter) counter.textContent = "📋 " + ativas + " ativa(s) · " + sorted.length + " total";
   box.innerHTML = sorted.map((o, i) => renderOrder(o, i)).join("");
 }
 
@@ -315,10 +344,8 @@ function renderOrder(o, i) {
   const clsDe  = mDe ? mDe.meta.color : "";
   const status = o.cancelado ? "cancelled" : o.executado ? "done" : "active";
   const tagTxt = o.cancelado ? "Cancelada" : o.executado ? "Executada" : "Ativa";
-
   const podeExec = !o.executado && !o.cancelado && userAddress && userAddress.toLowerCase() !== o.criador.toLowerCase();
   const podeCanc = !o.executado && !o.cancelado && userAddress && userAddress.toLowerCase() === o.criador.toLowerCase();
-
   return '<div class="order ' + status + '">' +
     '<div class="order-top"><span class="order-id">#' + (i + 1) + ' · ' + short(o.endereco) + '</span><span class="tag ' + status + '">' + tagTxt + '</span></div>' +
     '<div class="swap">' +
@@ -350,26 +377,38 @@ async function conectarCarteira() {
     if (parseInt(chainIdHex, 16) !== POLYGON_CHAIN_ID) {
       toast("Troque para Polygon…", "warn");
       try {
-        await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x89" }] });
+        await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: POLYGON_CHAIN_HEX }] });
       } catch (e) {
-        if (e.code === 4902) { toast("Adicione Polygon manualmente", "err", 8000); return; }
-        throw e;
+        if (e.code === 4902) {
+          try {
+            await window.ethereum.request({
+              method: "wallet_addEthereumChain",
+              params: [{
+                chainId: POLYGON_CHAIN_HEX,
+                chainName: "Polygon Mainnet",
+                nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
+                rpcUrls: ["https://polygon-rpc.com"],
+                blockExplorerUrls: ["https://polygonscan.com"],
+              }],
+            });
+          } catch (e2) { toast("Adicione Polygon manualmente", "err", 8000); return; }
+        } else throw e;
       }
     }
 
     signer = new ethers.providers.Web3Provider(window.ethereum).getSigner();
+    resetProvider();
 
     if ($("walletInfo")) $("walletInfo").style.display = "block";
     if ($("addr")) $("addr").textContent = userAddress;
     if ($("receiveAddr")) $("receiveAddr").value = userAddress;
     if ($("btnConnect")) { $("btnConnect").textContent = "✅ Conectado"; $("btnConnect").disabled = true; }
     if ($("btnDisconnect")) $("btnDisconnect").style.display = "inline-block";
-
     ["btnApprove", "btnCreate", "btnSendBRN"].forEach(id => { if ($(id)) $(id).disabled = false; });
 
+    await carregarMural();
     await carregarSaldos();
     await atualizarApproveStatus();
-    renderMural();
     toast("✅ Conectado: " + short(userAddress), "ok");
 
     window.ethereum.on("accountsChanged", () => location.reload());
@@ -393,7 +432,7 @@ function desconectar() {
 }
 
 /* ============================================================
-   SALDOS + ATIVAR TOKEN
+   SALDOS + ATIVAR
    ============================================================ */
 async function lerSaldo(token, addr) {
   const r = await rawCall(token, "0x" + SEL_ERC20.balanceOf + encAddress(addr));
@@ -410,16 +449,14 @@ async function lerSaldoPOL(addr) {
 
 async function carregarSaldos() {
   const box = $("balances"); if (!box || !userAddress) return;
-
+  box.innerHTML = '<div class="state"><div class="spinner"></div>Carregando saldos…</div>';
   try {
     const keys = Object.keys(TOKENS);
-
     const [polBal, saldos, allowances] = await Promise.all([
       lerSaldoPOL(userAddress).catch(() => 0n),
       Promise.all(keys.map(k => lerSaldo(TOKENS[k].address, userAddress).catch(() => 0n))),
       Promise.all(keys.map(k => lerAllowance(TOKENS[k].address, userAddress, ESCROW_FACTORY_ADDRESS).catch(() => 0n))),
     ]);
-
     let html = `
       <div class="balance-card">
         <div class="balance-head">
@@ -428,9 +465,7 @@ async function carregarSaldos() {
         </div>
         <div class="balance-value">${fmt(polBal, 18, 6)}</div>
         <div class="balance-addr">Polygon (nativo) · não precisa ativar</div>
-      </div>
-    `;
-
+      </div>`;
     html += keys.map((k, i) => {
       const t = TOKENS[k];
       const ativado = allowances[i] > 0n;
@@ -443,10 +478,8 @@ async function carregarSaldos() {
           <div class="balance-value">${fmt(saldos[i], t.decimals, 6)}</div>
           <div class="balance-addr">${t.address}</div>
           ${!ativado ? `<button class="btn-warn btn-xs" onclick="ativarToken('${k}')">Ativar ${k}</button>` : ''}
-        </div>
-      `;
+        </div>`;
     }).join("");
-
     box.innerHTML = html;
   } catch (e) { console.error("saldos:", e); }
 }
@@ -457,28 +490,26 @@ async function ativarToken(k) {
   const max = ethers.constants.MaxUint256;
   const data = "0x" + SEL_ERC20.approve + encAddress(ESCROW_FACTORY_ADDRESS) + encUint(max);
   try {
-    toast("⏳ Ativando " + k + "… confirme na MetaMask", "info");
-    const tx = await signer.sendTransaction({ to: meta.address, data: data });
+    toast("⏳ Ativando " + k + "…", "info");
+    const tx = await enviarTx(meta.address, data, 0, 100000);
     await tx.wait();
     toast("✅ " + k + " ativado!", "ok");
     await carregarSaldos();
     await atualizarApproveStatus();
   } catch (e) {
     console.error(e);
-    toast("Falha: " + (e.data && e.data.message || e.message), "err", 8000);
+    toast("Falha: " + (e.data && e.data.message || e.message), "err", 9000);
   }
 }
 
 /* ============================================================
-   ENVIAR (POL + qualquer token)
+   ENVIAR
    ============================================================ */
 async function enviarToken() {
   if (!signer) { toast("Conecte a carteira", "warn"); return; }
-
   const kSimbolo = $("selTokenSend") ? $("selTokenSend").value : "BRN";
   const dest = $("destAddress").value.trim();
   const val  = $("sendAmount").value;
-
   if (!isValidAddress(dest)) { toast("Endereço inválido", "err"); return; }
   if (dest.toLowerCase() === userAddress.toLowerCase()) { toast("Destino = você mesmo", "warn"); return; }
   if (!val || Number(val) <= 0) { toast("Valor inválido", "warn"); return; }
@@ -489,6 +520,7 @@ async function enviarToken() {
       const tx = await signer.sendTransaction({
         to: dest,
         value: ethers.utils.parseUnits(val, 18),
+        gasLimit: 30000,
       });
       await tx.wait();
       toast("✅ " + val + " POL enviado!", "ok", 8000);
@@ -497,7 +529,7 @@ async function enviarToken() {
       const valor = ethers.utils.parseUnits(val, meta.decimals);
       const data = "0x" + SEL_ERC20.transfer + encAddress(dest) + encUint(valor);
       toast("⏳ Enviando " + val + " " + kSimbolo + "…", "info");
-      const tx = await signer.sendTransaction({ to: meta.address, data: data });
+      const tx = await enviarTx(meta.address, data, 0, 100000);
       await tx.wait();
       toast("✅ " + val + " " + kSimbolo + " enviado!", "ok", 8000);
     }
@@ -507,10 +539,9 @@ async function enviarToken() {
     await carregarSaldos();
   } catch (e) {
     console.error(e);
-    toast("Falha: " + (e.data && e.data.message || e.message), "err", 8000);
+    toast("Falha: " + (e.data && e.data.message || e.message), "err", 9000);
   }
 }
-
 async function enviarBRN() { return enviarToken(); }
 
 function atualizarSendInfo() {
@@ -530,7 +561,6 @@ function atualizarSendInfo() {
 function montarSelects() {
   const keys = Object.keys(TOKENS);
   const optsErc = keys.map(k => '<option value="' + k + '">' + TOKENS[k].nome + '</option>').join("");
-
   const selOf = $("selOferece"), selQ = $("selQuero");
   if (selOf && selQ) {
     selOf.innerHTML = optsErc;
@@ -538,35 +568,31 @@ function montarSelects() {
     selOf.value = "BRN";
     selQ.value  = "USDC";
   }
-
   const selSend = $("selTokenSend");
-  if (selSend) {
-    selSend.innerHTML = '<option value="POL">POL (nativo)</option>' + optsErc;
-  }
+  if (selSend) selSend.innerHTML = '<option value="POL">POL (nativo)</option>' + optsErc;
 }
 
 /* ============================================================
-   APROVAR + CRIAR ORDEM (VENDER)
+   APROVAR + CRIAR ORDEM
    ============================================================ */
 async function aprovar() {
   if (!signer) { toast("Conecte a carteira", "warn"); return; }
   const kOf = $("selOferece").value;
   const v   = $("inOferece").value;
   if (!v || Number(v) <= 0) { toast("Informe a quantidade a oferecer", "warn"); return; }
-
   const meta = TOKENS[kOf];
   const valor = ethers.utils.parseUnits(v, meta.decimals);
   const data = "0x" + SEL_ERC20.approve + encAddress(ESCROW_FACTORY_ADDRESS) + encUint(valor);
   try {
     toast("⏳ Aprovando " + kOf + "…", "info");
-    const tx = await signer.sendTransaction({ to: meta.address, data: data });
+    const tx = await enviarTx(meta.address, data, 0, 100000);
     await tx.wait();
     toast("✅ " + kOf + " aprovado!", "ok");
     await carregarSaldos();
     await atualizarApproveStatus();
   } catch (e) {
     console.error(e);
-    toast("Falha: " + (e.data && e.data.message || e.message), "err", 8000);
+    toast("Falha: " + (e.data && e.data.message || e.message), "err", 9000);
   }
 }
 
@@ -585,15 +611,28 @@ async function criarOrdem() {
   const valorQ  = ethers.utils.parseUnits(vQ,  tQ.decimals);
 
   try {
-    const allow = await lerAllowance(tOf.address, userAddress, ESCROW_FACTORY_ADDRESS);
-    if (allow < valorOf) { toast("Aprove " + kOf + " primeiro", "warn", 6000); return; }
+    // 1) Checa saldo
+    const saldoOf = await lerSaldo(tOf.address, userAddress);
+    if (saldoOf < valorOf) {
+      toast("❌ Saldo insuficiente de " + kOf + " (tem " + fmt(saldoOf, tOf.decimals) + ")", "err", 8000);
+      return;
+    }
 
+    // 2) Checa allowance
+    const allow = await lerAllowance(tOf.address, userAddress, ESCROW_FACTORY_ADDRESS);
+    if (allow < valorOf) {
+      toast("⚠️ Aprove " + kOf + " primeiro (allowance insuficiente)", "warn", 7000);
+      return;
+    }
+
+    // 3) Monta calldata
     const data = "0x" + SEL_FACTORY.criarOrdem
       + encAddress(tOf.address) + encAddress(tQ.address)
       + encUint(valorOf) + encUint(valorQ);
 
-    toast("⏳ Criando ordem… confirme na MetaMask", "info");
-    const tx = await signer.sendTransaction({ to: ESCROW_FACTORY_ADDRESS, data: data });
+    // 4) Simula + envia (com gas manual)
+    toast("⏳ Simulando transação…", "info");
+    const tx = await enviarTx(ESCROW_FACTORY_ADDRESS, data, 0, 800000);
     toast("📤 TX: " + short(tx.hash), "info");
     await tx.wait();
     toast("✅ Ordem criada!", "ok");
@@ -601,12 +640,12 @@ async function criarOrdem() {
     $("inOferece").value = "";
     $("inQuero").value = "";
     if ($("rateInfo")) $("rateInfo").style.display = "none";
-
     await carregarSaldos();
     await carregarMural();
   } catch (e) {
     console.error(e);
-    toast("Falha: " + (e.data && e.data.message || e.message), "err", 8000);
+    const motivo = (e.data && e.data.message) || e.reason || e.message;
+    toast("❌ " + motivo, "err", 10000);
   }
 }
 
@@ -636,22 +675,33 @@ async function executarOrdem(escrowAddr) {
     const o = ordersCache.find(x => x.endereco.toLowerCase() === escrowAddr.toLowerCase());
     if (!o) { toast("Ordem não encontrada", "err"); return; }
 
+    // 1) Saldo do token desejado
+    const saldo = await lerSaldo(o.tokenDesejado, userAddress);
+    if (saldo < o.valorDesejado) {
+      toast("❌ Você não tem saldo suficiente do token desejado", "err", 8000);
+      return;
+    }
+
+    // 2) Allowance para o escrow
     const allow = await lerAllowance(o.tokenDesejado, userAddress, escrowAddr);
     if (allow < o.valorDesejado) {
-      toast("⏳ Aprovando token desejado…", "info");
+      toast("⏳ Aprovando token desejado para o escrow…", "info");
       const dataA = "0x" + SEL_ERC20.approve + encAddress(escrowAddr) + encUint(o.valorDesejado);
-      const txA = await signer.sendTransaction({ to: o.tokenDesejado, data: dataA });
+      const txA = await enviarTx(o.tokenDesejado, dataA, 0, 100000);
       await txA.wait();
     }
-    toast("⏳ Executando…", "info");
-    const tx = await signer.sendTransaction({ to: escrowAddr, data: "0x" + SEL_ESCROW.executar });
+
+    // 3) Executa
+    toast("⏳ Executando troca…", "info");
+    const tx = await enviarTx(escrowAddr, "0x" + SEL_ESCROW.executar, 0, 400000);
     await tx.wait();
     toast("✅ Troca concluída!", "ok", 8000);
     await carregarSaldos();
     await carregarMural();
   } catch (e) {
     console.error(e);
-    toast("Falha: " + (e.data && e.data.message || e.message), "err", 8000);
+    const motivo = (e.data && e.data.message) || e.reason || e.message;
+    toast("❌ " + motivo, "err", 10000);
   }
 }
 
@@ -659,14 +709,15 @@ async function cancelarOrdem(escrowAddr) {
   if (!signer) { toast("Conecte a carteira", "warn"); return; }
   try {
     toast("⏳ Cancelando…", "info");
-    const tx = await signer.sendTransaction({ to: escrowAddr, data: "0x" + SEL_ESCROW.cancelar });
+    const tx = await enviarTx(escrowAddr, "0x" + SEL_ESCROW.cancelar, 0, 200000);
     await tx.wait();
     toast("✅ Cancelada.", "ok");
     await carregarSaldos();
     await carregarMural();
   } catch (e) {
     console.error(e);
-    toast("Falha: " + (e.data && e.data.message || e.message), "err", 8000);
+    const motivo = (e.data && e.data.message) || e.reason || e.message;
+    toast("❌ " + motivo, "err", 10000);
   }
 }
 
@@ -677,13 +728,11 @@ function atualizarCotacao() {
   const kOf = $("selOferece").value, kQ = $("selQuero").value;
   const vOf = Number($("inOferece").value || 0), vQ = Number($("inQuero").value || 0);
   const box = $("rateInfo");
-
   if (vOf > 0 && vQ > 0 && kOf !== kQ) {
     const r = vQ / vOf;
     box.style.display = "block";
     box.textContent = "💱 1 " + kOf + " = " + r.toLocaleString("pt-BR", { maximumFractionDigits: 6 }) + " " + kQ;
   } else box.style.display = "none";
-
   const ok = userAddress && vOf > 0 && vQ > 0 && kOf !== kQ;
   if ($("btnApprove")) $("btnApprove").disabled = !ok;
   if ($("btnCreate"))  $("btnCreate").disabled  = !ok;
@@ -728,7 +777,6 @@ function init() {
       tab.classList.add("active");
       const el = $("tab-" + tab.dataset.tab);
       if (el) el.classList.add("active");
-
       if (tab.dataset.tab === "saldos" && userAddress) carregarSaldos();
       if (tab.dataset.tab === "mural") carregarMural();
     });
@@ -739,10 +787,11 @@ function init() {
 
   if (window.ethereum) {
     window.ethereum.request({ method: "eth_accounts" })
-      .then(accs => { if (accs && accs.length) conectarCarteira(); })
-      .catch(() => {});
+      .then(accs => { if (accs && accs.length) conectarCarteira(); else carregarMural(); })
+      .catch(() => carregarMural());
+  } else {
+    carregarMural();
   }
-  carregarMural();
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
