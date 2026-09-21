@@ -13,6 +13,17 @@ const TOKENS = {
   WETH: { address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18, color: "weth", nome: "WETH" },
   WBTC: { address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8,  color: "wbtc", nome: "WBTC" },
   LINK: { address: "0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39", decimals: 18, color: "link", nome: "LINK" },
+  MATIC: { address: "0x0000000000000000000000000000000000001010", decimals: 18, color: "matic", nome: "MATIC" },
+  AAVE:  { address: "0xD6DF932A45C0f255f85145f286eA0b292B21C90B", decimals: 18, color: "aave",  nome: "AAVE" },
+  UNI:   { address: "0xb33EaAd8d922B1083446DC23f610c2567fB5180f", decimals: 18, color: "uni",   nome: "UNI" },
+  CRV:   { address: "0x172370d5Cd63279eFa6d502DAB29171933a610AF", decimals: 18, color: "crv",   nome: "CRV" },
+  SUSHI: { address: "0x0b3F868E0BE5597D5DB7fEB59E1CADBb0fdDa50a", decimals: 18, color: "sushi", nome: "SUSHI" },
+  GRT:   { address: "0x5fe2B58c013d7601147DcdD68C143A77499f5531", decimals: 18, color: "grt",   nome: "GRT" },
+  BAL:   { address: "0x9a71012B13CA4d3D0Cdc72A177DF3ef03b0E76A3", decimals: 18, color: "bal",   nome: "BAL" },
+  COMP:  { address: "0x8505b9d2254A7Ae468c0E9dd10Ccea3A837aef5c", decimals: 18, color: "comp",  nome: "COMP" },
+  MKR:   { address: "0x6f7C932e7684666C9fd1d44527765433e01fF61d", decimals: 18, color: "mkr",   nome: "MKR" },
+  SAND:  { address: "0xBbba073C31bF03b8ACf7c28EF0738DeCF3695683", decimals: 18, color: "sand",  nome: "SAND" },
+  MANA:  { address: "0xA1c57f48F0Deb89f569dFbE6E2B7f46D33606fD4", decimals: 18, color: "mana",  nome: "MANA" },
 };
 
 const PARES_FILTRO = [
