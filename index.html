@@ -3,165 +3,192 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Carteira BRN P2P — Mural de Ordens (Escrow on-chain)</title>
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css">
+<title>BRN — Carteira & Trocas</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+<style>
+:root { color-scheme: dark; --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --brn:#f5d000; --usdc:#2775ca; --usdt:#26a17b; --ok:#3fb950; --err:#f85149; --warn:#d29922; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 20px; line-height: 1.5; }
+.container { max-width: 900px; margin: 0 auto; }
+header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+header h1 { font-size: 1.8rem; color: var(--brn); }
+header p { color: var(--muted); margin-top: 5px; }
+.net-status { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; font-size: 0.9rem; color: var(--muted); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); }
+.dot.off { background: var(--err); }
+.dot.load { background: var(--warn); animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.tabs { display: flex; gap: 5px; margin-bottom: 20px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.tab { padding: 10px 20px; background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 0.95rem; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.tab.active { color: var(--brn); border-bottom-color: var(--brn); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+.card h2 { font-size: 1.1rem; margin-bottom: 15px; color: var(--brn); }
+.wallet-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
+.wallet-info { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+.addr { font-family: monospace; font-size: 0.9rem; color: var(--muted); }
+.balance { font-weight: 600; font-size: 0.9rem; }
+.balance span { color: var(--brn); }
+.balance.usdc span { color: var(--usdc); }
+.balance.usdt span { color: var(--usdt); }
+.form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+input, button { padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.95rem; }
+input:focus { outline: none; border-color: var(--brn); }
+input[type="number"], input[type="text"] { flex: 1; min-width: 140px; }
+button { cursor: pointer; font-weight: 500; transition: all 0.2s; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--brn); color: #000; border: none; }
+.btn-primary:hover:not(:disabled) { filter: brightness(0.9); }
+.btn-send { background: var(--ok); color: #000; border: none; }
+.btn-ok { background: var(--ok); color: #000; border: none; }
+.btn-err { background: var(--err); color: #fff; border: none; }
+.btn-sm { padding: 6px 10px; font-size: 0.85rem; }
+.btn-refresh { background: transparent; border-color: var(--muted); color: var(--muted); }
+.hint { margin-top: 10px; padding: 8px 12px; background: rgba(39,117,202,0.1); border-radius: 6px; font-size: 0.9rem; color: var(--usdc); }
+.hint-usdt { background: rgba(38,161,123,0.1); color: var(--usdt); }
+.rate-info { margin-top: 10px; padding: 8px 12px; background: rgba(245,208,0,0.1); border-radius: 6px; font-size: 0.9rem; display: none; }
+.counter { margin-bottom: 15px; font-size: 0.95rem; color: var(--muted); }
+.order { border: 1px solid var(--border); border-radius: 8px; padding: 15px; margin-bottom: 12px; background: rgba(0,0,0,0.15); transition: border-color 0.2s; }
+.order:hover { border-color: var(--brn); }
+.order.cancelled { opacity: 0.6; }
+.order.done { opacity: 0.7; border-style: dashed; }
+.order-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.order-id { font-family: monospace; font-size: 0.85rem; color: var(--muted); }
+.tag { padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+.tag.active { background: rgba(63,185,80,0.15); color: var(--ok); }
+.tag.done { background: rgba(39,117,202,0.15); color: var(--usdc); }
+.tag.cancelled { background: rgba(248,81,73,0.15); color: var(--err); }
+.swap { display: flex; align-items: center; justify-content: space-around; text-align: center; margin: 15px 0; }
+.side .lbl { font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
+.amt { font-size: 1.3rem; font-weight: 700; }
+.amt.brn { color: var(--brn); }
+.amt.usdc { color: var(--usdc); }
+.amt.usdt { color: var(--usdt); }
+.arrow { font-size: 1.5rem; color: var(--muted); }
+.order-meta { display: flex; justify-content: space-between; flex-wrap: wrap; font-size: 0.8rem; color: var(--muted); margin: 10px 0; }
+.order-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.state, .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+.big { font-size: 3rem; margin-bottom: 10px; }
+.spinner { display: inline-block; width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--brn); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 10px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#toasts { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 9999; }
+.toast { padding: 12px 18px; border-radius: 8px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.3); max-width: 350px; transition: opacity 0.3s, transform 0.3s; }
+.toast.ok { border-left: 4px solid var(--ok); }
+.toast.err { border-left: 4px solid var(--err); }
+.toast.warn { border-left: 4px solid var(--warn); }
+.toast.info { border-left: 4px solid var(--usdc); }
+.contract-info { margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.15); border-radius: 8px; font-size: 0.8rem; color: var(--muted); }
+.contract-info code { font-family: monospace; font-size: 0.75rem; }
+</style>
 </head>
 <body>
-<div class="wrap">
-
-  <header class="top">
-    <div class="brand">
-      <div class="logo">B</div>
-      <div>
-        <h1>Carteira BRN P2P</h1>
-        <p>Mural de ordens de venda BRN ⇄ USDC · Escrow on-chain</p>
-      </div>
-    </div>
-    <div class="net-badge">
-      <span class="dot load" id="netDot"></span>
-      <span id="netText">Consultando…</span>
+<div class="container">
+  <header>
+    <h1>🔄 BRN — Carteira & Trocas</h1>
+    <p>Troque BRN ⇄ USDC ou BRN ⇄ USDT na blockchain Polygon</p>
+    <div class="net-status">
+      <div id="netDot" class="dot load"></div>
+      <span id="netText">Conectando…</span>
     </div>
   </header>
 
-  <section class="card">
-    <div class="wallet">
+  <div class="card">
+    <div class="wallet-bar">
       <div>
-        <h2>Sua carteira</h2>
-        <p class="sub">Conecte a MetaMask na rede Polygon para criar, executar ou cancelar ordens.</p>
+        <button id="btnConnect">🔌 Conectar carteira</button>
+        <button id="btnDisconnect" class="btn-refresh" style="display:none;">✖ Desconectar</button>
       </div>
-      <div class="row" style="flex:0 0 auto">
-        <button class="btn-primary" id="btnConnect">🔌 Conectar carteira</button>
-      </div>
-    </div>
-    <div id="walletInfo" style="display:none; margin-top:16px">
-      <div class="row" style="align-items:center">
-        <span class="addr" id="addr">—</span>
-        <button class="btn-ghost btn-sm" id="btnDisconnect" style="flex:0 0 auto">Desconectar</button>
-      </div>
-      <div class="balances" style="margin-top:16px">
-        <div class="bal">
-          <div class="t"><span class="chip brn">B</span> Saldo BRN</div>
-          <div class="v" id="balBRN">—</div>
-        </div>
-        <div class="bal">
-          <div class="t"><span class="chip usdc">$</span> Saldo USDC</div>
-          <div class="v" id="balUSDC">—</div>
-        </div>
+      <div id="walletInfo" class="wallet-info" style="display:none;">
+        <span class="addr" id="addr"></span>
+        <span class="balance"><span id="balBRN">—</span> BRN</span>
+        <span class="balance usdc"><span id="balUSDC">—</span> USDC</span>
+        <span class="balance usdt"><span id="balUSDT">—</span> USDT</span>
       </div>
     </div>
-  </section>
+  </div>
 
-  <section class="card">
-    <h2>Criar ordem de venda</h2>
-    <p class="sub">
-      Você oferece <b>BRN</b> e pede <b>USDC</b>. Os BRN ficam travados no contrato (escrow)
-      até alguém executar a ordem — ou você cancelar.
-    </p>
-    <div class="row">
-      <div>
-        <label for="inBRN">Você oferece (BRN)</label>
-        <input id="inBRN" type="number" min="0" step="any" placeholder="Ex.: 1000">
+  <div class="tabs">
+    <button class="tab active" data-tab="brn-usdc">🟡 Mural BRN ⇄ USDC</button>
+    <button class="tab" data-tab="usdt-brn">🟢 Mural USDT ⇄ BRN</button>
+    <button class="tab" data-tab="send">📤 Enviar BRN</button>
+  </div>
+
+  <!-- ========== MURAL 1: BRN ⇄ USDC ========== -->
+  <div class="tab-content active" id="tab-brn-usdc">
+    <div class="card">
+      <h2>🟡 Criar ordem de venda de BRN</h2>
+      <p class="hint">Você oferece <b>BRN</b> e pede <b>USDC</b>. Os BRN ficam travados no contrato até alguém executar ou você cancelar.</p>
+      <div class="form-row">
+        <input type="number" id="inBRN1" placeholder="Oferece (BRN)" step="0.0001" min="0">
+        <input type="number" id="inUSDC1" placeholder="Pede (USDC)" step="0.0001" min="0">
       </div>
-      <div>
-        <label for="inUSDC">Você pede (USDC)</label>
-        <input id="inUSDC" type="number" min="0" step="any" placeholder="Ex.: 1">
+      <div class="form-row">
+        <button id="btnApprove1" disabled>✅ Aprovar BRN</button>
+        <button id="btnCreate1" class="btn-primary" disabled>📤 Criar Ordem</button>
+      </div>
+      <div id="rate1" class="rate-info"></div>
+    </div>
+    <div class="card">
+      <div class="wallet-bar">
+        <h2>📋 Ordens BRN ⇄ USDC</h2>
+        <button id="btnRefresh1" class="btn-refresh">🔄 Atualizar</button>
+      </div>
+      <div class="counter" id="counter1">⏳ Consultando blockchain…</div>
+      <div id="orders1"></div>
+    </div>
+  </div>
+
+  <!-- ========== MURAL 2: USDT ⇄ BRN ========== -->
+  <div class="tab-content" id="tab-usdt-brn">
+    <div class="card">
+      <h2>🟢 Criar ordem de venda de USDT</h2>
+      <p class="hint hint-usdt">Você oferece <b>USDT</b> e pede <b>BRN</b>. Os USDT ficam travados no contrato até alguém executar ou você cancelar.</p>
+      <div class="form-row">
+        <input type="number" id="inUSDT2" placeholder="Oferece (USDT)" step="0.0001" min="0">
+        <input type="number" id="inBRN2" placeholder="Pede (BRN)" step="0.0001" min="0">
+      </div>
+      <div class="form-row">
+        <button id="btnApprove2" disabled>✅ Aprovar USDT</button>
+        <button id="btnCreate2" class="btn-primary" disabled>📤 Criar Ordem</button>
+      </div>
+      <div id="rate2" class="rate-info"></div>
+    </div>
+    <div class="card">
+      <div class="wallet-bar">
+        <h2>📋 Ordens USDT ⇄ BRN</h2>
+        <button id="btnRefresh2" class="btn-refresh">🔄 Atualizar</button>
+      </div>
+      <div class="counter" id="counter2">⏳ Consultando blockchain…</div>
+      <div id="orders2"></div>
+    </div>
+  </div>
+
+  <!-- ========== ENVIAR BRN ========== -->
+  <div class="tab-content" id="tab-send">
+    <div class="card">
+      <h2>📤 Transferir BRN</h2>
+      <p class="hint">Envie BRN diretamente de sua carteira para qualquer endereço Polygon.</p>
+      <div class="form-row" style="flex-direction: column; align-items: stretch;">
+        <input type="text" id="destAddress" placeholder="Endereço de destino (ex: 0x...)">
+        <input type="number" id="sendAmount" placeholder="Quantidade de BRN" step="0.0001" min="0">
+      </div>
+      <div class="form-row">
+        <button id="btnSendBRN" class="btn-send" disabled>📤 Enviar BRN</button>
       </div>
     </div>
-    <div class="note info" id="rateInfo" style="display:none"></div>
-    <div class="row" style="margin-top:16px">
-      <button class="btn-primary" id="btnCreate" disabled>➕ Criar ordem (trava BRN)</button>
-      <button class="btn-ghost" id="btnApproveBRN" disabled>✅ Aprovar BRN</button>
-    </div>
-  </section>
+  </div>
 
-  <section class="card">
-    <div class="mural-head">
-      <div>
-        <h2>Mural de ordens</h2>
-        <p class="sub">Lido direto da blockchain — não precisa conectar carteira para ver.</p>
-      </div>
-      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
-        <span class="counter" id="counter">⏳ Consultando…</span>
-        <button class="btn-ghost btn-sm" id="btnRefresh">🔄 Atualizar</button>
-      </div>
-    </div>
-    <div class="orders" id="orders">
-      <div class="state">
-        <div class="spinner"></div>
-        Consultando a blockchain…
-      </div>
-    </div>
-  </section>
-
-  <section class="card explain">
-    <h2>Como funciona (explicação)</h2>
-    <p class="sub">Entenda o fluxo on-chain do mural BRN ⇄ USDC.</p>
-
-    <h3>1. O que é o EscrowFactory?</h3>
-    <p>
-      É um <b>contrato inteligente já publicado na Polygon</b> no endereço
-      <code>0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8</code>. Ele funciona como uma
-      <b>fábrica de escrows</b>: cada vez que alguém cria uma ordem de venda, a fábrica
-      <b>implanta um novo contrato de escrow</b> só para aquela ordem.
-    </p>
-
-    <h3>2. O fluxo de uma ordem</h3>
-    <div class="flow">
-      <span class="step">1. Vendedor aprova BRN</span>
-      <span class="sep">→</span>
-      <span class="step">2. Cria ordem (BRN travado)</span>
-      <span class="sep">→</span>
-      <span class="step">3. Comprador aprova USDC</span>
-      <span class="sep">→</span>
-      <span class="step">4. Executa a ordem</span>
-      <span class="sep">→</span>
-      <span class="step">5. Troca atômica</span>
-    </div>
-    <ol>
-      <li><b>Aprovar BRN:</b> o vendedor autoriza a fábrica a mover seus BRN (<code>approve</code>).</li>
-      <li><b>Criar ordem:</b> chama <code>criarOrdem(...)</code>. A fábrica cria o escrow e <b>puxa os BRN</b>.</li>
-      <li><b>Aprovar USDC:</b> o comprador autoriza o escrow a mover seus USDC.</li>
-      <li><b>Executar:</b> o comprador chama <code>executar()</code>. O contrato faz a <b>troca atômica</b>.</li>
-      <li><b>Cancelar:</b> enquanto ninguém executou, o vendedor pode chamar <code>cancelar()</code>.</li>
-    </ol>
-
-    <h3>3. Por que é seguro?</h3>
-    <p>
-      A troca acontece <b>dentro do contrato</b>, na mesma transação. Ou as duas pernas
-      (BRN e USDC) acontecem juntas, ou nada acontece — é <b>atômico</b>.
-    </p>
-
-    <h3>4. O que este front-end faz</h3>
-    <ul>
-      <li><b>Lê o mural direto da blockchain</b> via proxy <code>/rpc</code> (sem CORS).</li>
-      <li>Mostra o <b>contador de ordens ativas</b> e o estado de cada uma.</li>
-      <li>Faz o <b>approve automático</b> de BRN (fábrica) e de USDC (escrow).</li>
-      <li>Permite <b>criar</b>, <b>executar</b> e <b>cancelar</b> ordens pela MetaMask.</li>
-    </ul>
-
-    <h3>5. Endereços usados</h3>
-    <ul>
-      <li><b>EscrowFactory:</b> <code>0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8</code></li>
-      <li><b>Token BRN:</b> <code>0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210</code> (18 decimais)</li>
-      <li><b>Token USDC:</b> <code>0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174</code> (6 decimais)</li>
-      <li><b>Rede:</b> Polygon Mainnet (chainId 137)</li>
-    </ul>
-
-    <div class="note">
-      ⚠️ <b>Atenção:</b> contrato <b>não verificado</b> no PolygonScan. Teste com valores pequenos.
-    </div>
-  </section>
-
-  <footer>
-    Carteira BRN P2P · Mural on-chain · Polygon Mainnet ·
-    <a href="https://polygonscan.com/address/0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8" target="_blank" rel="noopener">ver contrato no PolygonScan</a>
-  </footer>
+  <div class="contract-info">
+    <strong>📌 Endereços:</strong><br>
+    Escrow Factory: <code>0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8</code><br>
+    Token BRN: <code>0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210</code><br>
+    Token USDC: <code>0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174</code><br>
+    Token USDT: <code>0xc2132D05D31c914a87C6611C10748AEb04B58e8F</code>
+  </div>
 </div>
 
 <div id="toasts"></div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
