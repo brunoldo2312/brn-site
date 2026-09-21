@@ -12,8 +12,9 @@ const USDC_DECIMALS = 6;
 const POLYGON_CHAIN_ID = 137;
 
 const RPCS = [
-  "https://corsproxy.io/?url=https%3A%2F%2Fpolygon-bor-rpc.publicnode.com",
-  "https://api.allorigins.win/raw?url=https%3A%2F%2Fpolygon.drpc.org",
+  "https://polygon-bor-rpc.publicnode.com",
+  "https://polygon.drpc.org",
+  "https://1rpc.io/matic",
 ];
 const RPC_TIMEOUT_MS = 15000;
 
