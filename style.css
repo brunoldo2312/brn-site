@@ -32,7 +32,6 @@ body {
 
 .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 20px 80px; }
 
-/* ---------- HEADER ---------- */
 .top { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
 .brand { display: flex; align-items: center; gap: 14px; }
 .logo {
@@ -57,7 +56,6 @@ body {
 .dot.load { background: var(--warn); box-shadow: 0 0 10px var(--warn); }
 .dot.off  { background: var(--err);  box-shadow: 0 0 10px var(--err); }
 
-/* ---------- CARDS ---------- */
 .card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -70,7 +68,6 @@ body {
 .card .sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
 .card-head { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
 
-/* ---------- INPUTS ---------- */
 label {
   display: block; font-size: 12px; font-weight: 700;
   color: var(--muted); text-transform: uppercase; letter-spacing: .5px;
@@ -94,7 +91,6 @@ input:focus, select:focus {
 }
 input[readonly] { color: var(--muted); }
 
-/* ---------- BOTÕES ---------- */
 button {
   cursor: pointer; font-family: inherit; font-weight: 700; font-size: 14px;
   border-radius: 10px; border: none; padding: 12px 22px;
@@ -113,7 +109,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 
 .row-btns { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
 
-/* ---------- ABAS ---------- */
 .tabs { display: flex; gap: 8px; margin: 24px 0 16px; flex-wrap: wrap; }
 .tab {
   background: var(--card); border: 1px solid var(--border);
@@ -127,13 +122,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .tab-content.active { display: block; animation: fadeIn .2s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
-/* ---------- SALDOS ---------- */
-.balances-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 12px;
-  margin-top: 12px;
-}
+.balances-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-top: 12px; }
 .balance-card {
   background: var(--bg-2);
   border: 1px solid var(--border);
@@ -172,7 +161,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .badge.ok  { background: rgba(34,197,94,.15);  color: var(--ok); }
 .badge.off { background: rgba(245,158,11,.15); color: var(--warn); }
 
-/* ---------- FILTROS ---------- */
 .filtros { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
 .filtro {
   background: var(--card-2); border: 1px solid var(--border);
@@ -184,7 +172,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .filtro:hover { border-color: var(--brand); }
 .filtro.active { background: var(--brand); color: #fff; border-color: var(--brand); }
 
-/* ---------- ORDENS ---------- */
 .orders-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin-top: 12px; }
 .order {
   background: var(--bg-2);
@@ -217,7 +204,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .order-actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
 .order-actions button { flex: 1; padding: 10px 14px; font-size: 13px; }
 
-/* ---------- INFO ---------- */
 .rate-info, .approve-status {
   margin-top: 12px; padding: 12px 14px;
   background: var(--bg-2);
@@ -228,7 +214,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .approve-status.ok  { border-color: var(--ok);  color: var(--ok); }
 .approve-status.off { border-color: var(--warn); color: var(--warn); }
 
-/* ---------- ESTADOS ---------- */
 .empty, .state { grid-column: 1 / -1; text-align: center; padding: 50px 0; color: var(--muted); font-size: 14px; }
 .empty .big { font-size: 40px; margin-bottom: 10px; }
 .spinner {
@@ -241,7 +226,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---------- TOASTS ---------- */
 #toasts { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 10px; z-index: 9999; }
 .toast {
   background: var(--card);
@@ -260,7 +244,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .toast.warn { border-left-color: var(--warn); }
 @keyframes slideIn { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
 
-/* ---------- RESPONSIVO ---------- */
 @media (max-width: 640px) {
   .wrap { padding: 20px 14px 60px; }
   .brand h1 { font-size: 17px; }
