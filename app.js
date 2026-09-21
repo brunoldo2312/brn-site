@@ -1,5 +1,5 @@
 // ============================================================
-// APP.JS — BRN Carteira & Trocas — Multi-token (COMPLETO)
+// APP.JS — BRN Carteira & Trocas — Multi-token (COMPLETO v2)
 // ============================================================
 const ESCROW_FACTORY_ADDRESS = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
@@ -29,12 +29,21 @@ const TOKENS = {
 
 const FILTRO_TOKENS = ["todas", ...Object.keys(TOKENS)];
 
+/* ============================================================
+   RPCs — lista ampliada e testada (a maioria aceita CORS)
+   ============================================================ */
 const RPCS = [
+  "https://polygon-rpc.com",
+  "https://polygon.llamarpc.com",
   "https://polygon-bor-rpc.publicnode.com",
   "https://polygon.drpc.org",
+  "https://rpc.ankr.com/polygon",
+  "https://polygon.blockpi.network/v1/rpc/public",
   "https://1rpc.io/matic",
+  "https://polygon.mainnet.rpc.thirdweb.com",
 ];
-const RPC_TIMEOUT_MS = 15000;
+
+const RPC_TIMEOUT_MS = 12000;
 
 const SEL_FACTORY = {
   criarOrdem:  "ceff4da6",
@@ -59,6 +68,7 @@ const SEL_ERC20 = {
 let provider = null, signer = null, userAddress = null;
 let ordersCache = [];
 let filtroAtual = "todas";
+let rpcAtual = "";
 
 /* ============ HELPERS ============ */
 function $(id) { return document.getElementById(id); }
@@ -121,7 +131,9 @@ function decAddressArray(hex) {
   return arr;
 }
 
-/* ============ PROVIDER ============ */
+/* ============================================================
+   PROVIDER — versão robusta
+   ============================================================ */
 async function withTimeout(p, ms, msg) {
   let t;
   const to = new Promise((_, rej) => { t = setTimeout(() => rej(new Error(msg || "timeout")), ms); });
@@ -129,22 +141,49 @@ async function withTimeout(p, ms, msg) {
 }
 
 async function pickProvider() {
+  const erros = [];
   for (const url of RPCS) {
     try {
-      const p = new ethers.providers.JsonRpcProvider(url);
-      const net = await withTimeout(p.getNetwork(), 5000);
-      if (net && Number(net.chainId) === POLYGON_CHAIN_ID) {
-        try { await withTimeout(p.getBlockNumber(), 3000); return p; } catch (e) {}
+      // StaticJsonRpcProvider: pula eth_chainId (mais rápido e evita bloqueios)
+      const p = new ethers.providers.StaticJsonRpcProvider(
+        { url: url, timeout: 8000 },
+        { chainId: POLYGON_CHAIN_ID, name: "polygon" }
+      );
+
+      // Teste real: pedir o número do bloco
+      const bn = await withTimeout(p.getBlockNumber(), 7000, "timeout em " + url);
+
+      if (bn && bn > 0) {
+        console.log("✅ RPC conectado:", url, "| bloco:", bn);
+        rpcAtual = url;
+        return p;
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("❌ RPC falhou:", url, "→", e.message);
+      erros.push(url.replace(/^https?:\/\//, "").split("/")[0]);
+    }
   }
-  throw new Error("Nenhum RPC disponível. Recarregue.");
+  const msg = "Nenhum RPC respondeu. Testados: " + erros.join(", ");
+  console.error(msg);
+  throw new Error(msg);
 }
 
-async function getProvider() { if (provider) return provider; provider = await pickProvider(); return provider; }
+async function getProvider() {
+  if (provider) return provider;
+  provider = await pickProvider();
+  return provider;
+}
+
+function resetProvider() {
+  provider = null;
+  rpcAtual = "";
+}
+
 async function rawCall(to, data) {
   const p = await getProvider();
-  return await withTimeout(p.call({ to: to, data: data }), RPC_TIMEOUT_MS);
+  const args = { to: to, data: data };
+  if (userAddress) args.from = userAddress;
+  return await withTimeout(p.call(args), RPC_TIMEOUT_MS, "eth_call timeout");
 }
 
 function acharTokenPorEndereco(addr) {
@@ -168,6 +207,7 @@ async function carregarMural() {
       const r = await rawCall(ESCROW_FACTORY_ADDRESS, "0x" + SEL_FACTORY.todasOrdens);
       addrs = decAddressArray(r);
     } catch (e) {
+      console.warn("todasOrdens falhou, tentando totalOrdens:", e.message);
       const rT = await rawCall(ESCROW_FACTORY_ADDRESS, "0x" + SEL_FACTORY.totalOrdens);
       const n = Number(decUint(splitWords(rT)[0]));
       if (n > 0 && n < 200) {
@@ -199,9 +239,18 @@ async function carregarMural() {
     renderMural();
     setNet("ok", "Polygon · online");
   } catch (e) {
-    console.error(e);
-    if (box) box.innerHTML = '<div class="empty"><div class="big">⚠️</div>Não foi possível consultar.<br><small>' + e.message + '</small></div>';
-    if (counter) counter.textContent = "❌ Falha";
+    console.error("Mural falhou:", e);
+    resetProvider();
+    if (box) {
+      box.innerHTML =
+        '<div class="empty">' +
+          '<div class="big">⚠️</div>' +
+          'Não foi possível consultar a rede.<br>' +
+          '<small style="display:block;margin-top:8px;color:var(--muted);">' + e.message + '</small>' +
+          '<button id="btnRetryMural" class="btn-warn btn-sm" style="margin-top:16px;" onclick="carregarMural()">🔄 Tentar novamente</button>' +
+        '</div>';
+    }
+    if (counter) counter.textContent = "❌ Offline";
     setNet("off", "Offline");
   }
 }
@@ -649,7 +698,7 @@ function init() {
   if ($("btnSendBRN"))    $("btnSendBRN").addEventListener("click", enviarToken);
   if ($("btnApprove"))    $("btnApprove").addEventListener("click", aprovar);
   if ($("btnCreate"))     $("btnCreate").addEventListener("click", criarOrdem);
-  if ($("btnRefresh"))    $("btnRefresh").addEventListener("click", carregarMural);
+  if ($("btnRefresh"))    $("btnRefresh").addEventListener("click", function () { resetProvider(); carregarMural(); });
   if ($("btnRefreshBal")) $("btnRefreshBal").addEventListener("click", carregarSaldos);
 
   if ($("btnCopyAddr")) $("btnCopyAddr").addEventListener("click", function () {
