@@ -181,15 +181,14 @@ function renderFiltros() {
   el.innerHTML = FILTRO_TOKENS.map(function(k) {
     let label = k === "todas" ? "🌐 Todas" : k;
     let count = 0;
-    if (k !== "todas") {
+    if (k === "todas") {
+      count = ativos.length;
+    } else {
       const addr = TOKENS[k] && TOKENS[k].address.toLowerCase();
       if (addr) count = ativos.filter(function(o) {
         return o.tokenOferecido.toLowerCase() === addr || o.tokenDesejado.toLowerCase() === addr;
       }).length;
-    } else {
-      count = ativos.length;
     }
-    if (k !== "todas" && count === 0) return "";
     return '<button class="filtro ' + (filtroAtual === k ? "active" : "") + '" data-filtro="' + k + '">' + label + ' (' + count + ')</button>';
   }).join("");
   el.querySelectorAll(".filtro").forEach(function(b) {
@@ -202,6 +201,7 @@ function renderFiltros() {
 }
 
 function renderMural() {
+  renderFiltros();
   const box = $("orders"), counter = $("counter");
   if (!box) return;
   const validas = ordersCache.filter(function(o) { return !o.erro; });
