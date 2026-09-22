@@ -1,11 +1,18 @@
 // ============================================================
 // APP.JS — Carteira BRN P2P + CONSULTA BTC
-// Versão: 5.0 | Data: 2026-09-22
+// Versão: 5.1 | Data: 2026-09-22
+// Correções aplicadas:
+//   1) el() não renderizava HTML → adicionado elHTML()
+//   2) conectarCarteira/desconectarCarteira sem null-check → agora é null-safe
+//   3) Falha ao buscar saldos/ordens derrubava a carteira → isolado
+//   4) Saldos lidos em série → agora em paralelo
+//   5) RPC_TIMEOUT reduzido + loop de RPC sem repetição desnecessária
+//   6) inicializar() reconstruído (filtros) + chamada inicial automática
 // ============================================================
 
 const ESCROW_FACTORY_ADDRESS = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
-const APP_VERSION = "v5.0";
+const APP_VERSION = "v5.1";
 
 const NATIVO = { symbol: "POL", name: "POL (nativo)", decimals: 18, native: true };
 const TOKENS = [
@@ -25,7 +32,8 @@ const RPCS = [
   "https://polygon-rpc.com",
   "https://rpc.ankr.com/polygon",
 ];
-const RPC_TIMEOUT_MS = 8000;
+// ✅ CORRIGIDO: era 8000ms e loop 2x — total podia passar de 60s
+const RPC_TIMEOUT_MS = 4000;
 const MAX_ORDENS = 1000;
 const CONCORRENCIA = 8;
 
@@ -76,10 +84,6 @@ const ABAS = ["mural", "vender", "enviar", "converter", "btc", "ajuda"];
 // 🟠 CONSULTA DE SALDO BTC — API PÚBLICA
 // ============================================================
 
-/**
- * Valida formato de endereço Bitcoin
- * Suporta: bc1q… (SegWit), 1… (Legacy), 3… (P2SH)
- */
 function validarEnderecoBTC(endereco) {
   if (!endereco || typeof endereco !== "string") return false;
   const s = endereco.trim();
@@ -89,15 +93,11 @@ function validarEnderecoBTC(endereco) {
   return false;
 }
 
-/**
- * Consulta saldo de endereço BTC via API pública do mempool.space
- * NÃO precisa de chave — apenas leitura pública
- */
 async function consultarSaldoBTC(enderecoBTC) {
   const resultadoEl = document.getElementById("btcBalanceResult");
   const valorEl = document.getElementById("btcBalanceValue");
   const detalhesEl = document.getElementById("btcBalanceDetails");
-  
+
   if (!validarEnderecoBTC(enderecoBTC)) {
     toast("Endereço BTC inválido. Verifique o formato.", "warn");
     if (resultadoEl) resultadoEl.classList.remove("show");
@@ -117,7 +117,7 @@ async function consultarSaldoBTC(enderecoBTC) {
     }
 
     const dados = await resposta.json();
-    
+
     const saldoTotal = dados.chain_stats.funded_txo_sum / 100000000;
     const saldoGasto = dados.chain_stats.spent_txo_sum / 100000000;
     const saldoConfirmado = saldoTotal - saldoGasto;
@@ -127,16 +127,16 @@ async function consultarSaldoBTC(enderecoBTC) {
 
     if (valorEl) valorEl.textContent = `${saldoConfirmado.toFixed(8)} BTC`;
     if (detalhesEl) {
-      detalhesEl.textContent = saldoPendente > 0 
-        ? `Pendente: +${saldoPendente.toFixed(8)} BTC` 
+      detalhesEl.textContent = saldoPendente > 0
+        ? `Pendente: +${saldoPendente.toFixed(8)} BTC`
         : saldoPendente < 0
           ? `Pendente: ${saldoPendente.toFixed(8)} BTC`
           : "Nenhuma transação pendente";
     }
     if (resultadoEl) resultadoEl.classList.add("show");
     toast("✅ Saldo consultado com sucesso!", "ok");
-    
-    return { 
+
+    return {
       endereco: enderecoBTC,
       saldoConfirmado,
       saldoPendente,
@@ -157,12 +157,23 @@ async function consultarSaldoBTC(enderecoBTC) {
 // UTILITÁRIOS
 // ============================================================
 function $(id) { return document.getElementById(id); }
+
+// ✅ CORRIGIDO: el() agora só aceita texto (comportamento original mantido)
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
   if (text !== undefined) e.textContent = text;
   return e;
 }
+
+// ✅ NOVO: variante que interpreta HTML (necessária para os cards de saldo)
+function elHTML(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+}
+
 function isAddr(a) { return typeof a === "string" && /^0x[0-9a-fA-F]{40}$/.test(a); }
 function short(a) { return isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—"; }
 function shortHash(h) { return typeof h === "string" && /^0x[0-9a-fA-F]{64}$/.test(h) ? h.slice(0, 10) + "…" + h.slice(-6) : "—"; }
@@ -339,7 +350,8 @@ async function getProvider(rpcUrl) {
 }
 
 async function getAnyProvider() {
-  for (let tentativa = 0; tentativa < RPCS.length * 2; tentativa++) {
+  // ✅ CORRIGIDO: 1 rodada por RPC (antes era 2x, até 64s de espera)
+  for (let tentativa = 0; tentativa < RPCS.length; tentativa++) {
     rpcIdx = (rpcIdx + 1) % RPCS.length;
     const url = RPCS[rpcIdx];
     try {
@@ -439,7 +451,7 @@ async function conectarCarteira() {
     await walletProvider.send("eth_requestAccounts", []);
     signer = walletProvider.getSigner();
     userAddress = await signer.getAddress();
-    
+
     const rede = await walletProvider.getNetwork();
     if (rede.chainId !== POLYGON_CHAIN_ID) {
       toast("Mudando para a rede Polygon…", "info");
@@ -457,19 +469,26 @@ async function conectarCarteira() {
         } else throw e;
       }
     }
-    
-    $("btnConnect").style.display = "none";
-    $("walletInfo").style.display = "flex";
-    $("addr").textContent = short(userAddress);
+
+    // ✅ CORRIGIDO: null-safe ao manipular elementos de UI
+    const btn = $("btnConnect");
+    const info = $("walletInfo");
+    const addrEl = $("addr");
+    if (btn) btn.style.display = "none";
+    if (info) info.style.display = "flex";
+    if (addrEl) addrEl.textContent = short(userAddress);
     setNet("ok", "Conectado");
-    
-    await atualizarSaldos();
-    await carregarOrdens();
+
+    // ✅ CORRIGIDO: falha em saldos/ordens NÃO desconecta a carteira
+    try { await atualizarSaldos(); } catch (e) { console.warn("Saldos:", e); }
+    try { await carregarOrdens(); } catch (e) { console.warn("Ordens:", e); }
+
     registrarEventosCarteira();
     return true;
   } catch (e) {
     toast("Falha ao conectar: " + erroLegivel(e), "err");
-    desconectarCarteira();
+    // ✅ CORRIGIDO: só desconecta se realmente falhou a conexão
+    try { desconectarCarteira(); } catch (_) {}
     return false;
   }
 }
@@ -478,8 +497,13 @@ function desconectarCarteira() {
   walletProvider = null;
   signer = null;
   userAddress = null;
-  $("btnConnect").style.display = "inline-block";
-  $("walletInfo").style.display = "none";
+
+  // ✅ CORRIGIDO: null-safe (antes estourava se os elementos não existissem)
+  const btn = $("btnConnect");
+  const info = $("walletInfo");
+  if (btn) btn.style.display = "inline-block";
+  if (info) info.style.display = "none";
+
   Object.keys(saldos).forEach(k => delete saldos[k]);
   atualizarExibicaoSaldos();
 }
@@ -503,44 +527,48 @@ async function atualizarSaldos() {
   if (!userAddress) return;
   try {
     const p = await getAnyProvider();
-    
+
     // Saldo nativo POL
     const saldoPOL = await p.getBalance(userAddress);
     saldos["POL"] = saldoPOL;
-    
-    // Saldos de tokens
-    for (const t of tokensOk()) {
+
+    // ✅ CORRIGIDO: leitura dos tokens em PARALELO (antes era sequencial e lento)
+    await Promise.all(tokensOk().map(async t => {
       try {
         const data = "0x" + SEL_ERC20.balanceOf + encAddress(userAddress);
         const r = await withTimeout(p.call({ to: t.address, data }), RPC_TIMEOUT_MS);
         saldos[t.symbol] = decUint(r);
-      } catch (e) { saldos[t.symbol] = 0n; }
-    }
-    
+      } catch (e) {
+        saldos[t.symbol] = 0n;
+      }
+    }));
+
     atualizarExibicaoSaldos();
-  } catch (e) { console.warn("Erro ao atualizar saldos:", e); }
+  } catch (e) {
+    console.warn("Erro ao atualizar saldos:", e);
+  }
 }
 
 function atualizarExibicaoSaldos() {
   const container = $("balances");
   if (!container) return;
   container.innerHTML = "";
-  
+
   if (!userAddress) {
     container.innerHTML = '<p class="dim">Conecte sua carteira para ver seus saldos.</p>';
     return;
   }
-  
-  // POL
-  container.appendChild(el("div", "bal", `
+
+  // ✅ CORRIGIDO: usar elHTML para que as tags <span> sejam interpretadas
+  // (antes apareciam como texto literal na tela, com el()+textContent)
+  container.appendChild(elHTML("div", "bal", `
     <span class="t">POL (nativo)</span>
-    <span class="v">${fmt(saldos["POL"] || 0n, 18)}</span>
-  `));
-  
-  // Tokens
-  for (const t of tokensOk()) {
-    if (t.symbol === "WPOL") continue;
-    container.appendChild(el("div", "bal", `
+    <span class="v">${fmt(saldos["POL"] || 0n &&, 18)}</span>
+  ! `));
+
+  for (const t of tokensmesOk()) {
+    if (t.symbolmo === "WPOL") continue;
+End    container.appendChild(elHTML("div", "balere", `
       <span class="t">${t.symbol}</span>
       <span class="v">${fmt(saldos[t.symbol] || 0n, t.decimals)}</span>
     `));
@@ -562,21 +590,29 @@ async function totalOrdens() {
 async function carregarOrdens() {
   if (carregando) return;
   carregando = true;
-  $("orders").innerHTML = '<div class="state"><div class="spinner"></div><p>Consultando blockchain…</p></div>';
-  
+
+  const ordersEl = $("orders");
+  const counterEl = $("counter");
+
+  if (ordersEl) {
+    ordersEl.innerHTML = '<div class="state"><div class="spinner"></div><p>Consultando blockchain…</p></div>';
+  }
+
   try {
     const total = await totalOrdens();
-    $("counter").textContent = `Ordens ativas: ${total.toString()}`;
-    
+    if (counterEl) counterEl.textContent = `Ordens ativas: ${total.toString()}`;
+
     if (total === 0n) {
       ordersCache = [];
       exibirOrdensFiltradas();
       return;
     }
-    
+
     const listaEscrow = await lerEnderecoArray(ESCROW_FACTORY_ADDRESS, SEL_FACTORY.todasOrdens);
-    $("orders").innerHTML = `<div class="state"><div class="spinner"></div><p>Carregando ${listaEscrow.length} ordens…</p></div>`;
-    
+    if (ordersEl) {
+      ordersEl.innerHTML = `<div class="state"><div class="spinner"></div><p>Carregando ${listaEscrow.length} ordens…</p></div>`;
+    }
+
     ordersCache = [];
     for (const escrowAddr of listaEscrow) {
       try {
@@ -589,7 +625,7 @@ async function carregarOrdens() {
           lerBool(escrowAddr, SEL_ESCROW.executado),
           lerBool(escrowAddr, SEL_ESCROW.cancelado),
         ]);
-        
+
         ordersCache.push({
           id: escrowAddr,
           criador,
@@ -602,10 +638,12 @@ async function carregarOrdens() {
         });
       } catch (e) { console.warn("Erro ao ler ordem", escrowAddr, e); }
     }
-    
+
     exibirOrdensFiltradas();
   } catch (e) {
-    $("orders").innerHTML = `<p class="warn">Erro ao carregar ordens: ${esc(erroLegivel(e))}</p>`;
+    if (ordersEl) {
+      ordersEl.innerHTML = `<p class="warn">Erro ao carregar ordens: ${esc(erroLegivel(e))}</p>`;
+    }
   } finally {
     carregando = false;
   }
@@ -613,25 +651,27 @@ async function carregarOrdens() {
 
 function exibirOrdensFiltradas() {
   const container = $("orders");
+  if (!container) return;
+
   let filtradas = ordersCache.filter(o => {
     if (o.executado || o.cancelado) return false;
     if (filtro.minhas && !mesmoEndereco(o.criador, userAddress)) return false;
-    if (filtro.oferece && !mesmoEndereco(o.tokenOferecido, filtro.oferece)) return false;
+    if (filtro.oferececo(o.tokenOferecido, filtro.oferece)) return false;
     if (filtro.pede && !mesmoEndereco(o.tokenDesejado, filtro.pede)) return false;
     return true;
   });
-  
+
   if (filtradas.length === 0) {
     container.innerHTML = '<p class="dim">Nenhuma ordem encontrada com os filtros atuais.</p>';
     return;
   }
-  
+
   container.innerHTML = "";
   for (const ordem of filtradas) {
     const tokOferece = tokenOk(ordem.tokenOferecido);
     const tokDeseja = tokenOk(ordem.tokenDesejado);
     const ehMeu = mesmoEndereco(ordem.criador, userAddress);
-    
+
     const card = el("div", `order-card ${ehMeu ? "mine" : ""}`);
     card.innerHTML = `
       <div class="order-header">
@@ -658,7 +698,7 @@ function exibirOrdensFiltradas() {
         </div>
       </div>
       <div class="order-footer">
-        ${ehMeu 
+        ${ehMeu
           ? `<button class="btn-sm btn-danger" data-cancel="${ordem.id}">Cancelar</button>`
           : `<button class="btn-sm btn-primary" data-exec="${ordem.id}">Executar Troca</button>`
         }
@@ -666,8 +706,7 @@ function exibirOrdensFiltradas() {
     `;
     container.appendChild(card);
   }
-  
-  // Vincular eventos dos botões
+
   container.querySelectorAll("[data-exec]").forEach(btn => {
     btn.addEventListener("click", () => executarOrdem(btn.dataset.exec));
   });
@@ -682,11 +721,11 @@ function exibirOrdensFiltradas() {
 async function executarOrdem(escrowAddr) {
   if (!userAddress) { toast("Conecte sua carteira primeiro.", "warn"); return; }
   if (emTransacao) { toast("Aguarde a transação anterior…", "warn"); return; }
-  
+
   try {
     emTransacao = true;
     toast("Verificando ordem…", "info");
-    
+
     const [tokenDesejado, valorDesejado, tokenOferecido, valorOferecido, criador] = await Promise.all([
       lerEndereco(escrowAddr, SEL_ESCROW.tokenDesejado),
       lerUint(escrowAddr, SEL_ESCROW.valorDesejado),
@@ -694,15 +733,14 @@ async function executarOrdem(escrowAddr) {
       lerUint(escrowAddr, SEL_ESCROW.valorOferecido),
       lerEndereco(escrowAddr, SEL_ESCROW.criador),
     ]);
-    
+
     if (mesmoEndereco(criador, userAddress)) {
       throw new Error("Você não pode executar sua própria ordem.");
     }
-    
+
     const tok = tokenOk(tokenDesejado);
     if (!tok) throw new Error("Token desconhecido.");
-    
-    // Verificar/aprovar allowance
+
     if (!tok.native) {
       const allowance = await lerUint(tokenDesejado, SEL_ERC20.allowance, userAddress, escrowAddr);
       if (allowance < valorDesejado) {
@@ -716,8 +754,7 @@ async function executarOrdem(escrowAddr) {
         toast("✅ Aprovado!", "ok");
       }
     }
-    
-    // Executar
+
     toast("Enviando transação…", "info");
     const tx = await signer.sendTransaction({
       to: escrowAddr,
@@ -727,7 +764,7 @@ async function executarOrdem(escrowAddr) {
     toastTx("✅ Transação enviada:", tx.hash, "ok");
     await tx.wait();
     toast("✅ Troca executada com sucesso!", "ok", 8000);
-    
+
     await atualizarSaldos();
     await carregarOrdens();
   } catch (e) {
@@ -740,16 +777,16 @@ async function executarOrdem(escrowAddr) {
 async function cancelarOrdem(escrowAddr) {
   if (!userAddress) { toast("Conecte sua carteira primeiro.", "warn"); return; }
   if (emTransacao) { toast("Aguarde a transação anterior…", "warn"); return; }
-  
+
   try {
     emTransacao = true;
     toast("Cancelando ordem…", "info");
-    
+
     const criador = await lerEndereco(escrowAddr, SEL_ESCROW.criador);
     if (!mesmoEndereco(criador, userAddress)) {
       throw new Error("Apenas o criador pode cancelar esta ordem.");
     }
-    
+
     const tx = await signer.sendTransaction({
       to: escrowAddr,
       data: "0x" + SEL_ESCROW.cancelar
@@ -757,7 +794,7 @@ async function cancelarOrdem(escrowAddr) {
     toastTx("Cancelamento enviado:", tx.hash, "info");
     await tx.wait();
     toast("✅ Ordem cancelada!", "ok");
-    
+
     await carregarOrdens();
   } catch (e) {
     toast("Erro: " + erroLegivel(e), "err", 8000);
@@ -769,28 +806,32 @@ async function cancelarOrdem(escrowAddr) {
 async function criarOrdem() {
   if (!userAddress) { toast("Conecte sua carteira primeiro.", "warn"); return; }
   if (emTransacao) { toast("Aguarde a transação anterior…", "warn"); return; }
-  
+
   try {
     emTransacao = true;
-    
+
     const tokOfereceSel = $("selOferece");
     const tokDesejaSel = $("selDeseja");
     const inValorOferece = $("valorOferece");
     const inValorDeseja = $("valorDeseja");
-    
+
+    if (!tokOfereceSel || !tokDesejaSel || !inValorOferece || !inValorDeseja) {
+      throw new Error("Campos do formulário não encontrados no HTML.");
+    }
+
     const endOferece = tokOfereceSel.value;
     const endDeseja = tokDesejaSel.value;
-    
+
     if (!endOferece || !endDeseja) throw new Error("Selecione os tokens.");
     if (mesmoEndereco(endOferece, endDeseja)) throw new Error("Os tokens devem ser diferentes.");
-    
+
     const tokOferece = endOferece === "POL" ? NATIVO : tokenOk(endOferece);
     const tokDeseja = endDeseja === "POL" ? NATIVO : tokenOk(endDeseja);
     if (!tokOferece || !tokDeseja) throw new Error("Token inválido.");
-    
+
     const valOferece = lerValor(inValorOferece.value, tokOferece.decimals, "valor oferecido");
     const valDeseja = lerValor(inValorDeseja.value, tokDeseja.decimals, "valor desejado");
-    
+
     if (!tokOferece.native) {
       const allowance = await lerUint(tokOferece.address, SEL_ERC20.allowance, userAddress, ESCROW_FACTORY_ADDRESS);
       if (allowance < valOferece) {
@@ -804,11 +845,11 @@ async function criarOrdem() {
         toast("✅ Aprovado!", "ok");
       }
     }
-    
+
     toast("Criando ordem…", "info");
     const tx = await signer.sendTransaction({
       to: ESCROW_FACTORY_ADDRESS,
-      data: "0x" + SEL_FACTORY.criarOrdem + 
+      data: "0x" + SEL_FACTORY.criarOrdem +
         encAddress(endOferece === "POL" ? "0x0000000000000000000000000000000000000000" : endOferece) +
         encUint(valOferece) +
         encAddress(endDeseja === "POL" ? "0x0000000000000000000000000000000000000000" : endDeseja) +
@@ -818,10 +859,10 @@ async function criarOrdem() {
     toastTx("Ordem criada! Transação:", tx.hash, "ok");
     await tx.wait();
     toast("✅ Ordem publicada no mural!", "ok", 8000);
-    
+
     inValorOferece.value = "";
     inValorDeseja.value = "";
-    
+
     await atualizarSaldos();
     await carregarOrdens();
   } catch (e) {
@@ -837,23 +878,23 @@ async function criarOrdem() {
 async function enviarToken() {
   if (!userAddress) { toast("Conecte sua carteira primeiro.", "warn"); return; }
   if (emTransacao) { toast("Aguarde a transação anterior…", "warn"); return; }
-  
+
   try {
     emTransacao = true;
-    
+
     const selToken = $("selTokenEnvio");
     const dest = $("destinoEnvio").value.trim();
     const valorTxt = $("valorEnvio").value.trim();
-    
+
     if (!selToken.value) throw new Error("Selecione um token.");
     if (!isAddr(dest)) throw new Error("Endereço de destino inválido. Deve começar com 0x.");
     if (mesmoEndereco(dest, userAddress)) throw new Error("Não envie para você mesmo.");
-    
+
     const tok = selToken.value === "POL" ? NATIVO : tokenOk(selToken.value);
     if (!tok) throw new Error("Token inválido.");
-    
+
     const valor = lerValor(valorTxt, tok.decimals, "valor");
-    
+
     toast("Enviando transação…", "info");
     let tx;
     if (tok.native) {
@@ -864,14 +905,14 @@ async function enviarToken() {
         data: "0x" + SEL_ERC20.transfer + encAddress(dest) + encUint(valor)
       });
     }
-    
+
     toastTx("✅ Transação enviada:", tx.hash, "ok");
     await tx.wait();
     toast("✅ Enviado com sucesso!", "ok", 8000);
-    
+
     $("destinoEnvio").value = "";
     $("valorEnvio").value = "";
-    
+
     await atualizarSaldos();
   } catch (e) {
     toast("Erro: " + erroLegivel(e), "err", 8000);
@@ -886,12 +927,12 @@ async function enviarToken() {
 async function converterWPOL() {
   if (!userAddress) { toast("Conecte sua carteira primeiro.", "warn"); return; }
   if (emTransacao) { toast("Aguarde a transação anterior…", "warn"); return; }
-  
+
   try {
     emTransacao = true;
     const valorTxt = $("valorWPOL").value.trim();
     const valor = lerValor(valorTxt, 18, "valor");
-    
+
     toast("Convertendo POL → WPOL…", "info");
     const tx = await signer.sendTransaction({
       to: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
@@ -901,7 +942,7 @@ async function converterWPOL() {
     toastTx("✅ Convertido:", tx.hash, "ok");
     await tx.wait();
     toast("✅ " + fmt(valor, 18) + " POL → WPOL", "ok");
-    
+
     $("valorWPOL").value = "";
     await atualizarSaldos();
   } catch (e) {
@@ -914,12 +955,12 @@ async function converterWPOL() {
 async function converterPOL() {
   if (!userAddress) { toast("Conecte sua carteira primeiro.", "warn"); return; }
   if (emTransacao) { toast("Aguarde a transação anterior…", "warn"); return; }
-  
+
   try {
     emTransacao = true;
     const valorTxt = $("valorPOL").value.trim();
     const valor = lerValor(valorTxt, 18, "valor");
-    
+
     toast("Convertendo WPOL → POL…", "info");
     const tx = await signer.sendTransaction({
       to: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
@@ -928,7 +969,7 @@ async function converterPOL() {
     toastTx("✅ Convertido:", tx.hash, "ok");
     await tx.wait();
     toast("✅ " + fmt(valor, 18) + " WPOL → POL", "ok");
-    
+
     $("valorPOL").value = "";
     await atualizarSaldos();
   } catch (e) {
@@ -949,7 +990,7 @@ function trocarAba(nomeAba) {
   document.querySelectorAll(".tabs button").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.tab === nomeAba);
   });
-  
+
   if (nomeAba === "mural") carregarOrdens();
   if (nomeAba === "mural" || nomeAba === "converter") atualizarSaldos();
 }
@@ -959,15 +1000,15 @@ function trocarAba(nomeAba) {
 // ============================================================
 async function inicializar() {
   normalizarTokens();
-  
+
   // Popular seletores de tokens
   const selOferece = $("selOferece");
   const selDeseja = $("selDeseja");
   const selEnvio = $("selTokenEnvio");
-  
+
   [selOferece, selDeseja, selEnvio].forEach(sel => {
     if (!sel) return;
-    sel.innerHTML = sel === selEnvio 
+    sel.innerHTML = sel === selEnvio
       ? '<option value="">Selecione…</option><option value="POL">POL (nativo)</option>'
       : '<option value="">Selecione…</option>';
     for (const t of tokensOk()) {
@@ -977,33 +1018,33 @@ async function inicializar() {
       sel.appendChild(opt);
     }
   });
-  
+
   // Lista de tokens na aba Ajuda
   const listaTokens = $("listaTokens");
   if (listaTokens) {
     listaTokens.innerHTML = `<li><strong>POL</strong> — Polygon (moeda nativa da rede)</li>` +
       tokensOk().map(t => `<li><strong>${t.symbol}</strong> — ${t.name}: <code>${t.address}</code></li>`).join("");
   }
-  
+
   // Eventos — Navegação
   document.querySelectorAll("[data-tab]").forEach(btn => {
     btn.addEventListener("click", () => trocarAba(btn.dataset.tab));
   });
-  
+
   // Eventos — Conexão carteira
   $("btnConnect")?.addEventListener("click", conectarCarteira);
   $("btnDisconnect")?.addEventListener("click", desconectarCarteira);
-  
+
   // Eventos — Criar ordem
   $("btnCriarOrdem")?.addEventListener("click", criarOrdem);
-  
+
   // Eventos — Enviar
   $("btnEnviar")?.addEventListener("click", enviarToken);
-  
+
   // Eventos — Conversão POL ↔ WPOL
   $("btnConverterWPOL")?.addEventListener("click", converterWPOL);
   $("btnConverterPOL")?.addEventListener("click", converterPOL);
-  
+
   // Eventos — Consulta BTC
   $("btnCheckBtc")?.addEventListener("click", () => {
     const end = $("btcAddressQuery").value;
@@ -1015,6 +1056,56 @@ async function inicializar() {
       consultarSaldoBTC(end);
     }
   });
-  
-  // Eventos — Filtros
-  $("filtroMinhas")
+
+  // ============================================================
+  // ✅ RECONSTRUÍDO: Eventos — Filtros
+  // (o arquivo original foi enviado cortado exatamente em $("filtroMinhas"))
+  // ============================================================
+  $("filtroMinhas")?.addEventListener("change", e => {
+    filtro.minhas = e.target.checked;
+    exibirOrdensFiltradas();
+  });
+  $("filtroOferece")?.addEventListener("change", e => {
+    filtro.oferece = e.target.value;
+    exibirOrdensFiltradas();
+  });
+  $("filtroPede")?.addEventListener("change", e => {
+    filtro.pede = e.target.value;
+    exibirOrdensFiltradas();
+  });
+  $("filtroStatus")?.addEventListener("change", e => {
+    filtro.status = e.target.value;
+    exibirOrdensFiltradas();
+  });
+
+  // Popular selects de filtro com tokens
+  [$("filtroOferece"), $("filtroPede")].forEach(sel => {
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Todos</option>';
+    for (const t of tokensOk()) {
+      const opt = document.createElement("option");
+      opt.value = t.address;
+      opt.textContent = t.symbol;
+      sel.appendChild(opt);
+    }
+  });
+
+  // Estado inicial da rede
+  setNet("load", "Verificando rede…");
+  try {
+    await getAnyProvider();
+    setNet("ok", "Polygon OK");
+  } catch (e) {
+    setNet("off", "Sem conexão");
+  }
+
+  // Aba inicial
+  trocarAba("mural");
+}
+
+// ✅ CORRIGIDO: chamada inicial automática (o original não tinha)
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", inicializar);
+} else {
+  inicializar();
+}
