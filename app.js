@@ -1,14 +1,15 @@
 // ============================================================
-// APP.JS — Carteira BRN P2P (v3.1 — corrigido)
+// APP.JS — Carteira BRN P2P (v3.2 — corrigido)
 // Compatível com o EscrowFactory JÁ DEPLOYADO (sem alterar .sol)
 //
-// Correções desta versão em relação à v3:
+// Correções aplicadas:
 //  - init() roda via readyState (funciona com script async/defer)
 //  - withTimeout sem unhandled rejection
 //  - mostrarErroMural com guarda de null
 //  - preencherSelect/montarSelects com guarda de null
 //  - verificarTokens protegido contra execução duplicada
 //  - guards de null em todos os getElementById críticos
+//  - LISTA COMPLETA de 21 tokens suportados (v3.2)
 //
 // IMPORTANTE: o contrato NÃO está verificado no PolygonScan.
 // Os selectors vêm do bytecode. Teste com valores pequenos.
@@ -26,12 +27,27 @@ const POLYGON_CHAIN_ID = 137;
 // ------------------------------------------------------------
 const NATIVO = { symbol: "POL", name: "POL (nativo)", decimals: 18, native: true };
 const TOKENS = [
-  { symbol: "BRN",    name: "BRN",                 address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18, symbols: null },
-  { symbol: "USDC.e", name: "USD Coin (PoS)",      address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6,  symbols: ["USDC"] },
-  { symbol: "USDC",   name: "USD Coin (nativo)",   address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6,  symbols: ["USDC"] },
-  { symbol: "USDT",   name: "Tether USD",          address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6,  symbols: ["USDT"] },
-  { symbol: "WPOL",   name: "Wrapped POL",         address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18, symbols: ["WPOL", "WMATIC"] },
-  { symbol: "WETH",   name: "Wrapped Ether",       address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18, symbols: ["WETH"] },
+  { symbol: "BRN",    name: "BRN",                address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18, symbols: null },
+  { symbol: "USDC.e", name: "USD Coin (PoS)",     address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6,  symbols: ["USDC"] },
+  { symbol: "USDC",   name: "USD Coin (nativo)",  address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6,  symbols: ["USDC"] },
+  { symbol: "USDT",   name: "Tether USD",         address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6,  symbols: ["USDT"] },
+  { symbol: "DAI",    name: "Dai Stablecoin",     address: "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063", decimals: 18, symbols: ["DAI"] },
+  { symbol: "WPOL",   name: "Wrapped POL",        address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18, symbols: ["WPOL", "WMATIC"] },
+  { symbol: "WETH",   name: "Wrapped Ether",      address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18, symbols: ["WETH"] },
+  { symbol: "WBTC",   name: "Wrapped BTC",        address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8,  symbols: ["WBTC"] },
+  { symbol: "LINK",   name: "ChainLink Token",    address: "0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39", decimals: 18, symbols: ["LINK"] },
+  { symbol: "AAVE",   name: "Aave",               address: "0xD6DF932A45C0f255f85145f286eA0b292B21C90B", decimals: 18, symbols: ["AAVE"] },
+  { symbol: "UNI",    name: "Uniswap",            address: "0xb33EaAd8d922B1083446DC23f610c2567fB5180f", decimals: 18, symbols: ["UNI"] },
+  { symbol: "SUSHI",  name: "SushiToken",         address: "0x0b3F868E0BE5597D5DB7fEB59E1CADBb0fdDa50a", decimals: 18, symbols: ["SUSHI"] },
+  { symbol: "CRV",    name: "Curve DAO Token",    address: "0x172370d5Cd63279eFa6d502DAB29171933a610AF", decimals: 18, symbols: ["CRV"] },
+  { symbol: "MKR",    name: "Maker",              address: "0x6f7C932e7684666C9fd1d44527765433e01fF61d", decimals: 18, symbols: ["MKR"] },
+  { symbol: "COMP",   name: "Compound",           address: "0x8505b9d2254A7Ae468c0E9dd10Ccea3A837aef5c", decimals: 18, symbols: ["COMP"] },
+  { symbol: "SNX",    name: "Synthetix",          address: "0x50B728D8D964fd00C2d0AAD81718b71311feF68a", decimals: 18, symbols: ["SNX"] },
+  { symbol: "GRT",    name: "The Graph",          address: "0x5fe2B58c013d7601147DcdD68C143A77499f5531", decimals: 18, symbols: ["GRT"] },
+  { symbol: "1INCH",  name: "1inch",              address: "0x9c2C5fd7b07E95EE044DDeba0E97a665F142394f", decimals: 18, symbols: ["1INCH"] },
+  { symbol: "SAND",   name: "The Sandbox",        address: "0xBbba073C31bF03b8ACf7c28EF0738DeCF3695683", decimals: 18, symbols: ["SAND"] },
+  { symbol: "MANA",   name: "Decentraland",       address: "0xA1c57f48F0Deb89f569dFbE6E2B7f46D33606fD4", decimals: 18, symbols: ["MANA"] },
+  { symbol: "SHIB",   name: "Shiba Inu (PoS)",    address: "0x6f8a06447Ff6FcF75d803135a7de15CE88C1d4ec", decimals: 18, symbols: ["SHIB"] },
 ];
 
 // RPCs públicos com fallback
