@@ -6,25 +6,7 @@
     <title>BRN Exchange — Mural de Ordens P2P</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="style-melhorias.css">
-    <script>
-      (function carregarEthers() {
-        const fontes = [
-          "ethers.min.js",
-          "https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js",
-          "https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"
-        ];
-        let i = 0;
-        function tentar() {
-          if (i >= fontes.length) { console.error("❌ Ethers não carregou."); return; }
-          const s = document.createElement("script");
-          s.src = fontes[i++];
-          s.onload = () => console.log("✅ Ethers.js carregado de:", s.src);
-          s.onerror = () => { console.warn("⚠️ Falhou:", s.src); tentar(); };
-          document.head.appendChild(s);
-        }
-        tentar();
-      })();
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -109,7 +91,7 @@
                     </div>
                 </div>
                 <button id="btnCriarOrdem" class="btn btn-success" style="width:100%; margin-top:12px;">📋 Criar Ordem no Escrow</button>
-                <p class="source-note">⚠ Ao submeter, seus fundos ficam protegidos sob custódia do contrato inteligente até a execução por terceiros ou seu cancelamento manual.</p>
+                <p class="source-note">⚠ Ao submeter, seus fundos ficam protegidos sob custódia do contrato inteligente.</p>
             </div>
         </div>
 
