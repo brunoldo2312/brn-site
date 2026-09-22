@@ -1,9 +1,9 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 3.3 (Com Compartilhar Endereço)
+// APP.JS — BRN Exchange | Versão 3.4 (Debug RAW HEX)
 // ✅ Fallback de token desconhecido
-// ✅ Debug no console para ordens
+// ✅ Debug do HEX cru para diagnóstico de decodificação
 // ✅ RPCs reordenados (publicnode primeiro)
-// ✅ Compartilhar endereço BRN (nativo + WhatsApp + Telegram)
+// ✅ Compartilhar endereço BRN
 // ============================================================
 
 // ================= CONFIGURAÇÕES =================
@@ -21,7 +21,6 @@ const TOKENS = [
   { symbol: "WETH",    name: "Wrapped Ether",       address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18 },
 ];
 
-// RPCs reordenados — publicnode primeiro (mais estável)
 const RPC_LIST = [
   "https://polygon.publicnode.com",
   "https://polygon-rpc.com",
@@ -36,7 +35,6 @@ const S = {
   WPOL:    { deposit: "d0e30db0", withdraw: "2e1a7d4d" }
 };
 
-// Estado global
 let provider = null;
 let signer = null;
 let userAddress = null;
@@ -392,10 +390,8 @@ function abrirPainelCompartilhar() {
   const addrFull = $("shareAddrFull");
   if (!painel || !addrFull) return;
 
-  // Preenche endereço
   addrFull.textContent = userAddress;
 
-  // Preenche links de compartilhamento
   const texto = `Meu endereço BRN na Polygon: ${userAddress}`;
   const textoEnc = encodeURIComponent(texto);
 
@@ -408,29 +404,22 @@ function abrirPainelCompartilhar() {
   const ps = $("btnSharePolygonScan");
   if (ps) ps.href = `https://polygonscan.com/address/${userAddress}`;
 
-  // Compartilhamento nativo (Web Share API) se disponível
   const nat = $("btnShareNative");
   if (nat) {
     if (navigator.share) {
-      // Remover listener antigo antes de adicionar (evita duplicação)
       const novo = nat.cloneNode(true);
       nat.parentNode.replaceChild(novo, nat);
       novo.addEventListener("click", async (e) => {
         e.preventDefault();
         try {
-          await navigator.share({
-            title: "Meu Endereço BRN",
-            text: texto
-          });
+          await navigator.share({ title: "Meu Endereço BRN", text: texto });
         } catch (err) {
-          if (err.name !== "AbortError") {
-            console.warn("Erro ao compartilhar:", err.message);
-          }
+          if (err.name !== "AbortError") console.warn("Erro ao compartilhar:", err.message);
         }
       });
       novo.style.display = "";
     } else {
-      nat.style.display = "none"; // Navegador sem suporte
+      nat.style.display = "none";
     }
   }
 
@@ -449,7 +438,6 @@ async function copiarEndereco() {
     await navigator.clipboard.writeText(userAddress);
     toast("✅ Endereço copiado!", "ok");
   } catch {
-    // Fallback para navegadores antigos
     const ta = document.createElement("textarea");
     ta.value = userAddress;
     ta.style.position = "fixed";
@@ -503,9 +491,23 @@ async function carregarOrdens() {
           to: endereco,
           data: "0x" + S.Escrow.obterDados
         });
+
+        // 🔍 DEBUG: dump do hex cru (só na primeira ordem, para não poluir)
+        if (i === 0) {
+          console.log("🔍 RAW HEX (ordem #0):", dadosRes);
+          console.log("🔍 Tamanho do HEX:", dadosRes.length, "chars");
+          console.log("🔍 Número de words (64 chars cada):", (dadosRes.length - 2) / 64);
+        }
+
         const p = splitResposta(dadosRes.slice(2));
 
-        // Debug no console — mostra o que o contrato retornou
+        // 🔍 DEBUG: cada word separada (só na primeira ordem)
+        if (i === 0) {
+          p.forEach((word, idx) => {
+            console.log(`  Word[${idx}]: ${word}`);
+          });
+        }
+
         console.log(`[Ordem #${i}]`, {
           endereco,
           campos: p.length,
@@ -915,7 +917,6 @@ function configurarFiltros() {
 async function init() {
   console.log("🚀 BRN Exchange — Iniciando…");
 
-  // Aguarda ethers.js carregar (fallback do HTML) até 10s
   let aguardou = 0;
   while (typeof ethers === "undefined" && aguardou < 100) {
     await new Promise(r => setTimeout(r, 100));
@@ -947,7 +948,6 @@ async function init() {
   configurarAbas();
   configurarFiltros();
 
-  // Botões principais (com verificação de existência)
   const bind = (id, fn) => { const el = $(id); if (el) el.addEventListener("click", fn); };
   bind("btnConnect", conectarCarteira);
   bind("btnDisconnect", desconectarCarteira);
@@ -957,8 +957,6 @@ async function init() {
   bind("btnConverterWPOL", wrapPOL);
   bind("btnConverterPOL", unwrapWPOL);
   bind("btnConsultarBTC", consultarSaldoBTC);
-
-  // ✅ Botões de compartilhar endereço
   bind("btnShareAddr", abrirPainelCompartilhar);
   bind("btnCloseShare", fecharPainelCompartilhar);
   bind("btnCopyAddr", copiarEndereco);
@@ -966,7 +964,6 @@ async function init() {
   const btcInput = $("btcAddressInput");
   if (btcInput) btcInput.addEventListener("keydown", e => { if (e.key === "Enter") consultarSaldoBTC(); });
 
-  // Botões MAX
   bind("btnMaxOf", () => {
     const sel = $("selOferece");
     const tok = tokenPorEndereco(sel.value);
