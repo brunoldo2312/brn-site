@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BRN Exchange — Mural de Ordens</title>
     <link rel="stylesheet" href="style.css">
-    <!-- ✅ Ethers.js PRIMEIRO — NÃO ALTERAR A ORDEM! -->
+    <!-- ⚠️ NÃO ALTERAR A ORDEM! Ethers primeiro, depois app.js -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
 <body>
@@ -14,11 +14,11 @@
         <header>
             <div class="header-left">
                 <h1>🔷 BRN Exchange</h1>
-                <p>Mural de Ordens — Rede Polygon</p>
+                <p>Mural de Ordens — Polygon Mainnet</p>
             </div>
             <div class="net-status">
                 <span class="dot load" id="netDot"></span>
-                <span id="netText">Conectando…</span>
+                <span id="netText">Verificando rede…</span>
             </div>
         </header>
 
@@ -57,14 +57,14 @@
                     <h2 id="counter">⏳ Consultando ordens…</h2>
                     <button id="btnRefresh" class="btn btn-sm">🔄 Atualizar</button>
                 </div>
-                <p id="muralInfo" class="dim" style="margin-bottom: 12px;"></p>
+                <p id="muralInfo" class="dim" style="margin-bottom: 16px;"></p>
 
                 <!-- Filtros -->
                 <div class="filters">
                     <select id="filtroStatus">
-                        <option value="todas">📋 Todas as ordens</option>
+                        <option value="todas">📋 Todas</option>
                         <option value="ativas" selected>🔵 Ativas</option>
-                        <option value="executaveis">⚡ Posso executar</option>
+                        <option value="executaveis">⚡ Posso Executar</option>
                         <option value="executadas">✅ Executadas</option>
                         <option value="canceladas">❌ Canceladas</option>
                     </select>
@@ -151,9 +151,9 @@
             <div class="card">
                 <h2>🔄 Converter POL ↔ WPOL</h2>
                 
-                <h3>Converter POL → WPOL</h3>
+                <h3>🔁 POL → WPOL</h3>
                 <div class="input-group">
-                    <label>Saldo disponível: <span data-hint="saldoPOL">—</span> POL</label>
+                    <label>Saldo disponível: <span data-hint="saldoPOL">0.00</span> POL</label>
                     <div class="row">
                         <input type="text" id="valorWPOL" placeholder="0.0">
                         <button id="btnMaxWrap" class="btn btn-sm">MAX</button>
@@ -163,9 +163,9 @@
 
                 <hr>
 
-                <h3>Converter WPOL → POL</h3>
+                <h3>🔁 WPOL → POL</h3>
                 <div class="input-group">
-                    <label>Saldo disponível: <span data-hint="saldoWPOL">—</span> WPOL</label>
+                    <label>Saldo disponível: <span data-hint="saldoWPOL">0.00</span> WPOL</label>
                     <div class="row">
                         <input type="text" id="valorPOL" placeholder="0.0">
                         <button id="btnMaxUnwrap" class="btn btn-sm">MAX</button>
@@ -179,7 +179,7 @@
         <div id="panel-btc" class="panel" hidden>
             <div class="card">
                 <h2>₿ Consultar Saldo BTC</h2>
-                <p class="dim" style="margin-bottom: 16px;">Consulte o saldo de qualquer endereço Bitcoin. Não precisa de carteira conectada.</p>
+                <p class="dim" style="margin-bottom: 16px;">Consulte o saldo de qualquer endereço Bitcoin.</p>
                 
                 <div class="input-group">
                     <label>Endereço Bitcoin:</label>
@@ -201,34 +201,31 @@
                 <h2>❓ Ajuda e Informações</h2>
                 <h3>Como usar?</h3>
                 <ul>
-                    <li>1. Instale a extensão <strong>MetaMask</strong> no seu navegador</li>
-                    <li>2. Configure a rede <strong>Polygon Mainnet</strong> na MetaMask</li>
-                    <li>3. Clique em "Conectar MetaMask" e aprove a conexão</li>
-                    <li>4. Visualize ordens no mural, crie suas próprias ordens ou execute ordens de outros usuários</li>
+                    <li>1. Instale a extensão <strong>MetaMask</strong> no navegador</li>
+                    <li>2. Configure a rede <strong>Polygon Mainnet</strong>:</li>
+                    <ul style="margin-left: 16px;">
+                        <li>• RPC: https://polygon-rpc.com</li>
+                        <li>• Chain ID: 137</li>
+                        <li>• Símbolo: POL</li>
+                    </ul>
+                    <li>3. Clique em "Conectar MetaMask"</li>
+                    <li>4. Visualize, crie ou execute ordens de troca</li>
                 </ul>
                 
                 <h3 style="margin-top: 20px;">Contratos</h3>
                 <ul>
                     <li><strong>Escrow Factory:</strong> <code>0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8</code></li>
                     <li><strong>Token BRN:</strong> <code>0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210</code></li>
+                    <li><strong>WPOL:</strong> <code>0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270</code></li>
                 </ul>
-                
-                <h3 style="margin-top: 20px;">Redes suportadas</h3>
-                <ul>
-                    <li>✅ Polygon Mainnet (Chain ID: 137)</li>
-                </ul>
-                
-                <p class="dim" style="margin-top: 20px; font-size: 0.8rem;">
-                    ⚠️ Este aplicativo é uma interface para interagir com contratos na blockchain. Sempre verifique os endereços dos contratos antes de confirmar transações.
-                </p>
             </div>
         </div>
     </div>
 
-    <!-- Container de Notificações -->
+    <!-- Notificações -->
     <div id="toasts" class="toast-container"></div>
 
-    <!-- ✅ app.js DEPOIS do ethers -->
+    <!-- ⚠️ app.js SEMPRE DEPOIS do ethers -->
     <script src="app.js"></script>
 </body>
 </html>
