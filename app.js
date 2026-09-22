@@ -1,561 +1,438 @@
 // ============================================================
-// APP.JS — BRN Exchange
-// Versão: 5.3 | Data: 2026-09-22
-// ✅ Corrigido: Diagnóstico de inicialização + RPCs atualizados
+// APP.JS — BRN Exchange | Versão Completa e Corrigida
+// ✅ Conexão Polygon | ✅ Mural de Ordens | ✅ Criar Ordem
+// ✅ Enviar Tokens | ✅ POL ↔ WPOL | ✅ Diagnóstico Completo
 // ============================================================
 
-const ESCROW_FACTORY_ADDRESS = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
+// ================= CONFIGURAÇÕES =================
+const ESCROW_FACTORY = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
-const APP_VERSION = "v5.3";
 
+// Tokens suportados
 const TOKENS = [
-  { symbol: "BRN",    name: "BRN",                address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
-  { symbol: "USDC.e", name: "USD Coin (PoS)",     address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6 },
-  { symbol: "USDC",   name: "USD Coin (nativo)",  address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
-  { symbol: "USDT",   name: "Tether USD",         address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6 },
-  { symbol: "DAI",    name: "Dai Stablecoin",     address: "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063", decimals: 18 },
-  { symbol: "WPOL",   name: "Wrapped POL",        address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
-  { symbol: "WBTC",   name: "Wrapped BTC",        address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8 },
-  { symbol: "WETH",   name: "Wrapped Ether",      address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18 },
+  { symbol: "BRN",  name: "BRN Token",         address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
+  { symbol: "USDC", name: "USD Coin",           address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
+  { symbol: "USDT", name: "Tether USD",          address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6 },
+  { symbol: "WPOL", name: "Wrapped POL",         address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
+  { symbol: "WBTC", name: "Wrapped BTC",         address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8 },
 ];
 
-// ✅ RPCs atualizados e mais confiáveis
-const RPCS = [
+// RPCs confiáveis (com fallbacks)
+const RPC_LIST = [
   "https://polygon-rpc.com",
   "https://rpc.ankr.com/polygon",
   "https://polygon-bor-rpc.publicnode.com",
   "https://polygon.drpc.org",
   "https://1rpc.io/matic",
-  "https://polygon.publicnode.com",
 ];
-const RPC_TIMEOUT_MS = 8000;
-const MAX_ORDENS = 1000;
-const CONCORRENCIA = 8;
 
-// Selectors de funções
-const SEL_FACTORY = {
-  criarOrdem:   "ceff4da6",
-  ordensDe:     "0dc80995",
-  ordem:        "72c453b8",
-  totalOrdens:  "8275d6fa",
-  todasOrdens:  "e9b1e327",
+// Selectors de funções (4 bytes)
+const S = {
+  Factory: {
+    criarOrdem: "ceff4da6",
+    totalOrdens: "8275d6fa",
+    ordem: "72c453b8",
+  },
+  Escrow: {
+    obterDados: "32c9e06c",
+    executar: "b2d44d08",
+    cancelar: "8ffb1ccf",
+  },
+  ERC20: {
+    balanceOf: "70a08231",
+    allowance: "dd62ed3e",
+    approve: "095ea7b3",
+    transfer: "a9059cbb",
+  },
+  WPOL: {
+    deposit: "d0e30db0",   // POL → WPOL
+    withdraw: "2e1a7d4d",   // WPOL → POL
+  },
 };
-const SEL_ESCROW = {
-  criador:        "041c797c",
-  tokenDesejado:  "0cd59b77",
-  executado:      "2a3a5716",
-  obterDados:     "32c9e06c",
-  valorDesejado:  "651cc708",
-  cancelado:      "7766a742",
-  tokenOferecido: "8a337bdc",
-  cancelar:       "8ffb1ccf",
-  executar:       "b2d44d08",
-  valorOferecido: "f6c467b7",
-};
-const SEL_ERC20 = {
-  balanceOf: "70a08231",
-  allowance: "dd62ed3e",
-  approve:   "095ea7b3",
-  transfer:  "a9059cbb",
-};
-const SEL_WPOL = { deposit: "d0e30db0", withdraw: "2e1a7d4d" };
 
 // Estado global
-let walletProvider = null;
+let provider = null;
 let signer = null;
 let userAddress = null;
-let currentRpc = null;
-let rpcIdx = 0;
-const providersOk = {};
+let rpcProvider = null;
 let ordersCache = [];
-let carregando = false;
-let emTransacao = false;
-let listenersRegistrados = false;
-const saldos = { POL: 0n };
-const filtro = { status: "ativas", oferece: "", pede: "", minhas: false };
+let loading = false;
+let isTxBusy = false;
+let saldos = { POL: 0n };
+let filtroAtivo = { status: "ativas", oferece: "", pede: "", minhas: false };
 
-// ============================================================
-// UTILITÁRIOS
-// ============================================================
-function $(id) { return document.getElementById(id); }
-function isAddr(a) { return typeof a === "string" && /^0x[0-9a-fA-F]{40}$/.test(a); }
-function short(a) { return isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—"; }
-function shortHash(h) { return typeof h === "string" && /^0x[0-9a-fA-F]{64}$/.test(h) ? h.slice(0, 10) + "…" + h.slice(-6) : "—"; }
-function mesmoEndereco(a, b) { return !!a && !!b && a.toLowerCase() === b.toLowerCase(); }
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+// ================= UTILITÁRIOS =================
+const $ = id => document.getElementById(id);
+const isAddr = a => /^0x[a-fA-F0-9]{40}$/.test(a || "");
+const short = a => isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—";
+const mesmoAddr = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-function fmt(value, decimals, maxFrac = 8) {
+// Formatar valores
+function fmt(bigInt, decimals, maxFrac = 6) {
   try {
-    const s = ethers.utils.formatUnits(value.toString(), decimals);
-    const partes = s.split(".");
-    const inteiro = BigInt(partes[0]).toLocaleString("pt-BR");
-    const frac = (partes[1] || "").slice(0, maxFrac).replace(/0+$/, "");
-    if (BigInt(value) > 0n && inteiro === "0" && !frac) return "< 0," + "0".repeat(maxFrac - 1) + "1";
-    return frac ? inteiro + "," + frac : inteiro;
-  } catch (e) { return String(value); }
+    const str = ethers.utils.formatUnits(bigInt.toString(), decimals);
+    const [inteiro, fracao = ""] = str.split(".");
+    const limpo = fracao.slice(0, maxFrac).replace(/0+$/, "");
+    return limpo ? `${inteiro},${limpo}` : inteiro;
+  } catch { return "0"; }
 }
 
-function paraInput(valor, decimals) {
-  const s = ethers.utils.formatUnits(valor.toString(), decimals);
-  return s.replace(/\.0+$/, "");
+// Notificações
+function toast(texto, tipo = "info", duracao = 4000) {
+  const container = $("toasts");
+  if (!container) return;
+  const el = document.createElement("div");
+  el.className = `toast ${tipo}`;
+  el.textContent = texto;
+  container.appendChild(el);
+  setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, duracao);
 }
 
-function toast(msg, type = "info", ms = 5000, href = null) {
-  const box = $("toasts"); if (!box) return;
-  const t = document.createElement("div");
-  t.className = "toast " + type;
-  t.innerHTML = msg;
-  if (href && /^https:\/\/polygonscan\.com\/tx\/0x[0-9a-fA-F]{64}$/.test(href)) {
-    const a = document.createElement("a");
-    a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer";
-    a.textContent = " · ver no PolygonScan ↗";
-    t.appendChild(a);
+function toastTx(texto, hash, tipo = "info") {
+  const link = `https://polygonscan.com/tx/${hash}`;
+  const container = $("toasts");
+  if (!container) return;
+  const el = document.createElement("div");
+  el.className = `toast ${tipo}`;
+  el.innerHTML = `${texto} <a href="${link}" target="_blank" rel="noopener">Ver no PolygonScan ↗</a>`;
+  container.appendChild(el);
+  setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, 8000);
+}
+
+// ================= CODIFICAÇÃO ABI =================
+function encAddr(addr) {
+  if (!isAddr(addr)) throw new Error("Endereço inválido");
+  return addr.toLowerCase().slice(2).padStart(64, "0");
+}
+function encUint(valor) {
+  return BigInt(valor).toString(16).padStart(64, "0");
+}
+function decAddr(palavra) {
+  return ethers.utils.getAddress("0x" + palavra.slice(-40));
+}
+function decUint(palavra) {
+  return BigInt("0x" + palavra);
+}
+function decBool(palavra) {
+  return decUint(palavra) === 1n;
+}
+function splitResposta(hex) {
+  const semPrefixo = hex.slice(2);
+  const partes = [];
+  for (let i = 0; i < semPrefixo.length; i += 64) {
+    partes.push(semPrefixo.slice(i, i + 64));
   }
-  box.appendChild(t);
-  setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, ms);
-}
-function toastTx(msg, hash, type = "info") {
-  toast(msg + " " + shortHash(hash), type, 12000, "https://polygonscan.com/tx/" + hash);
+  return partes;
 }
 
-function setNet(state, text) {
-  const dot = $("netDot"), txt = $("netText");
-  if (dot) dot.className = "dot " + (state === "ok" ? "" : state);
-  if (txt) txt.textContent = text;
+// ================= REDE / RPC =================
+async function testarRPC(url) {
+  try {
+    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 8000 });
+    const rede = await p.getNetwork();
+    if (rede.chainId === POLYGON_CHAIN_ID) return p;
+  } catch {}
+  return null;
 }
 
-function erroLegivel(e) {
-  if (!e) return "Erro desconhecido.";
-  if (e.code === 4001 || e.code === "ACTION_REJECTED") return "Transação recusada na carteira.";
-  const m = e.reason || (e.data && e.data.message) || (e.error && e.error.message) || e.message || String(e);
-  return String(m).slice(0, 220);
-}
-
-// Codificação/decodificação ABI
-const HEX_WORD = /^[0-9a-fA-F]{64}$/;
-function pad32(hexNo0x) { return hexNo0x.padStart(64, "0"); }
-function encAddress(addr) {
-  if (!isAddr(addr)) throw new Error("Endereço inválido.");
-  return pad32(addr.toLowerCase().slice(2));
-}
-function encUint(n) {
-  const v = BigInt(n);
-  if (v < 0n || v >= (1n << 256n)) throw new Error("Valor fora do intervalo uint256.");
-  return pad32(v.toString(16));
-}
-function decUint(word) {
-  if (!HEX_WORD.test(word || "")) throw new Error("Resposta ABI inválida.");
-  return BigInt("0x" + word);
-}
-function decAddress(word) {
-  if (!HEX_WORD.test(word || "") || !/^0{24}/.test(word)) throw new Error("Endereço inválido na resposta.");
-  return ethers.utils.getAddress("0x" + word.slice(24).toLowerCase());
-}
-function decBool(word) {
-  const v = decUint(word);
-  if (v > 1n) throw new Error("Booleano inválido na resposta.");
-  return v === 1n;
-}
-function splitWords(hex) {
-  if (typeof hex !== "string" || !/^0x([0-9a-fA-F]{2})*$/.test(hex)) throw new Error("Resposta inválida do RPC.");
-  const b = hex.slice(2);
-  if (b.length % 64 !== 0) throw new Error("Resposta com tamanho inesperado.");
-  const out = [];
-  for (let i = 0; i < b.length; i += 64) out.push(b.slice(i, i + 64));
-  return out;
-}
-
-function lerValor(txt, dec, nome) {
-  const s = String(txt || "").trim().replace(",", ".");
-  if (!/^\d+(\.\d+)?$/.test(s)) throw new Error("Informe um valor válido de " + nome + ".");
-  let v;
-  try { v = BigInt(ethers.utils.parseUnits(s, dec).toString()); }
-  catch (e) { throw new Error(nome + ": no máximo " + dec + " casas decimais."); }
-  if (v <= 0n) throw new Error("O valor de " + nome + " deve ser maior que zero.");
-  return v;
-}
-
-async function mapLimit(items, limit, fn) {
-  const out = new Array(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (true) {
-      const i = next++;
-      if (i >= items.length) return;
-      out[i] = await fn(items[i], i);
+async function conectarRPC() {
+  for (const url of RPC_LIST) {
+    const p = await testarRPC(url);
+    if (p) {
+      rpcProvider = p;
+      console.log(`✅ RPC conectado: ${url}`);
+      return true;
     }
+  }
+  return false;
+}
+
+async function atualizarStatusRede() {
+  const dot = $("netDot");
+  const txt = $("netText");
+  dot.className = "dot load";
+  txt.textContent = "Conectando…";
+  
+  const ok = await conectarRPC();
+  if (ok) {
+    dot.className = "dot";
+    txt.textContent = "Polygon ✅";
+  } else {
+    dot.className = "dot off";
+    txt.textContent = "Sem conexão ❌";
+    toast("❌ Não foi possível conectar à rede Polygon. Verifique sua internet.", "err", 10000);
+  }
+  return ok;
+}
+
+// ================= TOKENS =================
+function tokenPorEndereco(endereco) {
+  return TOKENS.find(t => mesmoAddr(t.address, endereco));
+}
+
+function preencherSeletores() {
+  const opts = TOKENS.map(t => `<option value="${t.address}">${t.symbol} — ${t.name}</option>`).join("");
+  ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
+    const el = $(id);
+    if (el) el.innerHTML = opts;
   });
-  await Promise.all(workers);
-  return out;
 }
 
-// ============================================================
-// TOKENS
-// ============================================================
-function normalizarTokens() {
-  for (const t of TOKENS) {
-    try { t.address = ethers.utils.getAddress(t.address.toLowerCase()); }
-    catch (e) { t.address = null; }
-  }
-}
-function tokenPorEndereco(addr) { return TOKENS.find(t => t.address && mesmoEndereco(t.address, addr)) || null; }
-function tokensOk() { return TOKENS.filter(t => t.address); }
-function opcoesTokens(selId, primeiro = null) {
-  const el = $(selId); if (!el) return;
-  el.innerHTML = "";
-  if (primeiro) el.appendChild(Object.assign(document.createElement("option"), { textContent: primeiro }));
-  for (const t of tokensOk()) {
-    const o = Object.assign(document.createElement("option"), {
-      textContent: `${t.symbol} — ${t.name}`,
-      value: t.address
-    });
-    el.appendChild(o);
-  }
-}
-
-// ============================================================
-// RPC / PROVEDOR
-// ============================================================
-async function testarRpc(url) {
+// ================= SALDOS =================
+async function carregarSaldos() {
+  if (!rpcProvider || !userAddress) return;
+  
   try {
-    const p = new ethers.providers.JsonRpcProvider({ url, timeout: RPC_TIMEOUT_MS });
-    const n = await p.getNetwork();
-    if (n.chainId !== POLYGON_CHAIN_ID) throw new Error("Rede errada");
-    providersOk[url] = p;
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function getAnyProvider() {
-  for (let i = 0; i < RPCS.length; i++) {
-    const url = RPCS[(rpcIdx + i) % RPCS.length];
-    if (providersOk[url]) return providersOk[url];
-    if (await testarRpc(url)) {
-      currentRpc = url;
-      rpcIdx = (i + 1) % RPCS.length;
-      console.log(`✅ Usando RPC: ${url}`);
-      return providersOk[url];
+    saldos.POL = BigInt((await rpcProvider.getBalance(userAddress)).toString());
+    
+    for (const t of TOKENS) {
+      if (t.symbol === "POL") continue;
+      try {
+        const res = await rpcProvider.call({
+          to: t.address,
+          data: "0x" + S.ERC20.balanceOf + encAddr(userAddress)
+        });
+        saldos[t.address] = decUint(res.slice(2));
+      } catch {
+        saldos[t.address] = 0n;
+      }
     }
-  }
-  throw new Error("Sem conexão com a rede Polygon. Verifique sua internet.");
-}
-
-// ============================================================
-// CHAMADAS DE CONTRATO
-// ============================================================
-async function call(provider, to, data) {
-  return await provider.call({ to, data });
-}
-
-async function getTotalOrdens(provider) {
-  const r = await call(provider, ESCROW_FACTORY_ADDRESS, "0x" + SEL_FACTORY.totalOrdens);
-  return Number(decUint(r));
-}
-
-async function getOrdemEscrow(provider, idx) {
-  const data = "0x" + SEL_FACTORY.ordem + encUint(idx);
-  const r = await call(provider, ESCROW_FACTORY_ADDRESS, data);
-  return decAddress(r);
-}
-
-async function getDadosOrdem(provider, escrowAddr) {
-  const dados = { endereco: escrowAddr, indice: -1, valido: false };
-  try {
-    let r = await call(provider, escrowAddr, "0x" + SEL_ESCROW.obterDados);
-    const w = splitWords(r);
-    dados.criador = decAddress(w[0]);
-    dados.tokenOferecido = decAddress(w[1]);
-    dados.valorOferecido = decUint(w[2]);
-    dados.tokenDesejado = decAddress(w[3]);
-    dados.valorDesejado = decUint(w[4]);
-    dados.executado = decBool(w[5]);
-    dados.cancelado = decBool(w[6]);
-    dados.valido = true;
+    renderizarSaldos();
   } catch (e) {
-    dados.erro = e.message;
+    console.error("Erro ao carregar saldos:", e);
   }
-  return dados;
 }
 
-async function saldoToken(provider, tokenAddr, usuarioAddr) {
-  if (mesmoEndereco(tokenAddr, "POL")) {
-    return BigInt((await provider.getBalance(usuarioAddr)).toString());
-  }
-  const r = await call(provider, tokenAddr, "0x" + SEL_ERC20.balanceOf + encAddress(usuarioAddr));
-  return decUint(r);
-}
-
-async function allowanceToken(provider, tokenAddr, ownerAddr, spenderAddr) {
-  const r = await call(provider, tokenAddr, "0x" + SEL_ERC20.allowance + encAddress(ownerAddr) + encAddress(spenderAddr));
-  return decUint(r);
-}
-
-async function atualizarSaldos(provider, usuarioAddr) {
-  if (!usuarioAddr) return;
-  saldos.POL = BigInt((await provider.getBalance(usuarioAddr)).toString());
-  for (const t of tokensOk()) {
-    try {
-      saldos[t.address] = await saldoToken(provider, t.address, usuarioAddr);
-    } catch {
-      saldos[t.address] = 0n;
-    }
-  }
-  atualizarExibicaoSaldos();
-}
-
-function atualizarExibicaoSaldos() {
+function renderizarSaldos() {
   const container = $("balances");
   if (!container) return;
+  
   container.innerHTML = "";
-
-  const addBal = (symbol, valor, dec, note = "") => {
-    const card = document.createElement("div");
-    card.className = "bal";
-    card.innerHTML = `
-      <span class="t">${symbol}${note}</span>
-      <span class="v">${fmt(valor, dec)}</span>
+  
+  const add = (simbolo, valor, decimais) => {
+    const div = document.createElement("div");
+    div.className = "bal";
+    div.innerHTML = `
+      <span class="t">${simbolo}</span>
+      <span class="v">${fmt(valor, decimais)}</span>
     `;
-    container.appendChild(card);
+    container.appendChild(div);
   };
-
-  addBal("POL", saldos.POL || 0n, 18);
-  for (const t of tokensOk()) {
-    const val = saldos[t.address] ?? 0n;
-    addBal(t.symbol, val, t.decimals);
-  }
-
+  
+  add("POL", saldos.POL, 18);
+  TOKENS.forEach(t => add(t.symbol, saldos[t.address] || 0n, t.decimals));
+  
   // Atualizar hints
   document.querySelectorAll("[data-hint]").forEach(el => {
     const [tipo, ref] = el.getAttribute("data-hint").split(":");
-    if (tipo === "saldo") {
-      const sel = $(ref);
-      const tok = sel ? tokenPorEndereco(sel.value) : null;
-      if (tok) {
-        const val = tok.symbol === "POL" ? saldos.POL || 0n : saldos[tok.address] ?? 0n;
-        el.textContent = `Saldo: ${fmt(val, tok.decimals)} ${tok.symbol}`;
-      }
-    } else if (tipo === "saldoPOL") {
-      el.textContent = fmt(saldos.POL || 0n, 18);
-    } else if (tipo === "saldoWPOL") {
+    if (tipo === "saldoPOL") el.textContent = fmt(saldos.POL, 18);
+    if (tipo === "saldoWPOL") {
       const wpol = TOKENS.find(t => t.symbol === "WPOL");
-      el.textContent = wpol ? fmt(saldos[wpol.address] || 0n, 18) : "—";
+      el.textContent = fmt(saldos[wpol.address] || 0n, 18);
+    }
+    if (tipo === "saldo" && ref) {
+      const sel = $(ref);
+      if (sel && sel.value) {
+        const tok = tokenPorEndereco(sel.value);
+        if (tok) {
+          const val = tok.symbol === "POL" ? saldos.POL : (saldos[tok.address] || 0n);
+          el.textContent = `Saldo: ${fmt(val, tok.decimals)} ${tok.symbol}`;
+        }
+      }
     }
   });
 }
 
-// ============================================================
-// CONEXÃO CARTEIRA
-// ============================================================
+// ================= CARTEIRA =================
 async function conectarCarteira() {
+  if (!window.ethereum) {
+    toast("❌ MetaMask não detectada! Instale a extensão e recarregue.", "err", 10000);
+    return;
+  }
+  
   try {
-    if (!window.ethereum) {
-      toast("❌ MetaMask não detectada. Instale a extensão e recarregue.", "err", 10000);
-      return;
-    }
-
-    walletProvider = new ethers.providers.Web3Provider(window.ethereum);
-    const contas = await walletProvider.send("eth_requestAccounts", []);
-    if (!contas || contas.length === 0) {
-      toast("Nenhuma conta selecionada.", "warn");
-      return;
-    }
-
-    userAddress = ethers.utils.getAddress(contas[0].toLowerCase());
-    signer = walletProvider.getSigner();
-
-    const rede = await walletProvider.getNetwork();
+    provider = new ethers.providers.Web3Provider(window.ethereum);
+    
+    // Solicitar contas
+    const contas = await provider.send("eth_requestAccounts", []);
+    if (!contas.length) throw new Error("Nenhuma conta encontrada");
+    
+    userAddress = ethers.utils.getAddress(contas[0]);
+    signer = provider.getSigner();
+    
+    // Verificar rede
+    const rede = await provider.getNetwork();
     if (rede.chainId !== POLYGON_CHAIN_ID) {
-      toast("⚠️ Selecione a rede Polygon na MetaMask.", "warn", 8000);
+      toast("⚠️ Mudando para Polygon Mainnet…", "warn");
       try {
-        await walletProvider.send("wallet_switchEthereumChain", [{ chainId: "0x89" }]);
+        await provider.send("wallet_switchEthereumChain", [{ chainId: "0x89" }]);
       } catch {
-        toast("Não foi possível mudar de rede. Mude manualmente.", "warn");
+        toast("❌ Selecione manualmente a rede Polygon na MetaMask", "err", 8000);
+        return;
       }
-      return;
     }
-
+    
+    // Atualizar UI
     $("btnConnect").style.display = "none";
     $("walletInfo").style.display = "flex";
     $("addr").textContent = short(userAddress);
+    
     toast("✅ Carteira conectada!", "ok");
-
-    await atualizarSaldos(walletProvider, userAddress);
-    if (!listenersRegistrados) registrarListeners();
+    
+    // Carregar dados
+    await carregarSaldos();
     await carregarOrdens();
-
+    
   } catch (e) {
     if (e.code === 4001) toast("Conexão recusada.", "warn");
-    else toast("Erro: " + erroLegivel(e), "err");
+    else toast("Erro: " + e.message, "err");
     console.error(e);
   }
 }
 
 function desconectarCarteira() {
-  walletProvider = null;
+  provider = null;
   signer = null;
   userAddress = null;
   $("btnConnect").style.display = "block";
   $("walletInfo").style.display = "none";
-  toast("Carteira desconectada", "info");
+  toast("Desconectado", "info");
 }
 
-async function verificarRede() {
-  try {
-    const p = await getAnyProvider();
-    const rede = await p.getNetwork();
-    if (rede.chainId === POLYGON_CHAIN_ID) {
-      setNet("ok", "Polygon ✅");
-      return true;
-    }
-    setNet("off", "Rede Errada ❌");
-    return false;
-  } catch (e) {
-    console.error("Falha na conexão RPC:", e);
-    setNet("off", "Sem conexão ❌");
-    return false;
-  }
-}
-
-// ============================================================
-// CARREGAR ORDENS
-// ============================================================
-async function carregarOrdens(forcar = false) {
-  if (carregando) return;
-  carregando = true;
+// ================= MURAL DE ORDENS =================
+async function carregarOrdens() {
+  if (loading || !rpcProvider) return;
+  loading = true;
+  
   const container = $("orders");
   const counter = $("counter");
-  const muralInfo = $("muralInfo");
-
+  
   try {
     counter.textContent = "⏳ Consultando…";
     container.innerHTML = '<div class="state"><div class="spinner"></div><p>Carregando ordens…</p></div>';
-
-    const provider = await getAnyProvider();
-    const total = await getTotalOrdens(provider);
-    counter.textContent = `Encontradas ${total} ordem${total !== 1 ? "ens" : ""}`;
+    
+    // Obter total de ordens
+    const totalRes = await rpcProvider.call({
+      to: ESCROW_FACTORY,
+      data: "0x" + S.Factory.totalOrdens
+    });
+    const total = Number(decUint(totalRes.slice(2)));
+    
+    counter.textContent = `${total} ordem${total !== 1 ? "ens" : ""}`;
+    
     if (total === 0) {
       container.innerHTML = '<div class="empty"><div class="big">📋</div><p>Nenhuma ordem encontrada. Seja o primeiro a criar uma!</p></div>';
       ordersCache = [];
       return;
     }
-
-    const indices = Array.from({ length: total }, (_, i) => i);
-    const enderecos = await mapLimit(indices, CONCORRENCIA, async i => {
-      try { return await getOrdemEscrow(provider, i); }
-      catch { return null; }
-    });
-
-    const escrows = enderecos.filter(Boolean);
-    const dados = await mapLimit(escrows, CONCORRENCIA, async addr => {
-      try { return await getDadosOrdem(provider, addr); }
-      catch { return null; }
-    });
-
-    ordersCache = dados.filter(d => d && d.valido);
+    
+    // Carregar cada ordem
+    const ordens = [];
+    for (let i = 0; i < total; i++) {
+      try {
+        // Obter endereço do escrow
+        const enderecoRes = await rpcProvider.call({
+          to: ESCROW_FACTORY,
+          data: "0x" + S.Factory.ordem + encUint(i)
+        });
+        const endereco = decAddr(enderecoRes.slice(2));
+        
+        // Obter dados do escrow
+        const dadosRes = await rpcProvider.call({
+          to: endereco,
+          data: "0x" + S.Escrow.obterDados
+        });
+        const p = splitResposta(dadosRes.slice(2));
+        
+        ordens.push({
+          indice: i,
+          endereco: endereco,
+          criador: decAddr(p[0]),
+          tokenOferecido: decAddr(p[1]),
+          valorOferecido: decUint(p[2]),
+          tokenDesejado: decAddr(p[3]),
+          valorDesejado: decUint(p[4]),
+          executado: decBool(p[5]),
+          cancelado: decBool(p[6]),
+        });
+      } catch (e) {
+        console.warn(`Erro ao carregar ordem ${i}:`, e.message);
+      }
+    }
+    
+    ordersCache = ordens;
     aplicarFiltros();
-    muralInfo.textContent = `Exibindo ${ordersCache.length} de ${total} ordens`;
-
+    $("muralInfo").textContent = `Exibindo ${ordens.length} de ${total} ordens`;
+    
   } catch (e) {
-    container.innerHTML = `<div class="empty">❌ Erro ao carregar ordens: ${erroLegivel(e)}</div>`;
-    console.error(e);
+    container.innerHTML = `<div class="empty">❌ Erro: ${e.message}</div>`;
+    console.error("Erro ao carregar ordens:", e);
   } finally {
-    carregando = false;
+    loading = false;
   }
 }
 
 function aplicarFiltros() {
   let filtrado = [...ordersCache];
+  
+  // Status
+  if (filtroAtivo.status === "ativas") filtrado = filtrado.filter(o => !o.executado && !o.cancelado);
+  if (filtroAtivo.status === "executaveis") filtrado = filtrado.filter(o => !o.executado && !o.cancelado && userAddress && !mesmoAddr(o.criador, userAddress));
+  if (filtroAtivo.status === "executadas") filtrado = filtrado.filter(o => o.executado);
+  if (filtroAtivo.status === "canceladas") filtrado = filtrado.filter(o => o.cancelado);
+  
+  // Outros filtros
+  if (filtroAtivo.oferece) filtrado = filtrado.filter(o => mesmoAddr(o.tokenOferecido, filtroAtivo.oferece));
+  if (filtroAtivo.pede) filtrado = filtrado.filter(o => mesmoAddr(o.tokenDesejado, filtroAtivo.pede));
+  if (filtroAtivo.minhas && userAddress) filtrado = filtrado.filter(o => mesmoAddr(o.criador, userAddress));
+  
+  renderizarOrdens(filtrado);
+}
+
+function renderizarOrdens(lista) {
   const container = $("orders");
-
-  if (filtro.status === "ativas") filtrado = filtrado.filter(o => !o.executado && !o.cancelado);
-  else if (filtro.status === "executaveis") filtrado = filtrado.filter(o => !o.executado && !o.cancelado && userAddress && !mesmoEndereco(o.criador, userAddress));
-  else if (filtro.status === "executadas") filtrado = filtrado.filter(o => o.executado);
-  else if (filtro.status === "canceladas") filtrado = filtrado.filter(o => o.cancelado);
-
-  if (filtro.oferece) filtrado = filtrado.filter(o => mesmoEndereco(o.tokenOferecido, filtro.oferece));
-  if (filtro.pede) filtrado = filtrado.filter(o => mesmoEndereco(o.tokenDesejado, filtro.pede));
-  if (filtro.minhas && userAddress) filtrado = filtrado.filter(o => mesmoEndereco(o.criador, userAddress));
-
-  atualizarOpcoesFiltro();
-  renderizarOrdens(filtrado, container);
-}
-
-function atualizarOpcoesFiltro() {
-  const ofertas = [...new Set(ordersCache.map(o => o.tokenOferecido).filter(Boolean))];
-  const pedidos = [...new Set(ordersCache.map(o => o.tokenDesejado).filter(Boolean))];
-
-  const selOf = $("filtroOferece");
-  const selPe = $("filtroPede");
-  if (!selOf || !selPe) return;
-
-  selOf.innerHTML = '<option value="">Todos os ativos</option>';
-  selPe.innerHTML = '<option value="">Todos os ativos</option>';
-
-  for (const addr of ofertas) {
-    const t = tokenPorEndereco(addr);
-    if (!t) continue;
-    const o = document.createElement("option");
-    o.textContent = t.symbol;
-    o.value = addr;
-    if (filtro.oferece === addr) o.selected = true;
-    selOf.appendChild(o);
-  }
-  for (const addr of pedidos) {
-    const t = tokenPorEndereco(addr);
-    if (!t) continue;
-    const o = document.createElement("option");
-    o.textContent = t.symbol;
-    o.value = addr;
-    if (filtro.pede === addr) o.selected = true;
-    selPe.appendChild(o);
-  }
-}
-
-function renderizarOrdens(lista, container) {
   if (!lista.length) {
-    container.innerHTML = '<div class="empty">🔍 Nenhuma ordem corresponde aos filtros.</div>';
+    container.innerHTML = '<div class="empty">🔍 Nenhuma ordem encontrada.</div>';
     return;
   }
+  
   container.innerHTML = "";
-  lista.sort((a, b) => (b.indice || 0) - (a.indice || 0));
-
-  for (const ordem of lista) {
-    const ofer = tokenPorEndereco(ordem.tokenOferecido);
-    const ped = tokenPorEndereco(ordem.tokenDesejado);
-    const minha = userAddress && mesmoEndereco(ordem.criador, userAddress);
-    const ativa = !ordem.executado && !ordem.cancelado;
-
+  lista.sort((a, b) => b.indice - a.indice);
+  
+  for (const o of lista) {
+    const ofer = tokenPorEndereco(o.tokenOferecido);
+    const ped = tokenPorEndereco(o.tokenDesejado);
+    const minha = userAddress && mesmoAddr(o.criador, userAddress);
+    const ativa = !o.executado && !o.cancelado;
+    
     const div = document.createElement("div");
-    div.className = `order ${ativa ? "active" : ""} ${ordem.executado ? "done" : ""} ${ordem.cancelado ? "cancelled" : ""}`;
+    div.className = `order ${ativa ? "active" : ""} ${o.executado ? "done" : ""} ${o.cancelado ? "cancelled" : ""}`;
     div.innerHTML = `
       <div class="order-head">
-        <span class="order-num">#${ordem.indice ?? "—"}</span>
-        <span class="tag ${ordem.executado ? "done" : ordem.cancelado ? "cancelled" : "active"}">
-          ${ordem.executado ? "✅ Executada" : ordem.cancelado ? "❌ Cancelada" : "🔵 Ativa"}
+        <span class="order-num">#${o.indice}</span>
+        <span class="tag ${o.executado ? "done" : o.cancelado ? "cancelled" : "active"}">
+          ${o.executado ? "✅ Executada" : o.cancelado ? "❌ Cancelada" : "🔵 Ativa"}
         </span>
       </div>
-      <div class="order-id">Escrow: ${ordem.endereco}</div>
+      <div class="order-id">Escrow: ${short(o.endereco)}</div>
       <div class="swap">
         <div class="swap-side">
           <div class="swap-lbl">Oferece</div>
-          <div class="swap-amt">${ofer ? fmt(ordem.valorOferecido, ofer.decimals) : "?"} ${ofer?.symbol || "???"}</div>
+          <div class="swap-amt">${ofer ? fmt(o.valorOferecido, ofer.decimals) : "?"} ${ofer?.symbol || "???"}</div>
         </div>
         <div class="swap-icon">⇄</div>
         <div class="swap-side">
           <div class="swap-lbl">Pede</div>
-          <div class="swap-amt">${ped ? fmt(ordem.valorDesejado, ped.decimals) : "?"} ${ped?.symbol || "???"}</div>
+          <div class="swap-amt">${ped ? fmt(o.valorDesejado, ped.decimals) : "?"} ${ped?.symbol || "???"}</div>
         </div>
       </div>
-      <div class="swap-escrow ${ativa ? "ok" : ""}">
-        Criador: ${short(ordem.criador)} ${minha ? "(você)" : ""}
-      </div>
+      <div class="swap-escrow ok">Criador: ${short(o.criador)} ${minha ? "(você)" : ""}</div>
       <div class="order-foot">
-        <span class="order-meta">${minha ? "Sua ordem" : "Ordem de " + short(ordem.criador)}</span>
+        <span class="order-meta">${minha ? "Sua ordem" : "Ordem externa"}</span>
         <div class="order-actions">
-          ${ativa && !minha ? `<button class="btn btn-sm btn-primary" data-acao="executar" data-escrow="${ordem.endereco}">Executar</button>` : ""}
-          ${ativa && minha ? `<button class="btn btn-sm" data-acao="cancelar" data-escrow="${ordem.endereco}">Cancelar</button>` : ""}
+          ${ativa && !minha ? `<button class="btn btn-sm btn-primary" onclick="executarOrdem('${o.endereco}')">Executar</button>` : ""}
+          ${ativa && minha ? `<button class="btn btn-sm" onclick="cancelarOrdem('${o.endereco}')">Cancelar</button>` : ""}
         </div>
       </div>
     `;
@@ -563,171 +440,362 @@ function renderizarOrdens(lista, container) {
   }
 }
 
-// ============================================================
-// TRANSAÇÕES
-// ============================================================
-async function executarOrdem(escrowAddr) {
-  if (!signer || emTransacao) return;
-  emTransacao = true;
-  try {
-    toast("⏳ Executando ordem…", "info");
-    const tx = await signer.sendTransaction({
-      to: escrowAddr,
-      data: "0x" + SEL_ESCROW.executar,
-      gasLimit: 300000
-    });
-    toastTx("📤 Transação enviada:", tx.hash, "info");
-    await tx.wait();
-    toast("✅ Ordem executada com sucesso!", "ok");
-    await carregarOrdens(true);
-    await atualizarSaldos(walletProvider, userAddress);
-  } catch (e) {
-    toast("❌ Erro: " + erroLegivel(e), "err");
-  } finally { emTransacao = false; }
-}
-
-async function cancelarOrdem(escrowAddr) {
-  if (!signer || emTransacao) return;
-  emTransacao = true;
-  try {
-    toast("⏳ Cancelando ordem…", "info");
-    const tx = await signer.sendTransaction({
-      to: escrowAddr,
-      data: "0x" + SEL_ESCROW.cancelar,
-      gasLimit: 200000
-    });
-    toastTx("📤 Transação enviada:", tx.hash, "info");
-    await tx.wait();
-    toast("✅ Ordem cancelada!", "ok");
-    await carregarOrdens(true);
-    await atualizarSaldos(walletProvider, userAddress);
-  } catch (e) {
-    toast("❌ Erro: " + erroLegivel(e), "err");
-  } finally { emTransacao = false; }
-}
-
-async function aprovarToken(tokenAddr, spenderAddr, valor) {
-  if (!signer || emTransacao) return false;
-  emTransacao = true;
-  try {
-    const token = tokenPorEndereco(tokenAddr);
-    toast(`⏳ Aprovando ${token?.symbol || "token"}…`, "info");
-    const tx = await signer.sendTransaction({
-      to: tokenAddr,
-      data: "0x" + SEL_ERC20.approve + encAddress(spenderAddr) + encUint(valor),
-      gasLimit: 100000
-    });
-    toastTx("📤 Aprovação enviada:", tx.hash, "info");
-    await tx.wait();
-    toast("✅ Aprovado!", "ok");
-    return true;
-  } catch (e) {
-    toast("❌ Erro: " + erroLegivel(e), "err");
-    return false;
-  } finally { emTransacao = false; }
-}
-
+// ================= CRIAR ORDEM =================
 async function criarOrdem() {
-  if (!signer || !userAddress || emTransacao) return;
-  emTransacao = true;
+  if (!signer || !userAddress || isTxBusy) return;
+  isTxBusy = true;
+  
   try {
     const ofAddr = $("selOferece").value;
     const deAddr = $("selDeseja").value;
     const ofToken = tokenPorEndereco(ofAddr);
     const deToken = tokenPorEndereco(deAddr);
-    if (!ofToken || !deToken) throw new Error("Selecione os tokens.");
-    if (mesmoEndereco(ofAddr, deAddr)) throw new Error("Os ativos devem ser diferentes.");
-
-    const ofVal = lerValor($("valorOferece").value, ofToken.decimals, ofToken.symbol);
-    const deVal = lerValor($("valorDeseja").value, deToken.decimals, deToken.symbol);
-
-    const saldo = await saldoToken(walletProvider, ofAddr, userAddress);
-    if (saldo < ofVal) throw new Error(`Saldo insuficiente de ${ofToken.symbol}.`);
-
+    
+    if (!ofToken || !deToken) throw new Error("Selecione os tokens");
+    if (mesmoAddr(ofAddr, deAddr)) throw new Error("Tokens devem ser diferentes");
+    
+    // Ler valores
+    const ofVal = ethers.utils.parseUnits($("valorOferece").value.replace(",", "."), ofToken.decimals);
+    const deVal = ethers.utils.parseUnits($("valorDeseja").value.replace(",", "."), deToken.decimals);
+    
+    // Verificar saldo
+    const saldo = ofToken.symbol === "POL" 
+      ? saldos.POL 
+      : decUint((await rpcProvider.call({ to: ofAddr, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress) })).slice(2));
+    
+    if (saldo < ofVal) throw new Error(`Saldo insuficiente de ${ofToken.symbol}`);
+    
+    // Aprovar se for token ERC20
     if (ofToken.symbol !== "POL") {
-      const allowance = await allowanceToken(walletProvider, ofAddr, userAddress, ESCROW_FACTORY_ADDRESS);
+      const allowance = decUint((await rpcProvider.call({
+        to: ofAddr,
+        data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(ESCROW_FACTORY)
+      })).slice(2));
+      
       if (allowance < ofVal) {
-        const ok = await aprovarToken(ofAddr, ESCROW_FACTORY_ADDRESS, ofVal);
-        if (!ok) return;
+        toast(`⏳ Aprovando ${ofToken.symbol}…`, "info");
+        const tx = await signer.sendTransaction({
+          to: ofAddr,
+          data: "0x" + S.ERC20.approve + encAddr(ESCROW_FACTORY) + encUint(ofVal),
+          gasLimit: 100000
+        });
+        toastTx("📤 Aprovação:", tx.hash);
+        await tx.wait();
+        toast("✅ Aprovado!", "ok");
       }
     }
-
+    
+    // Criar ordem
     toast("⏳ Criando ordem…", "info");
     const tx = await signer.sendTransaction({
-      to: ESCROW_FACTORY_ADDRESS,
-      data: "0x" + SEL_FACTORY.criarOrdem + encAddress(ofAddr) + encUint(ofVal) + encAddress(deAddr) + encUint(deVal),
+      to: ESCROW_FACTORY,
+      data: "0x" + S.Factory.criarOrdem + encAddr(ofAddr) + encUint(ofVal) + encAddr(deAddr) + encUint(deVal),
       gasLimit: 500000,
       value: ofToken.symbol === "POL" ? ofVal : 0n
     });
+    
     toastTx("📤 Ordem criada:", tx.hash, "ok");
     await tx.wait();
     toast("✅ Ordem criada com sucesso!", "ok");
-
+    
+    // Limpar e recarregar
     $("valorOferece").value = "";
     $("valorDeseja").value = "";
-    await carregarOrdens(true);
-    await atualizarSaldos(walletProvider, userAddress);
+    await carregarSaldos();
+    await carregarOrdens();
+    
   } catch (e) {
-    toast("❌ Erro: " + erroLegivel(e), "err");
-  } finally { emTransacao = false; }
+    toast("❌ " + (e.message || "Erro desconhecido"), "err");
+    console.error(e);
+  } finally {
+    isTxBusy = false;
+  }
 }
 
-async function enviarToken() {
-  if (!signer || !userAddress || emTransacao) return;
-  emTransacao = true;
+// ================= EXECUTAR / CANCELAR ORDEM =================
+window.executarOrdem = async function(escrowAddr) {
+  if (!signer || isTxBusy) return;
+  isTxBusy = true;
+  
   try {
-    const sel = $("selTokenEnvio").value;
+    toast("⏳ Executando…", "info");
+    const tx = await signer.sendTransaction({
+      to: escrowAddr,
+      data: "0x" + S.Escrow.executar,
+      gasLimit: 300000
+    });
+    toastTx("📤 Transação:", tx.hash, "ok");
+    await tx.wait();
+    toast("✅ Ordem executada!", "ok");
+    await carregarSaldos();
+    await carregarOrdens();
+  } catch (e) {
+    toast("❌ " + e.message, "err");
+  } finally {
+    isTxBusy = false;
+  }
+};
+
+window.cancelarOrdem = async function(escrowAddr) {
+  if (!signer || isTxBusy) return;
+  isTxBusy = true;
+  
+  try {
+    toast("⏳ Cancelando…", "info");
+    const tx = await signer.sendTransaction({
+      to: escrowAddr,
+      data: "0x" + S.Escrow.cancelar,
+      gasLimit: 200000
+    });
+    toastTx("📤 Transação:", tx.hash, "ok");
+    await tx.wait();
+    toast("✅ Ordem cancelada!", "ok");
+    await carregarSaldos();
+    await carregarOrdens();
+  } catch (e) {
+    toast("❌ " + e.message, "err");
+  } finally {
+    isTxBusy = false;
+  }
+};
+
+// ================= ENVIAR TOKENS =================
+async function enviarToken() {
+  if (!signer || !userAddress || isTxBusy) return;
+  isTxBusy = true;
+  
+  try {
+    const tokenAddr = $("selTokenEnvio").value;
     const destino = $("destinoEnvio").value.trim();
-    const valorTxt = $("valorEnvio").value;
-    const token = tokenPorEndereco(sel);
-
-    if (!token) throw new Error("Selecione um ativo.");
-    if (!isAddr(destino)) throw new Error("Endereço de destino inválido.");
-    if (mesmoEndereco(destino, userAddress)) throw new Error("Não pode enviar para você mesmo.");
-
-    const valor = lerValor(valorTxt, token.decimals, token.symbol);
-    const saldo = token.symbol === "POL" ? saldos.POL || 0n : saldos[token.address] ?? 0n;
-    if (saldo < valor) throw new Error(`Saldo insuficiente de ${token.symbol}.`);
-
+    const valorStr = $("valorEnvio").value.replace(",", ".");
+    const token = tokenPorEndereco(tokenAddr);
+    
+    if (!token) throw new Error("Selecione um token");
+    if (!isAddr(destino)) throw new Error("Endereço inválido");
+    if (mesmoAddr(destino, userAddress)) throw new Error("Não pode enviar para você mesmo");
+    
+    const valor = ethers.utils.parseUnits(valorStr, token.decimals);
+    
     toast(`⏳ Enviando ${fmt(valor, token.decimals, 4)} ${token.symbol}…`, "info");
-
+    
     let tx;
     if (token.symbol === "POL") {
       tx = await signer.sendTransaction({ to: destino, value: valor, gasLimit: 21000 });
     } else {
       tx = await signer.sendTransaction({
         to: token.address,
-        data: "0x" + SEL_ERC20.transfer + encAddress(destino) + encUint(valor),
+        data: "0x" + S.ERC20.transfer + encAddr(destino) + encUint(valor),
         gasLimit: 100000
       });
     }
-
-    toastTx("📤 Transação enviada:", tx.hash, "ok");
+    
+    toastTx("📤 Transação:", tx.hash, "ok");
     await tx.wait();
-    toast(`✅ ${token.symbol} enviado com sucesso!`, "ok");
-
+    toast(`✅ ${token.symbol} enviado!`, "ok");
+    
     $("destinoEnvio").value = "";
     $("valorEnvio").value = "";
-    await atualizarSaldos(walletProvider, userAddress);
+    await carregarSaldos();
+    
   } catch (e) {
-    toast("❌ Erro: " + erroLegivel(e), "err");
-  } finally { emTransacao = false; }
+    toast("❌ " + e.message, "err");
+  } finally {
+    isTxBusy = false;
+  }
 }
 
+// ================= CONVERSÃO POL ↔ WPOL =================
 async function wrapPOL() {
-  if (!signer || !userAddress || emTransacao) return;
-  emTransacao = true;
+  if (!signer || !userAddress || isTxBusy) return;
+  isTxBusy = true;
+  
   try {
     const wpol = TOKENS.find(t => t.symbol === "WPOL");
-    const valor = lerValor($("valorWPOL").value, 18, "POL");
-    if ((saldos.POL || 0n) < valor) throw new Error("Saldo insuficiente de POL.");
-
-    toast("⏳ Convertendo POL → WPOL…", "info");
+    const valorStr = $("valorWPOL").value.replace(",", ".");
+    const valor = ethers.utils.parseUnits(valorStr, 18);
+    
+    if (valor > saldos.POL) throw new Error("Saldo insuficiente de POL");
+    
+    toast(`⏳ Convertendo ${fmt(valor, 18, 4)} POL → WPOL…`, "info");
     const tx = await signer.sendTransaction({
       to: wpol.address,
-      data: "0x" + SEL_WPOL.deposit,
+      data: "0x" + S.WPOL.deposit,
       value: valor,
       gasLimit: 50000
     });
-    toastTx("📤 Transação enviada:", tx.hash, "ok");
-    await
+    toastTx("📤 Transação:", tx.hash, "ok");
+    await tx.wait();
+    toast("✅ POL convertido em WPOL!", "ok");
+    
+    $("valorWPOL").value = "";
+    await carregarSaldos();
+    
+  } catch (e) {
+    toast("❌ " + e.message, "err");
+  } finally {
+    isTxBusy = false;
+  }
+}
+
+async function unwrapWPOL() {
+  if (!signer || !userAddress || isTxBusy) return;
+  isTxBusy = true;
+  
+  try {
+    const wpol = TOKENS.find(t => t.symbol === "WPOL");
+    const valorStr = $("valorPOL").value.replace(",", ".");
+    const valor = ethers.utils.parseUnits(valorStr, 18);
+    
+    const saldoWPOL = saldos[wpol.address] || 0n;
+    if (valor > saldoWPOL) throw new Error("Saldo insuficiente de WPOL");
+    
+    toast(`⏳ Convertendo ${fmt(valor, 18, 4)} WPOL → POL…`, "info");
+    const tx = await signer.sendTransaction({
+      to: wpol.address,
+      data: "0x" + S.WPOL.withdraw + encUint(valor),
+      gasLimit: 50000
+    });
+    toastTx("📤 Transação:", tx.hash, "ok");
+    await tx.wait();
+    toast("✅ WPOL convertido em POL!", "ok");
+    
+    $("valorPOL").value = "";
+    await carregarSaldos();
+    
+  } catch (e) {
+    toast("❌ " + e.message, "err");
+  } finally {
+    isTxBusy = false;
+  }
+}
+
+// ================= NAVEGAÇÃO DE ABAS =================
+function configurarAbas() {
+  document.querySelectorAll(".tabs button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const aba = btn.dataset.tab;
+      
+      // Atualizar botões
+      document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      
+      // Mostrar painel correto
+      document.querySelectorAll(".panel").forEach(p => p.hidden = true);
+      $(`panel-${aba}`).hidden = false;
+      
+      // Atualizar hints de saldo
+      setTimeout(renderizarSaldos, 50);
+    });
+  });
+}
+
+// ================= FILTROS =================
+function configurarFiltros() {
+  $("filtroStatus").addEventListener("change", e => {
+    filtroAtivo.status = e.target.value;
+    aplicarFiltros();
+  });
+  $("filtroOferece").addEventListener("change", e => {
+    filtroAtivo.oferece = e.target.value;
+    aplicarFiltros();
+  });
+  $("filtroPede").addEventListener("change", e => {
+    filtroAtivo.pede = e.target.value;
+    aplicarFiltros();
+  });
+  $("filtroMinhas").addEventListener("change", e => {
+    filtroAtivo.minhas = e.target.checked;
+    aplicarFiltros();
+  });
+  $("btnLimparFiltros").addEventListener("click", () => {
+    filtroAtivo = { status: "ativas", oferece: "", pede: "", minhas: false };
+    $("filtroStatus").value = "ativas";
+    $("filtroOferece").value = "";
+    $("filtroPede").value = "";
+    $("filtroMinhas").checked = false;
+    aplicarFiltros();
+  });
+}
+
+// ================= INICIALIZAÇÃO =================
+async function init() {
+  console.log("🚀 BRN Exchange — Iniciando…");
+  
+  // Verificar ethers
+  if (typeof ethers === "undefined") {
+    console.error("❌ Ethers.js não carregado! Verifique a ordem dos scripts no HTML.");
+    alert("ERRO: Ethers.js não foi carregado. Verifique a ordem dos scripts.");
+    return;
+  }
+  console.log("✅ Ethers.js carregado");
+  
+  // Conectar RPC
+  await atualizarStatusRede();
+  
+  // Preencher seletores
+  preencherSeletores();
+  
+  // Configurar abas
+  configurarAbas();
+  
+  // Configurar filtros
+  configurarFiltros();
+  
+  // Botões principais
+  $("btnConnect").addEventListener("click", conectarCarteira);
+  $("btnDisconnect").addEventListener("click", desconectarCarteira);
+  $("btnRefresh").addEventListener("click", carregarOrdens);
+  $("btnCriarOrdem").addEventListener("click", criarOrdem);
+  $("btnEnviar").addEventListener("click", enviarToken);
+  $("btnConverterWPOL").addEventListener("click", wrapPOL);
+  $("btnConverterPOL").addEventListener("click", unwrapWPOL);
+  
+  // Botões MAX
+  $("btnMaxOf")?.addEventListener("click", () => {
+    const sel = $("selOferece");
+    const tok = tokenPorEndereco(sel.value);
+    if (tok) {
+      const val = tok.symbol === "POL" ? saldos.POL : (saldos[tok.address] || 0n);
+      $("valorOferece").value = ethers.utils.formatUnits(val.toString(), tok.decimals).replace(/\.?0+$/, "");
+    }
+  });
+  $("btnMaxSend")?.addEventListener("click", () => {
+    const sel = $("selTokenEnvio");
+    const tok = tokenPorEndereco(sel.value);
+    if (tok) {
+      const val = tok.symbol === "POL" ? saldos.POL : (saldos[tok.address] || 0n);
+      $("valorEnvio").value = ethers.utils.formatUnits(val.toString(), tok.decimals).replace(/\.?0+$/, "");
+    }
+  });
+  $("btnMaxWrap")?.addEventListener("click", () => {
+    $("valorWPOL").value = ethers.utils.formatUnits(saldos.POL.toString(), 18).replace(/\.?0+$/, "");
+  });
+  $("btnMaxUnwrap")?.addEventListener("click", () => {
+    const wpol = TOKENS.find(t => t.symbol === "WPOL");
+    $("valorPOL").value = ethers.utils.formatUnits((saldos[wpol.address] || 0n).toString(), 18).replace(/\.?0+$/, "");
+  });
+  
+  // Atualizar hints ao mudar seleção
+  ["selOferece", "selTokenEnvio"].forEach(id => {
+    $(id)?.addEventListener("change", renderizarSaldos);
+  });
+  
+  // Carregar ordens automaticamente
+  if (rpcProvider) {
+    await carregarOrdens();
+  }
+  
+  console.log("✅ Inicialização concluída!");
+}
+
+// Iniciar quando a página carregar
+window.addEventListener("load", init);
+
+// Detectar troca de conta na MetaMask
+if (window.ethereum) {
+  window.ethereum.on("accountsChanged", contas => {
+    if (contas.length === 0) desconectarCarteira();
+    else window.location.reload();
+  });
+  window.ethereum.on("chainChanged", () => window.location.reload());
+}
