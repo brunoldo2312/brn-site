@@ -1,6 +1,8 @@
 /* ============================================================
    STYLE.CSS — BRN Exchange
-   Versão: 5.2 | Data: 2026-09-22
+   Versão: 5.3 | Data: 2026-09-22
+   ✅ Correção: cor do dot de Bitcoin quando online
+   ✅ Ajustes: chips de saldo, swap-escrow, responsividade
    ============================================================ */
 
 :root {
@@ -38,6 +40,7 @@ body {
     margin: 0 auto;
 }
 
+/* ==================== HEADER ==================== */
 header {
     display: flex;
     justify-content: space-between;
@@ -66,12 +69,14 @@ header {
     font-size: 0.85rem;
 }
 
+/* ==================== DOTS DE STATUS ==================== */
 .dot {
     width: 10px;
     height: 10px;
     border-radius: 50%;
     background: var(--accent);
     flex-shrink: 0;
+    transition: background 0.2s;
 }
 
 .dot.off {
@@ -83,11 +88,26 @@ header {
     animation: pulse 1s infinite;
 }
 
+/* ✅ CORREÇÃO: cor laranja do Bitcoin quando ONLINE (sem .load) */
+.dot.btc-status {
+    background: var(--btc);
+}
+
+.dot.btc-status.off {
+    background: var(--danger);
+}
+
+.dot.btc-status.load {
+    background: #d29922;
+    animation: pulse 1s infinite;
+}
+
 @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }
 }
 
+/* ==================== BOTÕES ==================== */
 .btn {
     padding: 8px 16px;
     border-radius: var(--radius);
@@ -95,7 +115,8 @@ header {
     cursor: pointer;
     font-size: 0.9rem;
     font-weight: 500;
-    transition: opacity 0.2s, transform 0.1s;
+    transition: opacity 0.2s, transform 0.1s, background 0.2s;
+    font-family: inherit;
 }
 
 .btn:active {
@@ -132,16 +153,56 @@ header {
     color: white;
 }
 
+.btn-err:hover:not(:disabled) {
+    background: #b62b28;
+}
+
 .btn-btc {
     background: var(--btc);
     color: #000;
     font-weight: 600;
+    white-space: nowrap;
 }
 
-.btn-btc:hover {
+.btn-btc:hover:not(:disabled) {
     background: #f9a847;
 }
 
+.btn-success {
+    background: #10b981;
+    color: white;
+    padding: 10px 16px;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 600;
+    font-family: inherit;
+    transition: background 0.2s;
+}
+
+.btn-success:hover:not(:disabled) {
+    background: #059669;
+}
+
+.btn-danger {
+    background: #ef4444;
+    color: white;
+    padding: 10px 16px;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 600;
+    font-family: inherit;
+    transition: background 0.2s;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: #dc2626;
+}
+
+/* ==================== TABS ==================== */
 .tabs {
     display: flex;
     flex-wrap: wrap;
@@ -160,6 +221,7 @@ header {
     cursor: pointer;
     font-size: 0.9rem;
     transition: all 0.15s;
+    font-family: inherit;
 }
 
 .tabs button:hover {
@@ -171,8 +233,13 @@ header {
     color: var(--text);
 }
 
+/* ==================== PAINÉIS ==================== */
 .panel {
     animation: fadeIn 0.2s ease;
+}
+
+.panel[hidden] {
+    display: none !important;
 }
 
 @keyframes fadeIn {
@@ -180,6 +247,7 @@ header {
     to { opacity: 1; transform: translateY(0); }
 }
 
+/* ==================== CARDS ==================== */
 .card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -198,13 +266,14 @@ header {
 .card h3 {
     font-size: 0.95rem;
     margin-bottom: 8px;
-    margin-top: 20px;
+    margin-top: 0;
 }
 
 .dim {
     color: var(--text-muted);
 }
 
+/* ==================== INPUTS ==================== */
 .input-group {
     margin-bottom: 12px;
 }
@@ -224,6 +293,8 @@ input, select {
     border-radius: var(--radius);
     color: var(--text);
     font-size: 0.95rem;
+    font-family: inherit;
+    transition: border-color 0.15s;
 }
 
 input:focus, select:focus {
@@ -231,15 +302,32 @@ input:focus, select:focus {
     border-color: var(--accent);
 }
 
+input::placeholder {
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+
+select {
+    cursor: pointer;
+}
+
 .row {
     display: flex;
     gap: 8px;
+    align-items: stretch;
 }
 
 .row input {
     flex: 1;
+    min-width: 0;
 }
 
+.row select {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ==================== SALDOS ==================== */
 .balances {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -251,19 +339,27 @@ input:focus, select:focus {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: border-color 0.2s;
+}
+
+.bal:hover {
+    border-color: var(--accent);
 }
 
 .bal .t {
     font-size: 0.85rem;
-    margin-bottom: 4px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    color: var(--text-muted);
+    font-weight: 500;
+    letter-spacing: 0.3px;
 }
 
 .bal .v {
     font-size: 1.1rem;
     font-weight: 600;
+    word-break: break-all;
 }
 
 .bal .v.dim {
@@ -276,6 +372,7 @@ input:focus, select:focus {
     margin-top: 2px;
 }
 
+/* ==================== CHIPS DE TOKENS ==================== */
 .chip {
     display: inline-flex;
     align-items: center;
@@ -285,14 +382,19 @@ input:focus, select:focus {
     border-radius: 50%;
     font-weight: bold;
     font-size: 0.75rem;
+    flex-shrink: 0;
 }
 
 .chip.brn { background: #4f46f1; color: white; }
 .chip.pol { background: #8247e5; color: white; }
 .chip.usdc { background: #2775ca; color: white; }
+.chip.usdt { background: #26a17b; color: white; }
+.chip.wpol { background: #8247e5; color: white; }
+.chip.wbtc { background: #f7931a; color: #000; }
 .chip.btc { background: var(--btc); color: #000; }
 .chip.other { background: var(--border); color: var(--text); }
 
+/* ==================== FILTROS ==================== */
 .filters {
     display: flex;
     flex-wrap: wrap;
@@ -308,6 +410,23 @@ input:focus, select:focus {
     min-width: 120px;
 }
 
+.filters label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    min-width: 140px;
+    user-select: none;
+}
+
+.filters input[type="checkbox"] {
+    width: auto;
+    cursor: pointer;
+    accent-color: var(--accent);
+}
+
+/* ==================== MURAL DE ORDENS ==================== */
 .orders {
     display: flex;
     flex-direction: column;
@@ -319,7 +438,11 @@ input:focus, select:focus {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 16px;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, transform 0.15s;
+}
+
+.order:hover {
+    transform: translateY(-1px);
 }
 
 .order.active { border-color: var(--accent); }
@@ -338,13 +461,15 @@ input:focus, select:focus {
 .order-num {
     font-weight: bold;
     color: var(--text-muted);
+    font-size: 0.9rem;
 }
 
 .order-id {
-    font-family: monospace;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
     font-size: 0.8rem;
     color: var(--text-muted);
     margin-bottom: 8px;
+    word-break: break-all;
 }
 
 .tag {
@@ -352,6 +477,7 @@ input:focus, select:focus {
     border-radius: 12px;
     font-size: 0.75rem;
     font-weight: 600;
+    white-space: nowrap;
 }
 
 .tag.active { background: rgba(35, 134, 54, 0.15); color: #3fb950; }
@@ -364,33 +490,40 @@ input:focus, select:focus {
     align-items: center;
     justify-content: space-around;
     margin: 12px 0;
+    gap: 8px;
 }
 
 .swap-side {
     text-align: center;
     flex: 1;
+    min-width: 0;
 }
 
 .swap-lbl {
     font-size: 0.75rem;
     color: var(--text-muted);
     margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .swap-amt {
     font-size: 1.1rem;
     font-weight: 600;
+    word-break: break-all;
 }
 
 .swap-icon {
     font-size: 1.2rem;
     padding: 0 8px;
     color: var(--text-muted);
+    flex-shrink: 0;
 }
 
 .swap-escrow {
     font-size: 0.75rem;
     margin-top: 4px;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
 }
 
 .swap-escrow.ok { color: var(--accent); }
@@ -415,6 +548,7 @@ input:focus, select:focus {
 .order-actions {
     display: flex;
     gap: 6px;
+    flex-wrap: wrap;
 }
 
 .order-note {
@@ -430,6 +564,18 @@ input:focus, select:focus {
     border: 1px solid rgba(210, 153, 34, 0.3);
 }
 
+.source-note {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 12px;
+    padding: 8px 10px;
+    background: rgba(210, 153, 34, 0.08);
+    border-left: 3px solid #d29922;
+    border-radius: 4px;
+    line-height: 1.5;
+}
+
+/* ==================== ESTADOS (vazio / carregando) ==================== */
 .empty {
     text-align: center;
     padding: 40px 20px;
@@ -439,6 +585,7 @@ input:focus, select:focus {
 .empty .big {
     font-size: 2.5rem;
     margin-bottom: 12px;
+    display: block;
 }
 
 .state {
@@ -461,6 +608,7 @@ input:focus, select:focus {
     to { transform: rotate(360deg); }
 }
 
+/* ==================== TOASTS ==================== */
 .toast-container {
     position: fixed;
     top: 16px;
@@ -470,6 +618,7 @@ input:focus, select:focus {
     flex-direction: column;
     gap: 8px;
     max-width: 380px;
+    pointer-events: none;
 }
 
 .toast {
@@ -477,7 +626,12 @@ input:focus, select:focus {
     border-radius: var(--radius);
     background: var(--card);
     border: 1px solid var(--border);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     animation: slideIn 0.2s ease;
+    transition: opacity 0.2s;
+    pointer-events: auto;
+    font-size: 0.9rem;
+    word-break: break-word;
 }
 
 @keyframes slideIn {
@@ -494,8 +648,10 @@ input:focus, select:focus {
     color: #58a6ff;
     font-size: 0.8rem;
     margin-left: 6px;
+    white-space: nowrap;
 }
 
+/* ==================== BARRA DA CARTEIRA ==================== */
 .wallet-bar {
     display: flex;
     justify-content: space-between;
@@ -517,18 +673,20 @@ input:focus, select:focus {
 }
 
 .wallet-info code {
-    font-family: monospace;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
     font-size: 0.85rem;
     color: var(--text-muted);
     background: var(--bg);
-    padding: 2px 6px;
+    padding: 3px 8px;
     border-radius: 4px;
+    border: 1px solid var(--border);
 }
 
 .wallet-info span {
     font-size: 0.9rem;
 }
 
+/* ==================== BALANÇOS ==================== */
 .bal-row {
     display: flex;
     justify-content: space-between;
@@ -538,6 +696,7 @@ input:focus, select:focus {
     margin-bottom: 12px;
 }
 
+/* ==================== BITCOIN ==================== */
 .btc-address {
     background: rgba(247, 147, 26, 0.08);
     border: 1px solid var(--btc);
@@ -554,7 +713,7 @@ input:focus, select:focus {
 
 .btc-address code {
     display: block;
-    font-family: monospace;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
     word-break: break-all;
     margin-top: 8px;
     color: var(--btc);
@@ -572,6 +731,7 @@ input:focus, select:focus {
 
 .btc-balance-result.show {
     display: block;
+    animation: fadeIn 0.25s ease;
 }
 
 .btc-balance-result .t {
@@ -584,8 +744,54 @@ input:focus, select:focus {
     font-size: 1.4rem;
     font-weight: 700;
     color: var(--btc);
+    word-break: break-all;
 }
 
+/* ==================== FORMULÁRIOS DE SWAP ==================== */
+.trade-forms {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin: 1.5rem 0;
+}
+
+.form-card {
+    background: var(--bg);
+    border-radius: var(--radius);
+    padding: 20px;
+    border: 1px solid var(--border);
+}
+
+.form-card h3 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    font-size: 1rem;
+    color: var(--text);
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 0.75rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font-size: 1rem;
+    font-family: inherit;
+}
+
+/* ==================== TIPOGRAFIA GERAL ==================== */
 ul {
     padding-left: 20px;
     font-size: 0.85rem;
@@ -600,6 +806,7 @@ ul li {
 a {
     color: #58a6ff;
     text-decoration: none;
+    transition: color 0.15s;
 }
 
 a:hover {
@@ -610,14 +817,12 @@ small {
     font-size: 0.75rem;
 }
 
-.hidden {
-    display: none !important;
+code {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
 }
 
-.source-note {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin-top: 8px;
+.hidden {
+    display: none !important;
 }
 
 .debug-info {
@@ -634,7 +839,13 @@ hr {
     margin: 20px 0;
 }
 
-/* Responsividade para celular */
+/* ==================== RESPONSIVIDADE ==================== */
+@media (max-width: 768px) {
+    .trade-forms {
+        grid-template-columns: 1fr;
+    }
+}
+
 @media (max-width: 600px) {
     body {
         padding: 10px;
@@ -647,11 +858,19 @@ hr {
 
     .wallet-bar {
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch;
+    }
+
+    .wallet-info {
+        justify-content: space-between;
     }
 
     .filters {
         flex-direction: column;
+    }
+
+    .filters > * {
+        width: 100%;
     }
 
     .swap {
@@ -659,9 +878,21 @@ hr {
         gap: 8px;
     }
 
+    .swap-icon {
+        transform: rotate(90deg);
+    }
+
     .order-foot {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .order-actions {
+        width: 100%;
+    }
+
+    .order-actions .btn {
+        flex: 1;
     }
 
     .toast-container {
@@ -672,5 +903,19 @@ hr {
 
     .row {
         flex-wrap: wrap;
+    }
+
+    .row input,
+    .row select,
+    .row button {
+        width: 100%;
+    }
+
+    .balances {
+        grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    }
+
+    .card {
+        padding: 16px;
     }
 }
