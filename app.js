@@ -1,24 +1,21 @@
 // ============================================================
-// APP.JS — Carteira BRN P2P (v3.3 — corrigido)
+// APP.JS — Carteira BRN P2P (v3.5)
 // Compatível com o EscrowFactory JÁ DEPLOYADO (sem alterar .sol)
 //
-// Correções aplicadas:
-//  - init() roda via readyState (funciona com script async/defer)
+// Histórico de correções:
+//  - init() via readyState (funciona com script async/defer)
 //  - withTimeout sem unhandled rejection
 //  - guards de null em todos os getElementById críticos
-//  - verificarTokens protegido contra execução duplicada
-//  - LISTA COMPLETA de 21 tokens suportados
-//  - v3.3: verificação de token mais tolerante — só os DECIMALS
-//    bloqueiam; símbolo vira aviso. Falha de RPC não é definitiva.
+//  - verificarTokens não bloqueia mais tokens (só informativo)
+//  - LISTA COMPLETA de 21 tokens
+//  - carregarSaldos mostra saldo parcial se RPC falhar em alguns
+//  - renderMural com layout novo + saldo do escrow por ordem
 // ============================================================
 
-// --- CONFIGURACOES (POLYGON MAINNET) ---
 const ESCROW_FACTORY_ADDRESS = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
+const APP_VERSION = "v3.5";
 
-// ------------------------------------------------------------
-// LISTA DE TOKENS SUPORTADOS (única fonte de verdade)
-// ------------------------------------------------------------
 const NATIVO = { symbol: "POL", name: "POL (nativo)", decimals: 18, native: true };
 const TOKENS = [
   { symbol: "BRN",    name: "BRN",                address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18, symbols: null },
@@ -52,7 +49,7 @@ const RPCS = [
 ];
 const RPC_TIMEOUT_MS = 8000;
 const MAX_ORDENS = 1000;
-const CONCORRENCIA = 5;
+const CONCORRENCIA = 8;
 
 const SEL_FACTORY = {
   criarOrdem:   "ceff4da6",
@@ -167,7 +164,6 @@ function erroLegivel(e) {
 }
 
 const HEX_WORD = /^[0-9a-fA-F]{64}$/;
-
 function pad32(hexNo0x) { return hexNo0x.padStart(64, "0"); }
 function encAddress(addr) {
   if (!isAddr(addr)) throw new Error("Endereço inválido.");
@@ -253,72 +249,38 @@ async function mapLimit(items, limit, fn) {
 function normalizarTokens() {
   for (const t of TOKENS) {
     try { t.address = ethers.utils.getAddress(t.address.toLowerCase()); }
-    catch (e) { t.ok = false; t.definitivo = true; t.aviso = "endereço inválido na lista"; }
-    if (t.ok === undefined) t.ok = false;
+    catch (e) { t.address = null; }
   }
 }
-function tokenPorEndereco(addr) { return TOKENS.find(t => mesmoEndereco(t.address, addr)) || null; }
-function tokenOk(addr) { const t = tokenPorEndereco(addr); return t && t.ok ? t : null; }
-function tokensOk() { return TOKENS.filter(t => t.ok); }
+function tokenPorEndereco(addr) { return TOKENS.find(t => t.address && mesmoEndereco(t.address, addr)) || null; }
+function tokenOk(addr) { return tokenPorEndereco(addr); }
+function tokensOk() { return TOKENS.filter(t => !!t.address); }
 function ativoPorId(id) { return id === "POL" ? NATIVO : tokenOk(id); }
 
-// v3.3: verificacao tolerante — DECIMALS e a checagem obrigatoria.
-// Se o RPC falhar para decimals, NAO marca como definitivo (retenta depois).
-// Se o simbolo nao bater, apenas avisa (nao bloqueia o token).
 let verificandoTokens = false;
 async function verificarTokens() {
   if (verificandoTokens) return;
   verificandoTokens = true;
   try {
     await mapLimit(TOKENS, CONCORRENCIA, async (t) => {
-      if (t.ok || t.definitivo) return;
-
-      let dec = null;
+      if (!t.address) return;
       try {
         const rd = await rawCall(t.address, "0x" + SEL_ERC20.decimals);
-        dec = Number(decUint(splitWords(rd)[0]));
+        const dec = Number(decUint(splitWords(rd)[0]));
+        if (dec === t.decimals) t.verif = "ok";
+        else t.verif = "decimais diferentes: on-chain=" + dec + " esperado=" + t.decimals;
       } catch (e) {
-        // RPC falhou ao ler decimals: deixa para tentar de novo
-        t.ok = false;
-        t.aviso = "RPC não respondeu — tentaremos de novo";
-        return;
-      }
-
-      if (dec !== t.decimals) {
-        // Decimais diferentes do esperado: rejeita em definitivo
-        t.ok = false;
-        t.definitivo = true;
-        t.aviso = "on-chain: " + dec + " decimais (esperado " + t.decimals + ")";
-        return;
-      }
-
-      // Decimais OK -> token aceito
-      t.ok = true;
-      t.aviso = null;
-
-      // Simbolo e apenas informativo. Nao bloqueia.
-      let simbolo = null;
-      try { simbolo = decString(await rawCall(t.address, "0x" + SEL_ERC20.symbol)); } catch (e) { /* opcional */ }
-      if (simbolo && t.symbols && !t.symbols.includes(simbolo.toUpperCase())) {
-        t.aviso = "símbolo on-chain é " + simbolo + " (esperado " + t.symbols.join("/") + ")";
+        t.verif = "não verificado (RPC)";
       }
     });
-
-    for (const t of TOKENS) {
-      if (!t.ok && t.definitivo && !t.avisado) {
-        t.avisado = true;
-        toast("Token " + t.symbol + " desativado: " + t.aviso, "warn", 9000);
-      }
-    }
   } finally {
     verificandoTokens = false;
   }
 }
 
 async function garantirTokens() {
-  if (TOKENS.some(t => !t.ok && !t.definitivo)) {
-    await verificarTokens();
-    montarSelects();
+  if (TOKENS.some(t => !t.verif)) {
+    verificarTokens().catch(() => {});
   }
 }
 
@@ -336,7 +298,7 @@ function chipClasse(symbol) {
 }
 
 // ============================================================
-// RPCs PÚBLICOS
+// RPCs
 // ============================================================
 async function withTimeout(promise, ms) {
   Promise.resolve(promise).catch(() => {});
@@ -429,7 +391,7 @@ function mostrarAba(nome, atualizarHash = true) {
   if (!ABAS.includes(nome)) nome = "mural";
   document.querySelectorAll("[data-tab]").forEach(b => b.classList.toggle("active", b.dataset.tab === nome));
   document.querySelectorAll("[data-panel]").forEach(p => { p.hidden = p.dataset.panel !== nome; });
-  if (atualizarHash) { try { history.replaceState(null, "", "#" + nome); } catch (e) { /* file:// */ } }
+  if (atualizarHash) { try { history.replaceState(null, "", "#" + nome); } catch (e) {} }
   if (nome === "enviar" || nome === "vender") atualizarHints();
 }
 
@@ -498,12 +460,12 @@ function montarSelects() {
 function renderListaTokens() {
   const ul = $("listaTokens");
   if (!ul) return;
-  const itens = [{ symbol: "POL", name: "POL (nativo)", decimals: 18, native: true, ok: true }, ...TOKENS].map(t => {
+  const itens = [{ symbol: "POL", name: "POL (nativo)", decimals: 18, native: true }, ...TOKENS].map(t => {
     const li = el("li");
     li.appendChild(el("b", "", t.symbol));
     li.appendChild(document.createTextNode(" — " + t.name + " · " + t.decimals + " decimais · "));
     if (t.native) { li.appendChild(document.createTextNode("uso: envio")); return li; }
-    li.appendChild(document.createTextNode(t.ok ? "✅ verificado " : "⚠️ desativado (" + (t.aviso || "aguardando verificação") + ") "));
+    li.appendChild(document.createTextNode("✅ aceito "));
     if (isAddr(t.address)) {
       const a = el("a", "", short(t.address) + " ↗");
       a.href = "https://polygonscan.com/token/" + t.address; a.target = "_blank"; a.rel = "noopener noreferrer";
@@ -537,7 +499,7 @@ async function carregarMural(silencioso = false) {
   }
 
   try {
-    await garantirTokens();
+    garantirTokens();
 
     let addrs = [];
     try {
@@ -609,8 +571,13 @@ function renderMural(orders) {
 
   box.innerHTML = sorted.map(o => {
     if (o.erro) {
-      return `<div class="order"><div class="order-id">${esc(o.endereco)}</div>
-        <div class="state" style="padding:10px">⚠️ Não foi possível ler esta ordem.</div></div>`;
+      return `<div class="order error">
+        <div class="order-head">
+          <span class="order-num">—</span>
+          <span class="order-id">${esc(o.endereco)}</span>
+        </div>
+        <div class="order-body dim">⚠️ Não foi possível ler esta ordem.</div>
+      </div>`;
     }
     const av = avaliar(o);
     const eDono = mesmoEndereco(userAddress, o.criador);
@@ -625,43 +592,59 @@ function renderMural(orders) {
     const podeExecutar = av.executavel && !!userAddress && !eDono;
     const podeCancelar = av.ativa && !!userAddress && eDono;
 
+    let escrowInfo = "";
+    if (av.ativa && o.saldoEscrow !== null && o.saldoEscrow !== undefined) {
+      const ok = o.saldoEscrow >= o.valorOferecido;
+      const label = ok ? "✓ No escrow" : "⚠ No escrow (incompleto)";
+      escrowInfo = `<div class="swap-escrow ${ok ? "ok" : "bad"}">${esc(label)}: ${esc(fmtToken(o.saldoEscrow, o.tokenOferecido))}</div>`;
+    } else if (av.ativa) {
+      escrowInfo = `<div class="swap-escrow dim">saldo do escrow indisponível</div>`;
+    }
+
     let aviso = "";
     if (av.ativa && !av.suportada) {
-      aviso = `<div class="note">⚠️ Esta ordem usa token fora da lista de suportados (possível token falso). O app não permite executá-la.</div>`;
+      aviso = `<div class="order-note warn">⚠️ Esta ordem usa token fora da lista de suportados (possível token falso). Não é possível executá-la.</div>`;
     } else if (av.ativa && av.financiada === false) {
-      aviso = `<div class="note">⚠️ O escrow não possui os tokens da ordem — ela não pode ser executada.</div>`;
+      aviso = `<div class="order-note warn">⚠️ O escrow não possui os tokens da ordem — ela não pode ser executada.</div>`;
     }
 
     const addr = esc(o.endereco);
-    const clsOf = av.tOf ? chipClasse(av.tOf.symbol) : "";
-    const clsDe = av.tDe ? chipClasse(av.tDe.symbol) : "";
+    const clsOf = av.tOf ? chipClasse(av.tOf.symbol) : "other";
+    const clsDe = av.tDe ? chipClasse(av.tDe.symbol) : "other";
+
     return `
       <div class="order ${classe}">
-        <div class="order-top">
-          <span class="order-id">#${o.indice + 1} · ${esc(short(o.endereco))}</span>
+        <div class="order-head">
+          <span class="order-num">#${o.indice + 1}</span>
+          <span class="order-id" title="${addr}">${esc(short(o.endereco))}</span>
           <span class="tag ${classe}">${esc(tagTxt)}</span>
         </div>
+
         <div class="swap">
-          <div class="side">
-            <div class="lbl">Oferece</div>
-            <div class="amt ${clsOf}">${esc(fmtToken(o.valorOferecido, o.tokenOferecido))}</div>
+          <div class="swap-side">
+            <div class="swap-lbl">Oferece</div>
+            <div class="swap-amt ${clsOf}">${esc(fmtToken(o.valorOferecido, o.tokenOferecido))}</div>
+            ${escrowInfo}
           </div>
-          <div class="arrow">⇄</div>
-          <div class="side">
-            <div class="lbl">Pede</div>
-            <div class="amt ${clsDe}">${esc(fmtToken(o.valorDesejado, o.tokenDesejado))}</div>
+          <div class="swap-icon">⇄</div>
+          <div class="swap-side">
+            <div class="swap-lbl">Pede</div>
+            <div class="swap-amt ${clsDe}">${esc(fmtToken(o.valorDesejado, o.tokenDesejado))}</div>
           </div>
         </div>
-        <div class="order-meta">
-          <span>Criador: <b>${esc(short(o.criador))}</b></span>
-          <span>Escrow: <b>${esc(short(o.endereco))}</b></span>
+
+        <div class="order-foot">
+          <div class="order-meta">
+            <span title="${esc(o.criador)}">👤 ${esc(short(o.criador))}</span>
+          </div>
+          <div class="order-actions">
+            ${podeExecutar ? `<button class="btn-ok btn-sm" data-action="executar" data-addr="${addr}">⚡ Executar</button>` : ""}
+            ${podeCancelar ? `<button class="btn-err btn-sm" data-action="cancelar" data-addr="${addr}">✖ Cancelar</button>` : ""}
+            ${(!userAddress && av.executavel) ? `<span class="order-id dim">conecte a carteira</span>` : ""}
+          </div>
         </div>
+
         ${aviso}
-        <div class="order-actions">
-          ${podeExecutar ? `<button class="btn-ok btn-sm" data-action="executar" data-addr="${addr}">⚡ Executar (pagar ${esc(fmtToken(o.valorDesejado, o.tokenDesejado))})</button>` : ""}
-          ${podeCancelar ? `<button class="btn-err btn-sm" data-action="cancelar" data-addr="${addr}">✖ Cancelar</button>` : ""}
-          ${(!userAddress && av.executavel) ? `<span class="order-id">Conecte a carteira para interagir</span>` : ""}
-        </div>
       </div>`;
   }).join("");
 }
@@ -742,12 +725,29 @@ function renderSaldos(ativos) {
   if (!box) return;
   box.replaceChildren(...ativos.map(a => {
     const card = el("div", "bal");
+
     const t = el("div", "t");
     t.appendChild(el("span", "chip " + chipClasse(a.symbol), a.symbol.slice(0, 1)));
     t.appendChild(document.createTextNode(" " + a.symbol));
     card.appendChild(t);
+
     const id = a.native ? "POL" : a.address;
-    card.appendChild(el("div", "v", saldos[id] === undefined ? "—" : fmt(saldos[id], a.decimals)));
+    const v = saldos[id];
+    const elV = el("div", "v");
+    if (v === undefined) {
+      elV.textContent = "—";
+      elV.classList.add("dim");
+    } else if (v === 0n) {
+      elV.textContent = "0";
+      elV.classList.add("dim");
+    } else {
+      elV.textContent = fmt(v, a.decimals);
+    }
+    card.appendChild(elV);
+
+    const sub = el("div", "bal-sub", a.symbol === "POL" ? "nativo" : a.name);
+    card.appendChild(sub);
+
     return card;
   }));
 }
@@ -755,11 +755,30 @@ function renderSaldos(ativos) {
 async function carregarSaldos() {
   if (!userAddress) return;
   const ativos = [NATIVO, ...tokensOk()];
+
+  const box = $("balances");
+  if (box) {
+    box.replaceChildren(...ativos.map(a => {
+      const card = el("div", "bal");
+      const t = el("div", "t");
+      t.appendChild(el("span", "chip " + chipClasse(a.symbol), a.symbol.slice(0, 1)));
+      t.appendChild(document.createTextNode(" " + a.symbol));
+      card.appendChild(t);
+      card.appendChild(el("div", "v dim", "…"));
+      return card;
+    }));
+  }
+
   await mapLimit(ativos, CONCORRENCIA, async (a) => {
     const id = a.native ? "POL" : a.address;
-    try { saldos[id] = await saldoDe(a, userAddress, walletProvider ? callWallet : rawCall); }
-    catch (e) { delete saldos[id]; }
+    try {
+      const v = await saldoDe(a, userAddress, walletProvider ? callWallet : rawCall);
+      saldos[id] = v;
+    } catch (e) {
+      // mantém valor antigo se existia
+    }
   });
+
   renderSaldos(ativos);
   atualizarHints();
 }
@@ -816,11 +835,10 @@ async function reservaGasPOL() {
     const fd = await walletProvider.getFeeData();
     const preco = fd.maxFeePerGas || fd.gasPrice;
     if (preco) return BigInt(preco.toString()) * 21000n * 2n;
-  } catch (e) { /* usa o padrão */ }
+  } catch (e) {}
   return 10n ** 16n;
 }
 
-// ---------------- ENVIAR ----------------
 function enderecosBloqueados() {
   const s = new Set(["0x0000000000000000000000000000000000000000", ESCROW_FACTORY_ADDRESS.toLowerCase()]);
   TOKENS.forEach(t => { if (isAddr(t.address)) s.add(t.address.toLowerCase()); });
@@ -856,7 +874,7 @@ async function enviarAtivo() {
     if (saldo < valor) throw new Error("Saldo insuficiente de " + ativo.symbol + ".");
 
     let ehContrato = false;
-    try { ehContrato = (await walletProvider.getCode(destino)) !== "0x"; } catch (e) { /* ignora */ }
+    try { ehContrato = (await walletProvider.getCode(destino)) !== "0x"; } catch (e) {}
 
     const ok = window.confirm(
       "Enviar " + fmt(valor, ativo.decimals) + " " + ativo.symbol + "\n\n" +
@@ -895,7 +913,6 @@ async function maxEnviar() {
   } catch (e) { toast(erroLegivel(e), "err"); }
 }
 
-// ---------------- VENDER ----------------
 function tokensDaVenda() {
   const tOf = tokenOk($("vTokOf").value);
   const tDe = tokenOk($("vTokDe").value);
@@ -964,7 +981,6 @@ async function maxVender() {
   } catch (e) { toast(erroLegivel(e), "err"); }
 }
 
-// ---------------- EXECUTAR ----------------
 async function executarOrdem(escrowAddr) {
   await comTransacao(async () => {
     const conhecida = ordersCache.find(x => mesmoEndereco(x.endereco, escrowAddr));
@@ -1013,7 +1029,6 @@ async function executarOrdem(escrowAddr) {
   });
 }
 
-// ---------------- CANCELAR ----------------
 async function cancelarOrdem(escrowAddr) {
   await comTransacao(async () => {
     const conhecida = ordersCache.find(x => mesmoEndereco(x.endereco, escrowAddr));
@@ -1034,9 +1049,6 @@ async function cancelarOrdem(escrowAddr) {
   });
 }
 
-// ============================================================
-// HINTS / COTAÇÃO
-// ============================================================
 function textoSaldo(ativo) {
   if (!ativo) return "";
   const id = ativo.native ? "POL" : ativo.address;
@@ -1088,6 +1100,13 @@ function evitarIguais(mudou) {
 function init() {
   normalizarTokens();
 
+  try {
+    console.log(
+      "%c[BRN] APP.JS " + APP_VERSION + " — carregado com " + TOKENS.length + " tokens",
+      "background:#1e3a8a;color:#fff;padding:3px 8px;border-radius:4px;font-weight:bold"
+    );
+  } catch (e) {}
+
   const tabs = $("tabs");
   if (tabs) tabs.addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-tab]");
@@ -1127,6 +1146,7 @@ function init() {
     else if (btn.dataset.action === "cancelar") cancelarOrdem(addr);
   });
 
+  montarSelects();
   renderListaTokens();
   carregarMural(false);
   setInterval(() => { if (!emTransacao && !document.hidden) carregarMural(true); }, 60000);
