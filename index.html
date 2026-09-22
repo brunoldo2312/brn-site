@@ -6,8 +6,8 @@
     <title>BRN Exchange — Mural de Ordens P2P</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="style-melhorias.css">
-    <!-- ✅ CORRIGIDO: CDN oficial do Ethers.js v5 -->
-    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js" type="text/javascript"></script>
+    <!-- ✅ Ethers.js v5 — CDN cdnjs (funcional) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -63,7 +63,7 @@
                     </label>
                     <button id="btnLimparFiltros" class="btn btn-sm">✕ Limpar</button>
                 </div>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:0.85rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:0.85rem; gap:8px; flex-wrap:wrap;">
                     <span id="counter" class="dim">0 ordens</span>
                     <span id="muralInfo" class="dim">Exibindo 0 ordens</span>
                     <button id="btnRefresh" class="btn btn-sm btn-primary">🔄 Atualizar</button>
@@ -84,7 +84,7 @@
                         <input type="text" id="valorOferece" placeholder="0.0">
                         <select id="selOferece"></select>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-top:4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
                         <small id="hintOferece" data-hint="saldo:selOferece" class="dim">Saldo: —</small>
                         <button id="btnMaxOf" class="btn btn-sm">MAX</button>
                     </div>
@@ -169,9 +169,9 @@
             </div>
         </div>
 
-        <!-- Exibição Visual de Saldos na Base -->
+        <!-- Painel de Saldos -->
         <div class="card">
-            <h2>Saldos da sua Carteira</h2>
+            <h2>💼 Saldos da sua Carteira</h2>
             <div id="balances" class="balances">
                 <p class="dim" style="font-size:0.9rem;">Conecte sua carteira para ver os saldos.</p>
             </div>
@@ -181,7 +181,7 @@
     <!-- Container de Notificações Toasts -->
     <div id="toasts" class="toast-container"></div>
 
-    <!-- ✅ CORRIGIDO: app.js carregado no final (após todos os elementos do DOM) -->
-    <script src="app.js" type="text/javascript"></script>
+    <!-- ✅ app.js carregado no final (após todos os elementos do DOM) -->
+    <script src="app.js"></script>
 </body>
 </html>
