@@ -1,39 +1,30 @@
 // ============================================================
-// APP.JS — Carteira BRN P2P (v5 — WRAP AUTOMÁTICO)
-// Compatível com o EscrowFactory JÁ DEPLOYADO (sem alterar .sol)
+// APP.JS — Carteira BRN P2P (v6 — CONEXÃO + FILTROS MELHORADOS)
 //
-// Novidades v5:
-//  [WRAP] POL aparece como opção em Vender e Executar
-//  [WRAP] App faz wrap/unwrap automático nos bastidores
-//  [WRAP] Usuário confirma UMA vez; app encadeia as txs
-//
-// Correções v4 mantidas:
-//  [FIX 1] decString aceita bytes32
-//  [FIX 2] decAddressArray tolerante a offsets variados
-//  [FIX 3] decBoolSeguro valida se é realmente bool
-//  [FIX 4] verificarTokens marca definitivo após N tentativas
-//  [FIX 5] renderMural usa fallback em o.indice
-//  [FIX 6] enviarTx estima gasLimit com margem
-//  [FIX 7] accountsChanged reconecta sem reload
-//  [FIX 8] rawCall só interrompe fallback em revert REAL
-//  [FIX 9] aviso visível quando há ordens com erro
-//  [FIX 10] lerOrdem valida layout de obterDados()
+// Novidades v6:
+//  [NET]  Conexão Polygon robusta (switch + add + validação dupla)
+//  [FILT] Busca por texto (endereço, símbolo, valor)
+//  [FILT] Ordenação (recentes, maior valor, melhor preço, executáveis)
+//  [FILT] Filtro "só com saldo" e "só executáveis"
+//  [FILT] Contador por filtro e botão de reset
+//  [FILT] Filtros separados: mural (compra) e vender (venda)
+//  [WRAP] POL ↔ WPOL automático em Vender e Executar
 // ============================================================
 
-// --- CONFIGURACOES (POLYGON MAINNET) ---
 const ESCROW_FACTORY_ADDRESS = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
-
-// WPOL (Wrapped POL) — usado para wrap/unwrap automático
+const POLYGON_CHAIN_ID_HEX = "0x89";
 const WPOL_ADDRESS = "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270";
-const SEL_WPOL = {
-  deposit:  "d0e30db0", // deposit() payable
-  withdraw: "2e1a7d4d", // withdraw(uint256)
+const SEL_WPOL = { deposit: "d0e30db0", withdraw: "2e1a7d4d" };
+
+const POLYGON_NETWORK_PARAMS = {
+  chainId: POLYGON_CHAIN_ID_HEX,
+  chainName: "Polygon Mainnet",
+  nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
+  rpcUrls: ["https://polygon-rpc.com"],
+  blockExplorerUrls: ["https://polygonscan.com"],
 };
 
-// ------------------------------------------------------------
-// LISTA DE TOKENS SUPORTADOS
-// ------------------------------------------------------------
 const NATIVO = { symbol: "POL", name: "POL (nativo)", decimals: 18, native: true };
 const TOKENS = [
   { symbol: "BRN",    name: "BRN",                 address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18, symbols: null },
@@ -44,7 +35,6 @@ const TOKENS = [
   { symbol: "WETH",   name: "Wrapped Ether",       address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18, symbols: ["WETH"] },
 ];
 
-// RPCs públicos com fallback
 const RPCS = [
   "https://polygon-bor-rpc.publicnode.com",
   "https://polygon.drpc.org",
@@ -56,7 +46,6 @@ const MAX_ORDENS = 1000;
 const CONCORRENCIA = 5;
 const MAX_TENTATIVAS_TOKEN = 3;
 
-// --- SELECTORS ---
 const SEL_FACTORY = {
   criarOrdem:   "ceff4da6",
   ordensDe:     "0dc80995",
@@ -86,7 +75,6 @@ const SEL_ERC20 = {
   symbol:    "95d89b41",
 };
 
-// --- ESTADO GLOBAL ---
 let walletProvider = null;
 let signer = null;
 let userAddress = null;
@@ -98,9 +86,20 @@ let carregando = false;
 let emTransacao = false;
 let listenersRegistrados = false;
 const saldos = {};
-const filtro = { status: "todas", oferece: "", pede: "", minhas: false };
 const ABAS = ["mural", "vender", "enviar", "ajuda"];
 const IDS_ACOES = ["btnCreate", "btnApprove", "btnSend", "btnMaxOf", "btnMaxSend"];
+
+// [FILT] Filtros separados
+const filtro = {
+  status: "todas",
+  oferece: "",
+  pede: "",
+  minhas: false,
+  busca: "",
+  ordenar: "recentes",
+  soExecutaveis: false,
+  soComSaldo: false,
+};
 
 // ============================================================
 // UTILITÁRIOS
@@ -215,7 +214,6 @@ function splitWords(hex) {
 function decAddressArray(hex) {
   const w = splitWords(hex);
   if (w.length < 1) throw new Error("Lista de ordens inválida.");
-
   if (w.length >= 2) {
     try {
       const off = Number(decUint(w[0]));
@@ -232,7 +230,6 @@ function decAddressArray(hex) {
       }
     } catch (e) { /* tenta caso 2 */ }
   }
-
   const arr = [];
   for (const word of w) {
     try { arr.push(decAddress(word)); } catch (e) { break; }
@@ -244,7 +241,6 @@ function decAddressArray(hex) {
 
 function decString(hex) {
   const w = splitWords(hex);
-
   if (w.length >= 2 && Number(decUint(w[0])) === 32) {
     const len = Number(decUint(w[1]));
     if (Number.isSafeInteger(len) && len <= 64 && 2 + Math.ceil(len / 32) <= w.length) {
@@ -252,20 +248,17 @@ function decString(hex) {
       try { return ethers.utils.toUtf8String("0x" + dados); } catch (e) { /* cai no caso 2 */ }
     }
   }
-
   if (w.length === 1) {
     const raw = w[0].replace(/(00)+$/, "");
     if (!raw) return "";
     try { return ethers.utils.toUtf8String("0x" + raw); } catch (e) { /* falha */ }
   }
-
   if (w.length >= 1) {
     const raw = w[0].replace(/(00)+$/, "");
     if (raw) {
       try { return ethers.utils.toUtf8String("0x" + raw); } catch (e) { /* falha */ }
     }
   }
-
   throw new Error("String inválida.");
 }
 
@@ -294,14 +287,28 @@ async function mapLimit(items, limit, fn) {
 }
 
 // ============================================================
-// TOKENS SUPORTADOS
+// TOKENS
 // ============================================================
 function normalizarTokens() {
   for (const t of TOKENS) {
     try { t.address = ethers.utils.getAddress(t.address.toLowerCase()); }
-    catch (e) { t.ok = false; t.definitivo = true; t.aviso = "endereço inválido na lista"; }
+    catch (e) { t.ok = false; t.definitivo = true; t.aviso = "endereço inválido"; }
     if (t.ok === undefined) t.ok = false;
     if (t.tentativas === undefined) t.tentativas = 0;
   }
 }
-function tokenPorEndereco(addr) { return TOKENS.find(t => mesmo
+function tokenPorEndereco(addr) { return TOKENS.find(t => mesmoEndereco(t.address, addr)) || null; }
+function tokenOk(addr) { const t = tokenPorEndereco(addr); return t && t.ok ? t : null; }
+function tokensOk() { return TOKENS.filter(t => t.ok); }
+function ativoPorId(id) { return id === "POL" ? NATIVO : tokenOk(id); }
+
+async function verificarTokens() {
+  await mapLimit(TOKENS, CONCORRENCIA, async (t) => {
+    if (t.ok || t.definitivo) return;
+    t.tentativas++;
+    try {
+      const rd = await rawCall(t.address, "0x" + SEL_ERC20.decimals);
+      const dec = Number(decUint(splitWords(rd)[0]));
+      let simbolo = null;
+      try { simbolo = decString(await rawCall(t.address, "0x" + SEL_ERC20.symbol)); }
+      catch (e) { /* símbol
