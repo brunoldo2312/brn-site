@@ -6,30 +6,28 @@
     <title>BRN Exchange — Mural de Ordens P2P</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="style-melhorias.css">
+    <!-- Dependência essencial: Ethers.js v5 -->
+    <script src="https://cloudflare.com" type="text/javascript"></script>
 </head>
 <body>
     <div class="container">
-        <!-- HEADER COM AS REDES SEPARADAS E SINCRONIZADAS -->
+        <!-- Cabeçalho com Status de Rede -->
         <header>
             <div class="header-left">
                 <h1>🔷 BRN Exchange</h1>
                 <p>Ecossistema Descentralizado de Troca de Ativos P2P</p>
             </div>
-            <div class="net-status-container" style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px;">
-                <!-- Status Isolado da Rede Polygon -->
-                <div class="net-status" id="statusPolygon">
-                    <div id="netDot" class="dot load"></div>
-                    <span id="netText">Polygon: Conectando…</span>
-                </div>
-                <!-- Status Isolado da API de Monitoramento Bitcoin -->
-                <div class="net-status" id="statusBitcoin">
-                    <div id="btcDot" class="dot btc-status load"></div>
-                    <span id="btcText">Bitcoin API: Sincronizando…</span>
-                </div>
+            <div class="net-status">
+                <div id="netDot" class="dot off"></div>
+                <span id="netText">Polygon: Desconectado ❌</span>
+            </div>
+            <div class="net-status">
+                <div id="btcDot" class="dot btc-status off"></div>
+                <span id="btcText">Bitcoin API: Desconectado ❌</span>
             </div>
         </header>
 
-        <!-- BARRA DA CARTEIRA METAMASK -->
+        <!-- Barra de Carteira -->
         <div class="wallet-bar">
             <button id="btnConnect" class="btn btn-primary">🔌 Conectar Carteira</button>
             <div id="walletInfo" class="wallet-info" style="display: none;">
@@ -38,31 +36,19 @@
             </div>
         </div>
 
-        <!-- ABAS DE NAVEGAÇÃO DO SISTEMA -->
+        <!-- Abas de Navegação -->
         <div class="tabs">
-            <button class="active" data-tab="mural">📋 Mural de Ordens</button>
-            <button data-tab="vender">💰 Criar Ordem</button>
+            <button data-tab="mural" class="active">📋 Mural de Ordens</button>
+            <button data-tab="criar">💰 Criar Ordem</button>
             <button data-tab="enviar">📤 Enviar Tokens</button>
-            <button data-tab="wpol">🔄 POL ↔ WPOL</button>
-            <button data-tab="btc">₿ Consultar BTC</button>
-            <button data-tab="ajuda">❓ Ajuda & Contratos</button>
+            <button data-tab="swap">🔄 POL ↔ WPOL</button>
+            <button data-tab="bitcoin">₿ Consultar BTC</button>
         </div>
 
-        <!-- CONTAINER PARA TOASTS/NOTIFICAÇÕES -->
-        <div id="toasts" class="toast-container"></div>
-
-        <!-- PAINEL 1: MURAL DE ORDENS -->
+        <!-- Painel 1: Mural de Ordens -->
         <div id="panel-mural" class="panel">
             <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
-                    <h2>📋 Livro de Ofertas Ativas</h2>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <span id="counter" class="dim">0 ordens</span>
-                        <button id="btnRefresh" class="btn btn-sm btn-primary">🔄 Atualizar</button>
-                    </div>
-                </div>
-
-                <!-- FILTROS DO MURAL -->
+                <h2>📋 Livro de Ofertas Ativas</h2>
                 <div class="filters">
                     <select id="filtroStatus">
                         <option value="ativas">🔵 Ativas</option>
@@ -70,60 +56,52 @@
                         <option value="executadas">✅ Executadas</option>
                         <option value="canceladas">❌ Canceladas</option>
                     </select>
-                    <select id="filtroOferece">
-                        <option value="">Todos os ativos oferecidos</option>
-                        <option value="0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210">Oferece: BRN</option>
-                        <option value="0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359">Oferece: USDC</option>
-                    </select>
-                    <select id="filtroPede">
-                        <option value="">Todos os ativos desejados</option>
-                        <option value="0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359">Pede: USDC</option>
-                        <option value="0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210">Pede: BRN</option>
-                    </select>
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem;">
+                    <select id="filtroOferece"><option value="">Oferece: Todos</option></select>
+                    <select id="filtroPede"><option value="">Pede: Todos</option></select>
+                    <label style="display:flex; align-items:center; gap:8px; min-width:140px;">
                         <input type="checkbox" id="filtroMinhas"> Minhas ordens
                     </label>
                     <button id="btnLimparFiltros" class="btn btn-sm">✕ Limpar</button>
                 </div>
-                <small id="muralInfo" class="dim" style="display: block; margin-bottom: 12px;"></small>
-
-                <!-- LISTA DINÂMICA DE ORDENS -->
+                <div style="display:flex; justify-content:space-between; margin-bottom:12px; font-size:0.85rem;">
+                    <span id="counter" class="dim">0 ordens</span>
+                    <span id="muralInfo" class="dim">Exibindo 0 ordens</span>
+                    <a href="#" id="btnRefresh" style="display:flex; align-items:center; gap:4px;">🔄 Atualizar</a>
+                </div>
                 <div id="orders" class="orders">
-                    <div class="empty">Carregando ordens da blockchain…</div>
+                    <div class="state"><p>Conecte sua carteira para carregar as ordens…</p></div>
                 </div>
             </div>
         </div>
 
-        <!-- PAINEL 2: CRIAR ORDEM -->
-        <div id="panel-vender" class="panel" hidden>
+        <!-- Painel 2: Criar Ordem -->
+        <div id="panel-criar" class="panel" hidden>
             <div class="card">
                 <h2>➕ Criar Nova Ordem de Troca</h2>
                 <div class="input-group">
                     <label>Você OFERECE:</label>
-                    <select id="selOferece"></select>
-                </div>
-                <div class="input-group">
                     <div class="row">
-                        <input type="text" id="valorOferece" placeholder="Quantidade oferecida (Ex: 100.0)">
-                        <button id="btnMaxOf" class="btn">MAX</button>
+                        <input type="text" id="valorOferece" placeholder="0.0">
+                        <select id="selOferece"></select>
                     </div>
-                    <small id="saldoOfereceHint" data-hint="saldo:selOferece" class="dim">Saldo: —</small>
-                </div>
-                <div class="input-group" style="margin-top: 20px;">
-                    <label>Você DESEJA receber em troca:</label>
-                    <select id="selDeseja"></select>
+                    <div style="display:flex; justify-content:space-between; margin-top:4px;">
+                        <small id="hintOferece" data-hint="saldo:selOferece" class="dim">Saldo: —</small>
+                        <button id="btnMaxOf" class="btn btn-sm">MAX</button>
+                    </div>
                 </div>
                 <div class="input-group">
-                    <input type="text" id="valorDeseja" placeholder="Quantidade desejada (Ex: 50.0)">
+                    <label>Você DESEJA receber em troca:</label>
+                    <div class="row">
+                        <input type="text" id="valorDeseja" placeholder="0.0">
+                        <select id="selDeseja"></select>
+                    </div>
                 </div>
-                <button id="btnCriarOrdem" class="btn btn-success" style="margin-top: 12px;">📋 Criar Ordem no Escrow</button>
-                <div class="order-note warn" style="margin-top: 16px;">
-                    ⚠️ Ao submeter, seus fundos ficam protegidos sob custódia do contrato inteligente até a execução por terceiros ou seu cancelamento manual.
-                </div>
+                <button id="btnCriarOrdem" class="btn btn-success" style="width:100%; margin-top:12px;">📋 Criar Ordem no Escrow</button>
+                <p class="source-note">⚠ Ao submeter, seus fundos ficam protegidos sob custódia do contrato inteligente até a execução por terceiros ou seu cancelamento manual.</p>
             </div>
         </div>
 
-        <!-- PAINEL 3: ENVIAR TOKENS DIRETO -->
+        <!-- Painel 3: Enviar Ativos -->
         <div id="panel-enviar" class="panel" hidden>
             <div class="card">
                 <h2>📤 Enviar Ativos Direto (Transferência)</h2>
@@ -139,51 +117,68 @@
                     <label>Valor:</label>
                     <div class="row">
                         <input type="text" id="valorEnvio" placeholder="0.0">
-                        <button id="btnMaxSend" class="btn">MAX</button>
+                        <button id="btnMaxSend" class="btn btn-sm">MAX</button>
                     </div>
-                    <small data-hint="saldo:selTokenEnvio" class="dim">Saldo: —</small>
+                    <small id="hintEnvio" data-hint="saldo:selTokenEnvio" class="dim" style="display:block; margin-top:4px;">Saldo: —</small>
                 </div>
-                <button id="btnEnviar" class="btn btn-primary" style="width: 100%; margin-top: 12px;">📤 Enviar Fundos</button>
+                <button id="btnEnviar" class="btn btn-primary" style="width:100%; margin-top:12px;">📤 Enviar Fundos</button>
             </div>
         </div>
 
-        <!-- PAINEL 4: CONVERSÃO DE WRAPPERS POL -->
-        <div id="panel-wpol" class="panel" hidden>
-            <div class="card">
-                <h2>🔄 Swap Nativo 1:1 (POL ↔ WPOL)</h2>
-                <div class="trade-forms">
-                    <div class="form-card">
-                        <h3>🔁 Embrulhar (POL → WPOL)</h3>
-                        <p class="dim" style="font-size: 0.85rem; margin-bottom: 8px;">Saldo: <span data-hint="saldoPOL:">0.00</span> POL</p>
-                        <div class="row" style="margin-bottom: 8px;">
-                            <input type="text" id="valorWPOL" placeholder="Quantidade POL">
-                            <button id="btnMaxWrap" class="btn">MAX</button>
+        <!-- Painel 4: POL ↔ WPOL -->
+        <div id="panel-swap" class="panel" hidden>
+            <div class="trade-forms">
+                <div class="form-card">
+                    <h3>🔁 Embrulhar (POL → WPOL)</h3>
+                    <div class="form-group">
+                        <small class="dim">Saldo: <span data-hint="saldoPOL">0.00</span> POL</small>
+                        <div class="row" style="margin-top:6px;">
+                            <input type="text" id="valorWPOL" placeholder="0.0">
+                            <button id="btnMaxWrap" class="btn btn-sm">MAX</button>
                         </div>
-                        <button id="btnConverterWPOL" class="btn btn-success">Converter para WPOL</button>
                     </div>
-                    <div class="form-card">
-                        <h3>🔁 Desembrulhar (WPOL → POL)</h3>
-                        <p class="dim" style="font-size: 0.85rem; margin-bottom: 8px;">Saldo: <span data-hint="saldoWPOL:">0.00</span> WPOL</p>
-                        <div class="row" style="margin-bottom: 8px;">
-                            <input type="text" id="valorPOL" placeholder="Quantidade WPOL">
-                            <button id="btnMaxUnwrap" class="btn">MAX</button>
+                    <button id="btnConverterWPOL" class="btn btn-success">Converter para WPOL</button>
+                </div>
+                <div class="form-card">
+                    <h3>🔁 Desembrulhar (WPOL → POL)</h3>
+                    <div class="form-group">
+                        <small class="dim">Saldo: <span data-hint="saldoWPOL">0.00</span> WPOL</small>
+                        <div class="row" style="margin-top:6px;">
+                            <input type="text" id="valorPOL" placeholder="0.0">
+                            <button id="btnMaxUnwrap" class="btn btn-sm">MAX</button>
                         </div>
-                        <button id="btnConverterPOL" class="btn btn-danger">Converter para POL</button>
                     </div>
+                    <button id="btnConverterPOL" class="btn btn-danger">Converter para POL</button>
                 </div>
             </div>
         </div>
 
-        <!-- PAINEL 5: EXPLORADOR BITCOIN -->
-        <div id="panel-btc" class="panel" hidden>
+        <!-- Painel 5: Bitcoin -->
+        <div id="panel-bitcoin" class="panel" hidden>
             <div class="card">
                 <h2>🟠 Consultar Saldo em Conta Bitcoin</h2>
-                <p class="dim" style="font-size: 0.85rem; margin-bottom: 12px;">Consulte saldos reais e atualizados de carteiras na rede nativa do Bitcoin.</p>
-                <div class="input-group">
-                    <input type="text" id="btcAddressInput" placeholder="Digite o endereço BTC (Ex: bc1...)">
+                <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">Consulte saldos reais e atualizados de carteiras na rede nativa do Bitcoin.</p>
+                <div class="row">
+                    <input type="text" id="btcAddressInput" placeholder="Digite o endereço Bitcoin...">
+                    <button id="btnConsultarBTC" class="btn btn-btc">₿ Buscar Dados</button>
                 </div>
-                <button id="btnConsultarBtc" class="btn btn-btc" style="width: 100%; margin-top: 4px;">₿ Buscar Dados Públicos</button>
-                <div class="btc-balance-result" id="btcResultCard">
+                <div id="btcResult" class="btc-balance-result">
                     <div class="t">Saldo Líquido Confirmado</div>
-                    <div class="v" id="btcBalanceValue">— BTC</div>
+                    <div id="btcBalanceValue" class="v">— BTC</div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Exibição Visual de Saldos na Base -->
+        <div class="card">
+            <h2>Saldos da sua Carteira</h2>
+            <div id="balances" class="balances">
+                <p class="dim" style="font-size:0.9rem;">Conecte sua carteira para ver os saldos.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Container de Notificações Toasts -->
+    <div id="toasts" class="toast-container"></div>
+</body>
+</html>
