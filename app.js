@@ -1,13 +1,7 @@
 // ============================================================
-// APP.JS — Carteira BRN P2P (v7 — ANTI-TRAVAMENTO)
-//
-// Correções v7:
-//  [NET]  Timeout curto (3s) + fallback agressivo entre RPCs
-//  [NET]  Watchdog global de 15s — nunca trava a UI
-//  [NET]  Logs detalhados no console (F12) para debug
-//  [RENDER] Renderização progressiva (não espera todas as ordens)
-//  [RENDER] Timeout individual por ordem (2s)
-//  [NET]  Detecta CORS/rede e mostra mensagem clara
+// APP.JS - Carteira BRN P2P (v9 - LIMPO)
+// Sem emojis em comentarios. Sem caracteres Unicode especiais.
+// Salve como UTF-8 sem BOM.
 // ============================================================
 
 const ESCROW_FACTORY_ADDRESS = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
@@ -25,28 +19,45 @@ const POLYGON_NETWORK_PARAMS = {
 };
 
 const NATIVO = { symbol: "POL", name: "POL (nativo)", decimals: 18, native: true };
+
+// Lista de tokens verificados na Polygon (enderecos conferidos)
 const TOKENS = [
-  { symbol: "BRN",    name: "BRN",                 address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18, symbols: null },
-  { symbol: "USDC.e", name: "USD Coin (PoS)",      address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6,  symbols: ["USDC"] },
-  { symbol: "USDC",   name: "USD Coin (nativo)",   address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6,  symbols: ["USDC"] },
-  { symbol: "USDT",   name: "Tether USD",          address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6,  symbols: ["USDT"] },
-  { symbol: "WPOL",   name: "Wrapped POL",         address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18, symbols: ["WPOL", "WMATIC"] },
-  { symbol: "WETH",   name: "Wrapped Ether",       address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18, symbols: ["WETH"] },
+  { symbol: "BRN",    name: "BRN",                address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18, symbols: null },
+  { symbol: "USDC.e", name: "USD Coin (PoS)",     address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6,  symbols: ["USDC"] },
+  { symbol: "USDC",   name: "USD Coin (nativo)",  address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6,  symbols: ["USDC"] },
+  { symbol: "USDT",   name: "Tether USD",         address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6,  symbols: ["USDT"] },
+  { symbol: "DAI",    name: "Dai Stablecoin",     address: "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063", decimals: 18, symbols: ["DAI"] },
+  { symbol: "WPOL",   name: "Wrapped POL",        address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18, symbols: ["WPOL", "WMATIC"] },
+  { symbol: "WETH",   name: "Wrapped Ether",      address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18, symbols: ["WETH"] },
+  { symbol: "WBTC",   name: "Wrapped BTC",        address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8,  symbols: ["WBTC"] },
+  { symbol: "LINK",   name: "ChainLink Token",    address: "0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39", decimals: 18, symbols: ["LINK"] },
+  { symbol: "AAVE",   name: "Aave",               address: "0xD6DF932A45C0f255f85145f286eA0b292B21C90B", decimals: 18, symbols: ["AAVE"] },
+  { symbol: "UNI",    name: "Uniswap",            address: "0xb33EaAd8d922B1083446DC23f610c2567fB5180f", decimals: 18, symbols: ["UNI"] },
+  { symbol: "SUSHI",  name: "SushiToken",         address: "0x0b3F868E0BE5597D5DB7fEB59E1CADBb0fdDa50a", decimals: 18, symbols: ["SUSHI"] },
+  { symbol: "CRV",    name: "Curve DAO Token",    address: "0x172370d5Cd63279eFa6d502DAB29171933a610AF", decimals: 18, symbols: ["CRV"] },
+  { symbol: "MKR",    name: "Maker",              address: "0x6f7C932e7684666C9fd1d44527765433e01fF61d", decimals: 18, symbols: ["MKR"] },
+  { symbol: "COMP",   name: "Compound",           address: "0x8505b9d2254A7Ae468c0E9dd10Ccea3A837aef5c", decimals: 18, symbols: ["COMP"] },
+  { symbol: "SNX",    name: "Synthetix",          address: "0x50B728D8D964fd00C2d0AAD81718b71311feF68a", decimals: 18, symbols: ["SNX"] },
+  { symbol: "GRT",    name: "The Graph",          address: "0x5fe2B58c013d7601147DcdD68C143A77499f5531", decimals: 18, symbols: ["GRT"] },
+  { symbol: "1INCH",  name: "1inch",              address: "0x9c2C5fd7b07E95EE044DDeba0E97a665F142394f", decimals: 18, symbols: ["1INCH"] },
+  { symbol: "SAND",   name: "The Sandbox",        address: "0xBbba073C31bF03b8ACf7c28EF0738DeCF3695683", decimals: 18, symbols: ["SAND"] },
+  { symbol: "MANA",   name: "Decentraland",       address: "0xA1c57f48F0Deb89f569dFbE6E2B7f46D33606fD4", decimals: 18, symbols: ["MANA"] },
+  { symbol: "SHIB",   name: "Shiba Inu (PoS)",    address: "0x6f8a06447Ff6FcF75d803135a7de15CE88C1d4ec", decimals: 18, symbols: ["SHIB"] },
 ];
 
-// [NET] Timeout curto — RPC público que não responde em 3s é descartado
 const RPCS = [
   "https://polygon-rpc.com",
   "https://polygon-bor-rpc.publicnode.com",
   "https://polygon.drpc.org",
+  "https://polygon.llamarpc.com",
   "https://rpc.ankr.com/polygon",
 ];
-const RPC_TIMEOUT_MS = 3000;      // [NET] era 8000
-const WATCHDOG_MS = 15000;        // [NET] watchdog global
+const RPC_TIMEOUT_MS = 2500;
+const WATCHDOG_MS = 12000;
 const MAX_ORDENS = 1000;
-const CONCORRENCIA = 5;
-const MAX_TENTATIVAS_TOKEN = 3;
-const DEBUG = true;               // [NET] logs no console
+const CONCORRENCIA = 6;
+const MAX_TENTATIVAS_TOKEN = 2;
+const DEBUG = true;
 
 const SEL_FACTORY = {
   criarOrdem:   "ceff4da6",
@@ -102,12 +113,13 @@ const filtro = {
   soComSaldo: false,
 };
 
-// [NET] log helper
-function log(...args) { if (DEBUG) console.log("[BRN]", ...args); }
-function logErr(...args) { if (DEBUG) console.error("[BRN]", ...args); }
+function log()    { if (DEBUG) console.log.apply(console, ["[BRN]"].concat([].slice.call(arguments))); }
+function logOk()  { if (DEBUG) console.log.apply(console, ["[BRN OK]"].concat([].slice.call(arguments))); }
+function logErr() { if (DEBUG) console.error.apply(console, ["[BRN ERR]"].concat([].slice.call(arguments))); }
+function logWarn(){ if (DEBUG) console.warn.apply(console, ["[BRN WARN]"].concat([].slice.call(arguments))); }
 
 // ============================================================
-// UTILITÁRIOS
+// UTILITARIOS
 // ============================================================
 function $(id) { return document.getElementById(id); }
 function el(tag, cls, text) {
@@ -117,17 +129,19 @@ function el(tag, cls, text) {
   return e;
 }
 function isAddr(a) { return typeof a === "string" && /^0x[0-9a-fA-F]{40}$/.test(a); }
-function short(a) { return isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—"; }
-function shortHash(h) { return typeof h === "string" && /^0x[0-9a-fA-F]{64}$/.test(h) ? h.slice(0, 10) + "…" + h.slice(-6) : "—"; }
+function short(a) { return isAddr(a) ? a.slice(0, 6) + "..." + a.slice(-4) : "-"; }
+function shortHash(h) { return typeof h === "string" && /^0x[0-9a-fA-F]{64}$/.test(h) ? h.slice(0, 10) + "..." + h.slice(-6) : "-"; }
 function mesmoEndereco(a, b) { return !!a && !!b && a.toLowerCase() === b.toLowerCase(); }
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 
 function esc(s) {
-  return String(s).replace(/[&<>"']/g, c =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  return String(s).replace(/[&<>"']/g, function(c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
 }
 
-function fmt(value, decimals, maxFrac = 6) {
+function fmt(value, decimals, maxFrac) {
+  if (maxFrac === undefined) maxFrac = 6;
   try {
     const s = ethers.utils.formatUnits(value.toString(), decimals);
     const partes = s.split(".");
@@ -145,20 +159,25 @@ function paraInput(valor, decimals) {
   return s.replace(/\.0+$/, "");
 }
 
-function toast(msg, type = "info", ms = 5000, href = null) {
+function toast(msg, type, ms, href) {
+  if (type === undefined) type = "info";
+  if (ms === undefined) ms = 5000;
   const box = $("toasts");
   if (!box) return;
   const t = el("div", "toast " + type, msg);
   if (href && /^https:\/\/polygonscan\.com\/tx\/0x[0-9a-fA-F]{64}$/.test(href)) {
-    const a = el("a", "", " · ver no PolygonScan ↗");
+    const a = el("a", "", " - ver no PolygonScan");
     a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer";
     t.appendChild(a);
   }
   box.appendChild(t);
-  setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, ms);
+  setTimeout(function() {
+    t.style.opacity = "0";
+    setTimeout(function() { t.remove(); }, 300);
+  }, ms);
 }
-function toastTx(msg, hash, type = "info") {
-  toast(msg + " " + shortHash(hash), type, 12000, "https://polygonscan.com/tx/" + hash);
+function toastTx(msg, hash, type) {
+  toast(msg + " " + shortHash(hash), type || "info", 12000, "https://polygonscan.com/tx/" + hash);
 }
 
 function setNet(state, text) {
@@ -169,16 +188,18 @@ function setNet(state, text) {
 
 function erroLegivel(e) {
   if (!e) return "Erro desconhecido.";
-  if (e.code === 4001 || e.code === "ACTION_REJECTED") return "Transação recusada na carteira.";
+  if (e.code === 4001 || e.code === "ACTION_REJECTED") return "Transacao recusada na carteira.";
   const m = e.reason || (e.data && e.data.message) || (e.error && e.error.message) || e.message || String(e);
   return String(m).slice(0, 220);
 }
 
-// --- helpers ABI ---
+// ============================================================
+// HELPERS ABI
+// ============================================================
 const HEX_WORD = /^[0-9a-fA-F]{64}$/;
 function pad32(hexNo0x) { return hexNo0x.padStart(64, "0"); }
 function encAddress(addr) {
-  if (!isAddr(addr)) throw new Error("Endereço inválido.");
+  if (!isAddr(addr)) throw new Error("Endereco invalido.");
   return pad32(addr.toLowerCase().slice(2));
 }
 function encUint(n) {
@@ -187,16 +208,16 @@ function encUint(n) {
   return pad32(v.toString(16));
 }
 function decUint(word) {
-  if (!HEX_WORD.test(word || "")) throw new Error("Resposta ABI inválida.");
+  if (!HEX_WORD.test(word || "")) throw new Error("Resposta ABI invalida.");
   return BigInt("0x" + word);
 }
 function decAddress(word) {
-  if (!HEX_WORD.test(word || "") || !/^0{24}/.test(word)) throw new Error("Endereço inválido na resposta.");
+  if (!HEX_WORD.test(word || "") || !/^0{24}/.test(word)) throw new Error("Endereco invalido na resposta.");
   return ethers.utils.getAddress("0x" + word.slice(24).toLowerCase());
 }
 function decBool(word) {
   const v = decUint(word);
-  if (v > 1n) throw new Error("Booleano inválido na resposta.");
+  if (v > 1n) throw new Error("Booleano invalido na resposta.");
   return v === 1n;
 }
 function decBoolSeguro(word) {
@@ -207,96 +228,5 @@ function decBoolSeguro(word) {
   } catch (e) { return null; }
 }
 function splitWords(hex) {
-  if (typeof hex !== "string" || !/^0x([0-9a-fA-F]{2})*$/.test(hex)) throw new Error("Resposta inválida do RPC.");
-  const b = hex.slice(2);
-  if (b.length % 64 !== 0) throw new Error("Resposta com tamanho inesperado.");
-  const out = [];
-  for (let i = 0; i < b.length; i += 64) out.push(b.slice(i, i + 64));
-  return out;
-}
-function decAddressArray(hex) {
-  const w = splitWords(hex);
-  if (w.length < 1) throw new Error("Lista de ordens inválida.");
-  if (w.length >= 2) {
-    try {
-      const off = Number(decUint(w[0]));
-      if (off % 32 === 0) {
-        const start = off / 32;
-        if (start < w.length) {
-          const len = Number(decUint(w[start]));
-          if (Number.isSafeInteger(len) && len <= MAX_ORDENS && start + 1 + len <= w.length) {
-            const arr = [];
-            for (let i = 0; i < len; i++) arr.push(decAddress(w[start + 1 + i]));
-            return arr;
-          }
-        }
-      }
-    } catch (e) { /* tenta caso 2 */ }
-  }
-  const arr = [];
-  for (const word of w) {
-    try { arr.push(decAddress(word)); } catch (e) { break; }
-  }
-  if (arr.length === 0) throw new Error("Lista de ordens inválida.");
-  if (arr.length > MAX_ORDENS) throw new Error("Lista de ordens grande demais.");
-  return arr;
-}
-function decString(hex) {
-  const w = splitWords(hex);
-  if (w.length >= 2 && Number(decUint(w[0])) === 32) {
-    const len = Number(decUint(w[1]));
-    if (Number.isSafeInteger(len) && len <= 64 && 2 + Math.ceil(len / 32) <= w.length) {
-      const dados = w.slice(2).join("").slice(0, len * 2);
-      try { return ethers.utils.toUtf8String("0x" + dados); } catch (e) { /* cai no caso 2 */ }
-    }
-  }
-  if (w.length === 1) {
-    const raw = w[0].replace(/(00)+$/, "");
-    if (!raw) return "";
-    try { return ethers.utils.toUtf8String("0x" + raw); } catch (e) { /* falha */ }
-  }
-  if (w.length >= 1) {
-    const raw = w[0].replace(/(00)+$/, "");
-    if (raw) {
-      try { return ethers.utils.toUtf8String("0x" + raw); } catch (e) { /* falha */ }
-    }
-  }
-  throw new Error("String inválida.");
-}
-function lerValor(txt, dec, nome) {
-  const s = String(txt || "").trim().replace(",", ".");
-  if (!/^\d+(\.\d+)?$/.test(s)) throw new Error("Informe um valor válido de " + nome + ".");
-  let v;
-  try { v = BigInt(ethers.utils.parseUnits(s, dec).toString()); }
-  catch (e) { throw new Error(nome + ": no máximo " + dec + " casas decimais."); }
-  if (v <= 0n) throw new Error("O valor de " + nome + " deve ser maior que zero.");
-  return v;
-}
-async function mapLimit(items, limit, fn) {
-  const out = new Array(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (true) {
-      const i = next++;
-      if (i >= items.length) return;
-      out[i] = await fn(items[i], i);
-    }
-  });
-  await Promise.all(workers);
-  return out;
-}
-
-// ============================================================
-// TOKENS
-// ============================================================
-function normalizarTokens() {
-  for (const t of TOKENS) {
-    try { t.address = ethers.utils.getAddress(t.address.toLowerCase()); }
-    catch (e) { t.ok = false; t.definitivo = true; t.aviso = "endereço inválido"; }
-    if (t.ok === undefined) t.ok = false;
-    if (t.tentativas === undefined) t.tentativas = 0;
-  }
-}
-function tokenPorEndereco(addr) { return TOKENS.find(t => mesmoEndereco(t.address, addr)) || null; }
-function tokenOk(addr) { const t = tokenPorEndereco(addr); return t && t.ok ? t : null; }
-function tokensOk() { return TOKENS
+  if (typeof hex !== "string" || !/^0x([0-9a-fA-F]{2})*$/.test(hex)) throw new Error("Resposta invalida do RPC.");
+  const b = hex
