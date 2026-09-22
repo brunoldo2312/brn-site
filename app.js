@@ -1,8 +1,9 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 3.2 (Precisa)
+// APP.JS — BRN Exchange | Versão 3.3 (Com Compartilhar Endereço)
 // ✅ Fallback de token desconhecido
 // ✅ Debug no console para ordens
 // ✅ RPCs reordenados (publicnode primeiro)
+// ✅ Compartilhar endereço BRN (nativo + WhatsApp + Telegram)
 // ============================================================
 
 // ================= CONFIGURAÇÕES =================
@@ -20,7 +21,7 @@ const TOKENS = [
   { symbol: "WETH",    name: "Wrapped Ether",       address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18 },
 ];
 
-// ✅ RPCs reordenados — publicnode primeiro (mais estável)
+// RPCs reordenados — publicnode primeiro (mais estável)
 const RPC_LIST = [
   "https://polygon.publicnode.com",
   "https://polygon-rpc.com",
@@ -232,7 +233,6 @@ async function consultarSaldoBTC() {
 }
 
 // ================= TOKENS =================
-// ✅ CORREÇÃO: fallback para token desconhecido (nunca retorna undefined)
 function tokenPorEndereco(endereco) {
   if (!endereco) return null;
   const t = TOKENS.find(t => mesmoAddr(t.address, endereco));
@@ -375,9 +375,95 @@ function desconectarCarteira() {
   saldos = { POL: 0n };
   $("btnConnect").style.display = "block";
   $("walletInfo").style.display = "none";
+  fecharPainelCompartilhar();
   renderizarSaldos();
   aplicarFiltros();
   toast("Desconectado", "info");
+}
+
+// ================= COMPARTILHAR ENDEREÇO =================
+function abrirPainelCompartilhar() {
+  if (!userAddress) {
+    toast("Conecte a carteira primeiro.", "warn");
+    return;
+  }
+
+  const painel = $("sharePanel");
+  const addrFull = $("shareAddrFull");
+  if (!painel || !addrFull) return;
+
+  // Preenche endereço
+  addrFull.textContent = userAddress;
+
+  // Preenche links de compartilhamento
+  const texto = `Meu endereço BRN na Polygon: ${userAddress}`;
+  const textoEnc = encodeURIComponent(texto);
+
+  const wa = $("btnShareWhatsApp");
+  if (wa) wa.href = `https://wa.me/?text=${textoEnc}`;
+
+  const tg = $("btnShareTelegram");
+  if (tg) tg.href = `https://t.me/share/url?url=${encodeURIComponent(userAddress)}&text=${encodeURIComponent("Meu endereço BRN:")}`;
+
+  const ps = $("btnSharePolygonScan");
+  if (ps) ps.href = `https://polygonscan.com/address/${userAddress}`;
+
+  // Compartilhamento nativo (Web Share API) se disponível
+  const nat = $("btnShareNative");
+  if (nat) {
+    if (navigator.share) {
+      // Remover listener antigo antes de adicionar (evita duplicação)
+      const novo = nat.cloneNode(true);
+      nat.parentNode.replaceChild(novo, nat);
+      novo.addEventListener("click", async (e) => {
+        e.preventDefault();
+        try {
+          await navigator.share({
+            title: "Meu Endereço BRN",
+            text: texto
+          });
+        } catch (err) {
+          if (err.name !== "AbortError") {
+            console.warn("Erro ao compartilhar:", err.message);
+          }
+        }
+      });
+      novo.style.display = "";
+    } else {
+      nat.style.display = "none"; // Navegador sem suporte
+    }
+  }
+
+  painel.style.display = "block";
+  painel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function fecharPainelCompartilhar() {
+  const painel = $("sharePanel");
+  if (painel) painel.style.display = "none";
+}
+
+async function copiarEndereco() {
+  if (!userAddress) return;
+  try {
+    await navigator.clipboard.writeText(userAddress);
+    toast("✅ Endereço copiado!", "ok");
+  } catch {
+    // Fallback para navegadores antigos
+    const ta = document.createElement("textarea");
+    ta.value = userAddress;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      toast("✅ Endereço copiado!", "ok");
+    } catch {
+      toast("❌ Não foi possível copiar. Selecione manualmente.", "err");
+    }
+    ta.remove();
+  }
 }
 
 // ================= MURAL DE ORDENS =================
@@ -419,7 +505,7 @@ async function carregarOrdens() {
         });
         const p = splitResposta(dadosRes.slice(2));
 
-        // 🔍 DEBUG no console — mostra o que o contrato retornou
+        // Debug no console — mostra o que o contrato retornou
         console.log(`[Ordem #${i}]`, {
           endereco,
           campos: p.length,
@@ -491,7 +577,6 @@ function renderizarOrdens(lista) {
     const minha = userAddress && mesmoAddr(o.criador, userAddress);
     const ativa = !o.executado && !o.cancelado;
 
-    // ✅ CORREÇÃO: sempre mostra quantidade — nunca "?"
     const oferTexto = ofer ? `${fmt(o.valorOferecido, ofer.decimals)} ${ofer.symbol}` : "Token desconhecido";
     const pedTexto = ped ? `${fmt(o.valorDesejado, ped.decimals)} ${ped.symbol}` : "Token desconhecido";
     const oferAviso = ofer?.desconhecido ? ` <small class="dim">(token não cadastrado)</small>` : "";
@@ -872,6 +957,11 @@ async function init() {
   bind("btnConverterWPOL", wrapPOL);
   bind("btnConverterPOL", unwrapWPOL);
   bind("btnConsultarBTC", consultarSaldoBTC);
+
+  // ✅ Botões de compartilhar endereço
+  bind("btnShareAddr", abrirPainelCompartilhar);
+  bind("btnCloseShare", fecharPainelCompartilhar);
+  bind("btnCopyAddr", copiarEndereco);
 
   const btcInput = $("btcAddressInput");
   if (btcInput) btcInput.addEventListener("keydown", e => { if (e.key === "Enter") consultarSaldoBTC(); });
