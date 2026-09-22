@@ -266,7 +266,8 @@
                 <div class="filters">
                     <div>
                         <label style="font-size:0.8rem; color:var(--text-muted);">Status</label>
-                        <select id="fStatus">
+                        <!-- ✅ ID corrigido -->
+                        <select id="filtroStatus">
                             <option value="todas">Todas</option>
                             <option value="ativas">Ativas</option>
                             <option value="executaveis">Executáveis</option>
@@ -276,15 +277,18 @@
                     </div>
                     <div>
                         <label style="font-size:0.8rem; color:var(--text-muted);">Oferece</label>
-                        <select id="fOferece"></select>
+                        <!-- ✅ ID corrigido -->
+                        <select id="filtroOferece"></select>
                     </div>
                     <div>
                         <label style="font-size:0.8rem; color:var(--text-muted);">Pede</label>
-                        <select id="fPede"></select>
+                        <!-- ✅ ID corrigido -->
+                        <select id="filtroPede"></select>
                     </div>
                     <div style="display:flex; align-items:flex-end; padding-bottom:6px;">
                         <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem;">
-                            <input type="checkbox" id="fMinhas"> Minhas ordens
+                            <!-- ✅ ID corrigido -->
+                            <input type="checkbox" id="filtroMinhas"> Minhas ordens
                         </label>
                     </div>
                     <div style="display:flex; align-items:flex-end; padding-bottom:6px;">
@@ -313,30 +317,35 @@
 
                 <div class="input-group">
                     <label>Você oferece</label>
-                    <select id="vTokOf"></select>
-                    <small class="dim" data-hint="saldo:vTokOf">—</small>
+                    <!-- ✅ ID corrigido -->
+                    <select id="selOferece"></select>
+                    <small class="dim" data-hint="saldo:selOferece">—</small>
                 </div>
                 <div class="input-group">
                     <label>Quantidade</label>
                     <div class="row">
-                        <input type="text" id="vValOf" placeholder="0.0">
+                        <!-- ✅ ID corrigido -->
+                        <input type="text" id="valorOferece" placeholder="0.0">
                         <button class="btn-sm" id="btnMaxOf">MAX</button>
                     </div>
                 </div>
 
                 <div class="input-group">
                     <label>Você pede</label>
-                    <select id="vTokDe"></select>
-                    <small class="dim" data-hint="saldo:vTokDe">—</small>
+                    <!-- ✅ ID corrigido -->
+                    <select id="selDeseja"></select>
+                    <small class="dim" data-hint="saldo:selDeseja">—</small>
                 </div>
                 <div class="input-group">
                     <label>Quantidade</label>
-                    <input type="text" id="vValDe" placeholder="0.0">
+                    <!-- ✅ ID corrigido -->
+                    <input type="text" id="valorDeseja" placeholder="0.0">
                 </div>
 
                 <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
                     <button class="btn" id="btnApprove">✅ Aprovar</button>
-                    <button class="btn btn-primary" id="btnCreate">📋 Criar Ordem</button>
+                    <!-- ✅ ID corrigido -->
+                    <button class="btn btn-primary" id="btnCriarOrdem">📋 Criar Ordem</button>
                 </div>
             </div>
         </div>
@@ -351,21 +360,25 @@
 
                 <div class="input-group">
                     <label>Ativo</label>
-                    <select id="sendToken"></select>
-                    <small class="dim" data-hint="saldo:sendToken">—</small>
+                    <!-- ✅ ID corrigido -->
+                    <select id="selTokenEnvio"></select>
+                    <small class="dim" data-hint="saldo:selTokenEnvio">—</small>
                 </div>
                 <div class="input-group">
                     <label>Endereço de destino (0x…)</label>
-                    <input type="text" id="sendDestino" placeholder="0x…">
+                    <!-- ✅ ID corrigido -->
+                    <input type="text" id="destinoEnvio" placeholder="0x…">
                 </div>
                 <div class="input-group">
                     <label>Quantidade</label>
                     <div class="row">
-                        <input type="text" id="sendValor" placeholder="0.0">
+                        <!-- ✅ ID corrigido -->
+                        <input type="text" id="valorEnvio" placeholder="0.0">
                         <button class="btn-sm" id="btnMaxSend">MAX</button>
                     </div>
                 </div>
-                <button class="btn btn-primary" id="btnSend">📤 Enviar</button>
+                <!-- ✅ ID corrigido -->
+                <button class="btn btn-primary" id="btnEnviar">📤 Enviar</button>
             </div>
         </div>
 
@@ -390,21 +403,25 @@
                 <div class="input-group">
                     <label>Quantidade de POL</label>
                     <div class="row">
-                        <input type="text" id="wpolValor" placeholder="0.0">
+                        <!-- ✅ ID corrigido -->
+                        <input type="text" id="valorWPOL" placeholder="0.0">
                         <button class="btn-sm" id="btnMaxWrap">MAX</button>
                     </div>
                 </div>
-                <button class="btn-primary" id="btnWrapPol">🔄 Converter para WPOL</button>
+                <!-- ✅ ID corrigido -->
+                <button class="btn-primary" id="btnConverterWPOL">🔄 Converter para WPOL</button>
 
                 <h3 style="margin:24px 0 10px; font-size:0.95rem;">Converter WPOL → POL</h3>
                 <div class="input-group">
                     <label>Quantidade de WPOL</label>
                     <div class="row">
-                        <input type="text" id="unwrapValor" placeholder="0.0">
+                        <!-- ✅ ID corrigido -->
+                        <input type="text" id="valorPOL" placeholder="0.0">
                         <button class="btn-sm" id="btnMaxUnwrap">MAX</button>
                     </div>
                 </div>
-                <button class="btn-primary" id="btnUnwrapPol">🔄 Converter para POL</button>
+                <!-- ✅ ID corrigido -->
+                <button class="btn-primary" id="btnConverterPOL">🔄 Converter para POL</button>
             </div>
         </div>
 
@@ -416,7 +433,6 @@
                 <h2>🟠 Bitcoin — BTC & WBTC</h2>
                 <p class="dim" style="margin-bottom:20px;">Consulte saldos na rede Bitcoin e saiba mais sobre WBTC</p>
 
-                <!-- CONSULTA SALDO BTC NATIVO -->
                 <h3 style="font-size:0.95rem; margin-bottom:12px;">📥 Consultar Saldo de Endereço BTC</h3>
                 <div class="input-group">
                     <label>Endereço Bitcoin</label>
@@ -425,7 +441,7 @@
                         <button class="btn-btc" id="btnCheckBtc">🔍 Consultar</button>
                     </div>
                 </div>
-                
+
                 <div class="btc-balance-result" id="btcBalanceResult">
                     <div class="t">Saldo do endereço:</div>
                     <div class="v" id="btcBalanceValue">— BTC</div>
@@ -435,7 +451,6 @@
 
                 <div style="margin-top:24px; padding-top:20px; border-top: 1px solid var(--border);"></div>
 
-                <!-- SALDO WBTC NA POLYGON -->
                 <h3 style="font-size:0.95rem; margin-bottom:12px;">💰 Seu Saldo WBTC (Polygon)</h3>
                 <div class="balances">
                     <div class="bal">
@@ -449,7 +464,6 @@
 
                 <div style="margin-top:24px; padding-top:20px; border-top: 1px solid var(--border);"></div>
 
-                <!-- INFORMAÇÕES SOBRE A PONTE -->
                 <h3 style="font-size:0.95rem; margin-bottom:12px;">🔄 Ponte BTC ↔ WBTC</h3>
                 <div class="btc-address">
                     <h4 style="font-size:0.9rem; margin-bottom:10px; color:var(--btc);">Como funciona:</h4>
@@ -460,7 +474,7 @@
                         <li>Você não precisa "importar" seu endereço BTC — basta informá-lo ao sacar</li>
                     </ul>
                 </div>
-                
+
                 <div style="margin-top:16px;">
                     <h4 style="font-size:0.9rem; margin-bottom:8px;">⚠️ Importante:</h4>
                     <ul>
@@ -478,10 +492,10 @@
         <div data-panel="ajuda" class="panel" hidden>
             <div class="card">
                 <h2>❓ Ajuda & Informações</h2>
-                
+
                 <h3 style="margin-top:16px;">🔗 Contratos</h3>
                 <ul id="listaTokens"></ul>
-                
+
                 <h3 style="margin-top:20px;">📌 Como usar</h3>
                 <ul>
                     <li>Instale a MetaMask no seu navegador</li>
@@ -509,11 +523,12 @@
     <script>
 // ============================================================
 // APP.JS — Carteira BRN P2P + CONSULTA BTC
+// Versão: 5.1 | Data: 2026-09-22
 // ============================================================
 
 const ESCROW_FACTORY_ADDRESS = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
-const APP_VERSION = "v5.0";
+const APP_VERSION = "v5.1";
 
 const NATIVO = { symbol: "POL", name: "POL (nativo)", decimals: 18, native: true };
 const TOKENS = [
@@ -533,7 +548,7 @@ const RPCS = [
   "https://polygon-rpc.com",
   "https://rpc.ankr.com/polygon",
 ];
-const RPC_TIMEOUT_MS = 8000;
+const RPC_TIMEOUT_MS = 4000;
 const MAX_ORDENS = 1000;
 const CONCORRENCIA = 8;
 
@@ -581,37 +596,25 @@ const filtro = { status: "todas", oferece: "", pede: "", minhas: false };
 const ABAS = ["mural", "vender", "enviar", "converter", "btc", "ajuda"];
 
 // ============================================================
-// 🟠 CONSULTA DE SALDO BTC — API PÚBLICA
+// CONSULTA DE SALDO BTC — API PÚBLICA
 // ============================================================
-
-/**
- * Valida formato de endereço Bitcoin
- * Suporta: bc1q… (SegWit), 1… (Legacy), 3… (P2SH)
- */
 function validarEnderecoBTC(endereco) {
   if (!endereco || typeof endereco !== "string") return false;
   const s = endereco.trim();
-  // bc1q… (Bech32 / SegWit)
   if (/^bc1q[a-z0-9]{38,59}$/i.test(s)) return true;
-  // 1… (Legacy)
   if (/^1[a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(s)) return true;
-  // 3… (P2SH)
   if (/^3[a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(s)) return true;
   return false;
 }
 
-/**
- * Consulta saldo de endereço BTC via API pública do mempool.space
- * NÃO precisa de chave — apenas leitura pública
- */
 async function consultarSaldoBTC(enderecoBTC) {
   const resultadoEl = document.getElementById("btcBalanceResult");
   const valorEl = document.getElementById("btcBalanceValue");
   const detalhesEl = document.getElementById("btcBalanceDetails");
-  
+
   if (!validarEnderecoBTC(enderecoBTC)) {
     toast("Endereço BTC inválido. Verifique o formato.", "warn");
-    resultadoEl.classList.remove("show");
+    if (resultadoEl) resultadoEl.classList.remove("show");
     return null;
   }
 
@@ -628,8 +631,6 @@ async function consultarSaldoBTC(enderecoBTC) {
     }
 
     const dados = await resposta.json();
-    
-    // Converter satoshis para BTC (1 BTC = 100.000.000 sats)
     const saldoTotal = dados.chain_stats.funded_txo_sum / 100000000;
     const saldoGasto = dados.chain_stats.spent_txo_sum / 100000000;
     const saldoConfirmado = saldoTotal - saldoGasto;
@@ -637,29 +638,23 @@ async function consultarSaldoBTC(enderecoBTC) {
     const saldoPendenteSaida = dados.mempool_stats.spent_txo_sum / 100000000;
     const saldoPendente = saldoPendenteEntrada - saldoPendenteSaida;
 
-    // Exibir resultado
-    valorEl.textContent = `${saldoConfirmado.toFixed(8)} BTC`;
-    detalhesEl.textContent = saldoPendente > 0 
-      ? `Pendente: +${saldoPendente.toFixed(8)} BTC` 
-      : saldoPendente < 0
-        ? `Pendente: ${saldoPendente.toFixed(8)} BTC`
-        : "Nenhuma transação pendente";
-    
-    resultadoEl.classList.add("show");
+    if (valorEl) valorEl.textContent = `${saldoConfirmado.toFixed(8)} BTC`;
+    if (detalhesEl) {
+      detalhesEl.textContent = saldoPendente > 0
+        ? `Pendente: +${saldoPendente.toFixed(8)} BTC`
+        : saldoPendente < 0
+          ? `Pendente: ${saldoPendente.toFixed(8)} BTC`
+          : "Nenhuma transação pendente";
+    }
+    if (resultadoEl) resultadoEl.classList.add("show");
     toast("✅ Saldo consultado com sucesso!", "ok");
-    
-    return { 
-      endereco: enderecoBTC,
-      saldoConfirmado,
-      saldoPendente,
-      totalRecebido: saldoTotal,
-      totalGasto: saldoGasto
-    };
+
+    return { endereco: enderecoBTC, saldoConfirmado, saldoPendente, totalRecebido: saldoTotal, totalGasto: saldoGasto };
   } catch (erro) {
     console.error("Erro na consulta BTC:", erro);
-    valorEl.textContent = "Erro na consulta";
-    detalhesEl.textContent = erro.message || "Tente novamente mais tarde";
-    resultadoEl.classList.add("show");
+    if (valorEl) valorEl.textContent = "Erro na consulta";
+    if (detalhesEl) detalhesEl.textContent = erro.message || "Tente novamente mais tarde";
+    if (resultadoEl) resultadoEl.classList.add("show");
     toast("Falha ao consultar: " + erro.message, "err");
     return null;
   }
@@ -673,6 +668,13 @@ function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
   if (text !== undefined) e.textContent = text;
+  return e;
+}
+// ✅ NOVO: variante que interpreta HTML
+function elHTML(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
   return e;
 }
 function isAddr(a) { return typeof a === "string" && /^0x[0-9a-fA-F]{40}$/.test(a); }
@@ -836,4 +838,899 @@ async function withTimeout(promise, ms) {
   finally { clearTimeout(t); }
 }
 
-async function getProvider
+async function getProvider(rpcUrl) {
+  if (providersOk[rpcUrl]) return providersOk[rpcUrl];
+  const p = new ethers.providers.JsonRpcProvider(rpcUrl);
+  p._url = rpcUrl;
+  try {
+    await withTimeout(p.getBlockNumber(), RPC_TIMEOUT_MS);
+    providersOk[rpcUrl] = p;
+  } catch (e) {
+    console.warn("RPC indisponível:", rpcUrl, e.message);
+    throw e;
+  }
+  return p;
+}
+
+async function getAnyProvider() {
+  // ✅ CORRIGIDO: apenas 1 rodada por RPC
+  for (let tentativa = 0; tentativa < RPCS.length; tentativa++) {
+    rpcIdx = (rpcIdx + 1) % RPCS.length;
+    const url = RPCS[rpcIdx];
+    try {
+      currentRpc = await getProvider(url);
+      return currentRpc;
+    } catch (e) { continue; }
+  }
+  throw new Error("Nenhum RPC da rede Polygon está acessível no momento. Tente novamente mais tarde.");
+}
+
+async function rpcCall(method, params = []) {
+  const p = currentRpc || (await getAnyProvider());
+  for (let i = 0; i < 3; i++) {
+    try {
+      return await withTimeout(p.send(method, params), RPC_TIMEOUT_MS);
+    } catch (e) {
+      currentRpc = null;
+      if (i === 2) throw e;
+      await sleep(500);
+    }
+  }
+}
+
+// ============================================================
+// LEITURA DE CONTRATOS
+// ============================================================
+async function lerEndereco(addrContract, selector, ...args) {
+  const p = currentRpc || (await getAnyProvider());
+  const data = "0x" + selector + args.map(a => encAddress(a)).join("");
+  for (let i = 0; i < 3; i++) {
+    try {
+      const r = await withTimeout(p.call({ to: addrContract, data }), RPC_TIMEOUT_MS);
+      return decAddress(r);
+    } catch (e) {
+      currentRpc = null;
+      if (i === 2) throw e;
+      await sleep(300);
+    }
+  }
+}
+
+async function lerUint(addrContract, selector, ...args) {
+  const p = currentRpc || (await getAnyProvider());
+  const data = "0x" + selector + args.map(a => encUint(a)).join("");
+  for (let i = 0; i < 3; i++) {
+    try {
+      const r = await withTimeout(p.call({ to: addrContract, data }), RPC_TIMEOUT_MS);
+      return decUint(r);
+    } catch (e) {
+      currentRpc = null;
+      if (i === 2) throw e;
+      await sleep(300);
+    }
+  }
+}
+
+async function lerBool(addrContract, selector, ...args) {
+  const p = currentRpc || (await getAnyProvider());
+  const data = "0x" + selector + args.map(a => encUint(a)).join("");
+  for (let i = 0; i < 3; i++) {
+    try {
+      const r = await withTimeout(p.call({ to: addrContract, data }), RPC_TIMEOUT_MS);
+      return decBool(r);
+    } catch (e) {
+      currentRpc = null;
+      if (i === 2) throw e;
+      await sleep(300);
+    }
+  }
+}
+
+async function lerEnderecoArray(addrContract, selector, ...args) {
+  const p = currentRpc || (await getAnyProvider());
+  const data = "0x" + selector + args.map(a => encAddress(a)).join("");
+  for (let i = 0; i < 3; i++) {
+    try {
+      const r = await withTimeout(p.call({ to: addrContract, data }), RPC_TIMEOUT_MS);
+      return decAddressArray(r);
+    } catch (e) {
+      currentRpc = null;
+      if (i === 2) throw e;
+      await sleep(300);
+    }
+  }
+}
+
+// ============================================================
+// CARTEIRA / CONEXÃO
+// ============================================================
+async function conectarCarteira() {
+  if (!window.ethereum) {
+    toast("MetaMask não detectada. Instale a extensão MetaMask no navegador.", "err", 8000);
+    return false;
+  }
+  try {
+    walletProvider = new ethers.providers.Web3Provider(window.ethereum);
+    await walletProvider.send("eth_requestAccounts", []);
+    signer = walletProvider.getSigner();
+    userAddress = await signer.getAddress();
+
+    const rede = await walletProvider.getNetwork();
+    if (rede.chainId !== POLYGON_CHAIN_ID) {
+      toast("Mudando para a rede Polygon…", "info");
+      try {
+        await walletProvider.send("wallet_switchEthereumChain", [{ chainId: "0x" + POLYGON_CHAIN_ID.toString(16) }]);
+      } catch (e) {
+        if (e.code === 4902) {
+          await walletProvider.send("wallet_addEthereumChain", [{
+            chainId: "0x" + POLYGON_CHAIN_ID.toString(16),
+            chainName: "Polygon Mainnet",
+            rpcUrls: ["https://polygon-rpc.com"],
+            nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
+            blockExplorerUrls: ["https://polygonscan.com"]
+          }]);
+        } else throw e;
+      }
+    }
+
+    // ✅ CORRIGIDO: null-safe
+    const btn = $("btnConnect");
+    const info = $("walletInfo");
+    const addrEl = $("addr");
+    if (btn) btn.style.display = "none";
+    if (info) info.style.display = "flex";
+    if (addrEl) addrEl.textContent = short(userAddress);
+    setNet("ok", "Conectado");
+
+    // ✅ CORRIGIDO: falhas de saldos/ordens NÃO desconectam
+    try { await atualizarSaldos(); } catch (e) { console.warn("Saldos:", e); }
+    try { await carregarOrdens(); } catch (e) { console.warn("Ordens:", e); }
+
+    registrarEventosCarteira();
+    return true;
+  } catch (e) {
+    toast("Falha ao conectar: " + erroLegivel(e), "err");
+    try { desconectarCarteira(); } catch (_) {}
+    return false;
+  }
+}
+
+function desconectarCarteira() {
+  walletProvider = null;
+  signer = null;
+  userAddress = null;
+
+  // ✅ CORRIGIDO: null-safe
+  const btn = $("btnConnect");
+  const info = $("walletInfo");
+  if (btn) btn.style.display = "inline-block";
+  if (info) info.style.display = "none";
+
+  Object.keys(saldos).forEach(k => delete saldos[k]);
+  atualizarExibicaoSaldos();
+}
+
+function registrarEventosCarteira() {
+  if (listenersRegistrados) return;
+  listenersRegistrados = true;
+  if (window.ethereum) {
+    window.ethereum.on("accountsChanged", contas => {
+      if (contas.length === 0) desconectarCarteira();
+      else window.location.reload();
+    });
+    window.ethereum.on("chainChanged", () => window.location.reload());
+  }
+}
+
+// ============================================================
+// SALDOS
+// ============================================================
+async function atualizarSaldos() {
+  if (!userAddress) return;
+  try {
+    const p = await getAnyProvider();
+
+    const saldoPOL = await p.getBalance(userAddress);
+    saldos["POL"] = saldoPOL;
+
+    // ✅ CORRIGIDO: leitura em paralelo
+    await Promise.all(tokensOk().map(async t => {
+      try {
+        const data = "0x" + SEL_ERC20.balanceOf + encAddress(userAddress);
+        const r = await withTimeout(p.call({ to: t.address, data }), RPC_TIMEOUT_MS);
+        saldos[t.symbol] = decUint(r);
+      } catch (e) {
+        saldos[t.symbol] = 0n;
+      }
+    }));
+
+    atualizarExibicaoSaldos();
+    atualizarHintsSaldo();
+  } catch (e) {
+    console.warn("Erro ao atualizar saldos:", e);
+  }
+}
+
+function atualizarExibicaoSaldos() {
+  const container = $("balances");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (!userAddress) {
+    container.innerHTML = '<p class="dim">Conecte sua carteira para ver seus saldos.</p>';
+    return;
+  }
+
+  // ✅ CORRIGIDO: usa elHTML para interpretar as tags <span>
+  container.appendChild(elHTML("div", "bal", `
+    <span class="t"><span class="chip pol">P</span> POL</span>
+    <span class="v">${fmt(saldos["POL"] || 0n, 18)}</span>
+  `));
+
+  for (const t of tokensOk()) {
+    if (t.symbol === "WPOL") continue;
+    container.appendChild(elHTML("div", "bal", `
+      <span class="t"><span class="chip ${chipClasse(t.symbol)}">${t.symbol.slice(0,1)}</span> ${t.symbol}</span>
+      <span class="v">${fmt(saldos[t.symbol] || 0n, t.decimals)}</span>
+    `));
+  }
+}
+
+// Atualiza os <small data-hint="saldo:..."> em todos os lugares
+function atualizarHintsSaldo() {
+  document.querySelectorAll("[data-hint^='saldo:']").forEach(elx => {
+    const key = elx.dataset.hint.slice("saldo:".length);
+    if (key === "saldoPOL") {
+      elx.textContent = fmt(saldos["POL"] || 0n, 18) + " POL";
+      return;
+    }
+    if (key === "saldoWPOL") {
+      elx.textContent = fmt(saldos["WPOL"] || 0n, 18) + " WPOL";
+      return;
+    }
+    const t = tokenOk(key);
+    if (t) elx.textContent = fmt(saldos[t.symbol] || 0n, t.decimals) + " " + t.symbol;
+  });
+
+  const polBal = $("polBalance");
+  const wpolBal = $("wpolBalance");
+  if (polBal) polBal.textContent = fmt(saldos["POL"] || 0n, 18) + " POL";
+  if (wpolBal) wpolBal.textContent = fmt(saldos["WPOL"] || 0n, 18) + " WPOL";
+}
+
+// ============================================================
+// ORDENS
+// ============================================================
+async function totalOrdens() {
+  try {
+    return await lerUint(ESCROW_FACTORY_ADDRESS, SEL_FACTORY.totalOrdens);
+  } catch (e) {
+    console.warn("Não foi possível ler total de ordens:", e);
+    return 0n;
+  }
+}
+
+async function carregarOrdens() {
+  if (carregando) return;
+  carregando = true;
+
+  const ordersEl = $("orders");
+  const counterEl = $("counter");
+
+  if (ordersEl) {
+    ordersEl.innerHTML = '<div class="state"><div class="spinner"></div><p>Consultando blockchain…</p></div>';
+  }
+
+  try {
+    const total = await totalOrdens();
+    if (counterEl) counterEl.textContent = `Ordens ativas: ${total.toString()}`;
+
+    if (total === 0n) {
+      ordersCache = [];
+      exibirOrdensFiltradas();
+      return;
+    }
+
+    const listaEscrow = await lerEnderecoArray(ESCROW_FACTORY_ADDRESS, SEL_FACTORY.todasOrdens);
+    if (ordersEl) {
+      ordersEl.innerHTML = `<div class="state"><div class="spinner"></div><p>Carregando ${listaEscrow.length} ordens…</p></div>`;
+    }
+
+    ordersCache = [];
+    for (const escrowAddr of listaEscrow) {
+      try {
+        const [criador, tokenOferecido, valorOferecido, tokenDesejado, valorDesejado, executado, cancelado] = await Promise.all([
+          lerEndereco(escrowAddr, SEL_ESCROW.criador),
+          lerEndereco(escrowAddr, SEL_ESCROW.tokenOferecido),
+          lerUint(escrowAddr, SEL_ESCROW.valorOferecido),
+          lerEndereco(escrowAddr, SEL_ESCROW.tokenDesejado),
+          lerUint(escrowAddr, SEL_ESCROW.valorDesejado),
+          lerBool(escrowAddr, SEL_ESCROW.executado),
+          lerBool(escrowAddr, SEL_ESCROW.cancelado),
+        ]);
+
+        ordersCache.push({
+          id: escrowAddr,
+          criador,
+          tokenOferecido,
+          valorOferecido,
+          tokenDesejado,
+          valorDesejado,
+          executado,
+          cancelado,
+        });
+      } catch (e) { console.warn("Erro ao ler ordem", escrowAddr, e); }
+    }
+
+    exibirOrdensFiltradas();
+  } catch (e) {
+    if (ordersEl) {
+      ordersEl.innerHTML = `<p class="warn">Erro ao carregar ordens: ${esc(erroLegivel(e))}</p>`;
+    }
+  } finally {
+    carregando = false;
+  }
+}
+
+function exibirOrdensFiltradas() {
+  const container = $("orders");
+  if (!container) return;
+
+  let filtradas = ordersCache.filter(o => {
+    if (o.executado || o.cancelado) {
+      // se filtro.status for "executadas"/"canceladas", mostrar mesmo assim
+      if (filtro.status === "executadas" && o.executado) return true;
+      if (filtro.status === "canceladas" && o.cancelado) return true;
+      return false;
+    }
+    if (filtro.minhas && !mesmoEndereco(o.criador, userAddress)) return false;
+    if (filtro.oferece && !mesmoEndereco(o.tokenOferecido, filtro.oferece)) return false;
+    if (filtro.pede && !mesmoEndereco(o.tokenDesejado, filtro.pede)) return false;
+    return true;
+  });
+
+  const infoEl = $("muralInfo");
+  if (infoEl) infoEl.textContent = `${filtradas.length} ordem(ns) exibida(s)`;
+
+  if (filtradas.length === 0) {
+    container.innerHTML = '<p class="dim">Nenhuma ordem encontrada com os filtros atuais.</p>';
+    return;
+  }
+
+  container.innerHTML = "";
+  for (const ordem of filtradas) {
+    const tokOferece = tokenOk(ordem.tokenOferecido);
+    const tokDeseja = tokenOk(ordem.tokenDesejado);
+    const ehMeu = mesmoEndereco(ordem.criador, userAddress);
+
+    let statusTag = "active";
+    let statusLbl = "Ativa";
+    if (ordem.executado) { statusTag = "done"; statusLbl = "Executada"; }
+    else if (ordem.cancelado) { statusTag = "cancelled"; statusLbl = "Cancelada"; }
+
+    const card = el("div", "order " + statusTag);
+    card.innerHTML = `
+      <div class="order-head">
+        <span class="order-id">${short(ordem.id)}</span>
+        <span class="tag ${statusTag}">${statusLbl}</span>
+      </div>
+      <div class="swap">
+        <div class="swap-side">
+          <div class="swap-lbl">Oferece</div>
+          <div class="swap-amt">
+            <span class="chip ${tokOferece ? chipClasse(tokOferece.symbol) : "other"}">${tokOferece ? tokOferece.symbol.slice(0,1) : "?"}</span>
+            ${tokOferece ? fmt(ordem.valorOferecido, tokOferece.decimals) : ordem.valorOferecido.toString()}
+            ${tokOferece ? tokOferece.symbol : ""}
+          </div>
+        </div>
+        <div class="swap-icon">→</div>
+        <div class="swap-side">
+          <div class="swap-lbl">Pede</div>
+          <div class="swap-amt">
+            <span class="chip ${tokDeseja ? chipClasse(tokDeseja.symbol) : "other"}">${tokDeseja ? tokDeseja.symbol.slice(0,1) : "?"}</span>
+            ${tokDeseja ? fmt(ordem.valorDesejado, tokDeseja.decimals) : ordem.valorDesejado.toString()}
+            ${tokDeseja ? tokDeseja.symbol : ""}
+          </div>
+        </div>
+      </div>
+      <div class="order-foot">
+        <div class="order-meta">Criador: ${short(ordem.criador)} ${ehMeu ? "(você)" : ""}</div>
+        <div class="order-actions">
+          ${!ordem.executado && !ordem.cancelado ? (
+            ehMeu
+              ? `<button class="btn btn-sm btn-err" data-cancel="${ordem.id}">Cancelar</button>`
+              : `<button class="btn btn-sm btn-primary" data-exec="${ordem.id}">Executar</button>`
+          ) : ""}
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  }
+
+  container.querySelectorAll("[data-exec]").forEach(btn => {
+    btn.addEventListener("click", () => executarOrdem(btn.dataset.exec));
+  });
+  container.querySelectorAll("[data-cancel]").forEach(btn => {
+    btn.addEventListener("click", () => cancelarOrdem(btn.dataset.cancel));
+  });
+}
+
+// ============================================================
+// TRANSAÇÕES
+// ============================================================
+async function executarOrdem(escrowAddr) {
+  if (!userAddress) { toast("Conecte sua carteira primeiro.", "warn"); return; }
+  if (emTransacao) { toast("Aguarde a transação anterior…", "warn"); return; }
+
+  try {
+    emTransacao = true;
+    toast("Verificando ordem…", "info");
+
+    const [tokenDesejado, valorDesejado, tokenOferecido, valorOferecido, criador] = await Promise.all([
+      lerEndereco(escrowAddr, SEL_ESCROW.tokenDesejado),
+      lerUint(escrowAddr, SEL_ESCROW.valorDesejado),
+      lerEndereco(escrowAddr, SEL_ESCROW.tokenOferecido),
+      lerUint(escrowAddr, SEL_ESCROW.valorOferecido),
+      lerEndereco(escrowAddr, SEL_ESCROW.criador),
+    ]);
+
+    if (mesmoEndereco(criador, userAddress)) {
+      throw new Error("Você não pode executar sua própria ordem.");
+    }
+
+    const tok = tokenOk(tokenDesejado);
+    if (!tok) throw new Error("Token desconhecido.");
+
+    if (!tok.native) {
+      const allowance = await lerUint(tokenDesejado, SEL_ERC20.allowance, userAddress, escrowAddr);
+      if (allowance < valorDesejado) {
+        toast("Aprovando tokens…", "info");
+        const tx = await signer.sendTransaction({
+          to: tokenDesejado,
+          data: "0x" + SEL_ERC20.approve + encAddress(escrowAddr) + encUint(valorDesejado)
+        });
+        toastTx("Aprovação enviada:", tx.hash, "info");
+        await tx.wait();
+        toast("✅ Aprovado!", "ok");
+      }
+    }
+
+    toast("Enviando transação…", "info");
+    const tx = await signer.sendTransaction({
+      to: escrowAddr,
+      data: "0x" + SEL_ESCROW.executar,
+      value: tok.native ? valorDesejado : 0n
+    });
+    toastTx("✅ Transação enviada:", tx.hash, "ok");
+    await tx.wait();
+    toast("✅ Troca executada com sucesso!", "ok", 8000);
+
+    await atualizarSaldos();
+    await carregarOrdens();
+  } catch (e) {
+    toast("Erro: " + erroLegivel(e), "err", 8000);
+  } finally {
+    emTransacao = false;
+  }
+}
+
+async function cancelarOrdem(escrowAddr) {
+  if (!userAddress) { toast("Conecte sua carteira primeiro.", "warn"); return; }
+  if (emTransacao) { toast("Aguarde a transação anterior…", "warn"); return; }
+
+  try {
+    emTransacao = true;
+    toast("Cancelando ordem…", "info");
+
+    const criador = await lerEndereco(escrowAddr, SEL_ESCROW.criador);
+    if (!mesmoEndereco(criador, userAddress)) {
+      throw new Error("Apenas o criador pode cancelar esta ordem.");
+    }
+
+    const tx = await signer.sendTransaction({
+      to: escrowAddr,
+      data: "0x" + SEL_ESCROW.cancelar
+    });
+    toastTx("Cancelamento enviado:", tx.hash, "info");
+    await tx.wait();
+    toast("✅ Ordem cancelada!", "ok");
+
+    await carregarOrdens();
+  } catch (e) {
+    toast("Erro: " + erroLegivel(e), "err", 8000);
+  } finally {
+    emTransacao = false;
+  }
+}
+
+async function criarOrdem() {
+  if (!userAddress) { toast("Conecte sua carteira primeiro.", "warn"); return; }
+  if (emTransacao) { toast("Aguarde a transação anterior…", "warn"); return; }
+
+  try {
+    emTransacao = true;
+
+    const tokOfereceSel = $("selOferece");
+    const tokDesejaSel = $("selDeseja");
+    const inValorOferece = $("valorOferece");
+    const inValorDeseja = $("valorDeseja");
+
+    if (!tokOfereceSel || !tokDesejaSel || !inValorOferece || !inValorDeseja) {
+      throw new Error("Campos do formulário não encontrados no HTML.");
+    }
+
+    const endOferece = tokOfereceSel.value;
+    const endDeseja = tokDesejaSel.value;
+
+    if (!endOferece || !endDeseja) throw new Error("Selecione os tokens.");
+    if (mesmoEndereco(endOferece, endDeseja)) throw new Error("Os tokens devem ser diferentes.");
+
+    const tokOferece = endOferece === "POL" ? NATIVO : tokenOk(endOferece);
+    const tokDeseja = endDeseja === "POL" ? NATIVO : tokenOk(endDeseja);
+    if (!tokOferece || !tokDeseja) throw new Error("Token inválido.");
+
+    const valOferece = lerValor(inValorOferece.value, tokOferece.decimals, "valor oferecido");
+    const valDeseja = lerValor(inValorDeseja.value, tokDeseja.decimals, "valor desejado");
+
+    if (!tokOferece.native) {
+      const allowance = await lerUint(tokOferece.address, SEL_ERC20.allowance, userAddress, ESCROW_FACTORY_ADDRESS);
+      if (allowance < valOferece) {
+        toast("Aprovando tokens para venda…", "info");
+        const tx = await signer.sendTransaction({
+          to: tokOferece.address,
+          data: "0x" + SEL_ERC20.approve + encAddress(ESCROW_FACTORY_ADDRESS) + encUint(valOferece)
+        });
+        toastTx("Aprovação enviada:", tx.hash, "info");
+        await tx.wait();
+        toast("✅ Aprovado!", "ok");
+      }
+    }
+
+    toast("Criando ordem…", "info");
+    const tx = await signer.sendTransaction({
+      to: ESCROW_FACTORY_ADDRESS,
+      data: "0x" + SEL_FACTORY.criarOrdem +
+        encAddress(endOferece === "POL" ? "0x0000000000000000000000000000000000000000" : endOferece) +
+        encUint(valOferece) +
+        encAddress(endDeseja === "POL" ? "0x0000000000000000000000000000000000000000" : endDeseja) +
+        encUint(valDeseja),
+      value: tokOferece.native ? valOferece : 0n
+    });
+    toastTx("Ordem criada! Transação:", tx.hash, "ok");
+    await tx.wait();
+    toast("✅ Ordem publicada no mural!", "ok", 8000);
+
+    inValorOferece.value = "";
+    inValorDeseja.value = "";
+
+    await atualizarSaldos();
+    await carregarOrdens();
+  } catch (e) {
+    toast("Erro: " + erroLegivel(e), "err", 8000);
+  } finally {
+    emTransacao = false;
+  }
+}
+
+// ============================================================
+// APROVAR TOKEN (botão dedicado)
+// ============================================================
+async function aprovarToken() {
+  if (!userAddress) { toast("Conecte sua carteira primeiro.", "warn"); return; }
+  if (emTransacao) { toast("Aguarde a transação anterior…", "warn"); return; }
+  try {
+    emTransacao = true;
+    const sel = $("selOferece");
+    const inp = $("valorOferece");
+    if (!sel || !inp) throw new Error("Campos não encontrados.");
+    const endOferece = sel.value;
+    if (!endOferece || endOferece === "POL") throw new Error("Aprovação não se aplica a POL.");
+    const tok = tokenOk(endOferece);
+    if (!tok) throw new Error("Token inválido.");
+    const valor = lerValor(inp.value, tok.decimals, "valor");
+
+    toast("Aprovando…", "info");
+    const tx = await signer.sendTransaction({
+      to: tok.address,
+      data: "0x" + SEL_ERC20.approve + encAddress(ESCROW_FACTORY_ADDRESS) + encUint(valor)
+    });
+    toastTx("Aprovação enviada:", tx.hash, "info");
+    await tx.wait();
+    toast("✅ Aprovado!", "ok");
+  } catch (e) {
+    toast("Erro: " + erroLegivel(e), "err", 8000);
+  } finally {
+    emTransacao = false;
+  }
+}
+
+// ============================================================
+// ENVIAR TOKENS
+// ============================================================
+async function enviarToken() {
+  if (!userAddress) { toast("Conecte sua carteira primeiro.", "warn"); return; }
+  if (emTransacao) { toast("Aguarde a transação anterior…", "warn"); return; }
+
+  try {
+    emTransacao = true;
+
+    const selToken = $("selTokenEnvio");
+    const destEl = $("destinoEnvio");
+    const valorEl = $("valorEnvio");
+    if (!selToken || !destEl || !valorEl) throw new Error("Campos não encontrados.");
+
+    const dest = destEl.value.trim();
+    const valorTxt = valorEl.value.trim();
+
+    if (!selToken.value) throw new Error("Selecione um token.");
+    if (!isAddr(dest)) throw new Error("Endereço de destino inválido. Deve começar com 0x.");
+    if (mesmoEndereco(dest, userAddress)) throw new Error("Não envie para você mesmo.");
+
+    const tok = selToken.value === "POL" ? NATIVO : tokenOk(selToken.value);
+    if (!tok) throw new Error("Token inválido.");
+
+    const valor = lerValor(valorTxt, tok.decimals, "valor");
+
+    toast("Enviando transação…", "info");
+    let tx;
+    if (tok.native) {
+      tx = await signer.sendTransaction({ to: dest, value: valor });
+    } else {
+      tx = await signer.sendTransaction({
+        to: tok.address,
+        data: "0x" + SEL_ERC20.transfer + encAddress(dest) + encUint(valor)
+      });
+    }
+
+    toastTx("✅ Transação enviada:", tx.hash, "ok");
+    await tx.wait();
+    toast("✅ Enviado com sucesso!", "ok", 8000);
+
+    destEl.value = "";
+    valorEl.value = "";
+
+    await atualizarSaldos();
+  } catch (e) {
+    toast("Erro: " + erroLegivel(e), "err", 8000);
+  } finally {
+    emTransacao = false;
+  }
+}
+
+// ============================================================
+// CONVERSÃO POL ↔ WPOL
+// ============================================================
+async function converterWPOL() {
+  if (!userAddress) { toast("Conecte sua carteira primeiro.", "warn"); return; }
+  if (emTransacao) { toast("Aguarde a transação anterior…", "warn"); return; }
+
+  try {
+    emTransacao = true;
+    const inp = $("valorWPOL");
+    if (!inp) throw new Error("Campo não encontrado.");
+    const valor = lerValor(inp.value, 18, "valor");
+
+    toast("Convertendo POL → WPOL…", "info");
+    const tx = await signer.sendTransaction({
+      to: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+      data: "0x" + SEL_WPOL.deposit,
+      value: valor
+    });
+    toastTx("✅ Convertido:", tx.hash, "ok");
+    await tx.wait();
+    toast("✅ " + fmt(valor, 18) + " POL → WPOL", "ok");
+
+    inp.value = "";
+    await atualizarSaldos();
+  } catch (e) {
+    toast("Erro: " + erroLegivel(e), "err", 8000);
+  } finally {
+    emTransacao = false;
+  }
+}
+
+async function converterPOL() {
+  if (!userAddress) { toast("Conecte sua carteira primeiro.", "warn"); return; }
+  if (emTransacao) { toast("Aguarde a transação anterior…", "warn"); return; }
+
+  try {
+    emTransacao = true;
+    const inp = $("valorPOL");
+    if (!inp) throw new Error("Campo não encontrado.");
+    const valor = lerValor(inp.value, 18, "valor");
+
+    toast("Convertendo WPOL → POL…", "info");
+    const tx = await signer.sendTransaction({
+      to: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+      data: "0x" + SEL_WPOL.withdraw + encUint(valor)
+    });
+    toastTx("✅ Convertido:", tx.hash, "ok");
+    await tx.wait();
+    toast("✅ " + fmt(valor, 18) + " WPOL → POL", "ok");
+
+    inp.value = "";
+    await atualizarSaldos();
+  } catch (e) {
+    toast("Erro: " + erroLegivel(e), "err", 8000);
+  } finally {
+    emTransacao = false;
+  }
+}
+
+// ============================================================
+// MAX (preencher com saldo)
+// ============================================================
+function preencherMax(inputId, symbol) {
+  const inp = $(inputId);
+  if (!inp) return;
+  const val = saldos[symbol] || 0n;
+  const t = symbol === "POL" ? NATIVO : TOKENS.find(x => x.symbol === symbol);
+  if (!t) return;
+  inp.value = paraInput(val, t.decimals);
+}
+
+// ============================================================
+// NAVEGAÇÃO ENTRE ABAS
+// ============================================================
+function trocarAba(nomeAba) {
+  ABAS.forEach(aba => {
+    const panel = document.querySelector(`[data-panel="${aba}"]`);
+    if (panel) panel.hidden = (aba !== nomeAba);
+  });
+  document.querySelectorAll(".tabs button").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.tab === nomeAba);
+  });
+
+  if (nomeAba === "mural") {
+    carregarOrdens();
+    atualizarSaldos();
+  }
+  if (nomeAba === "converter") atualizarSaldos();
+}
+
+// ============================================================
+// INICIALIZAÇÃO
+// ============================================================
+async function inicializar() {
+  normalizarTokens();
+
+  // Popular seletores de tokens
+  const selOferece = $("selOferece");
+  const selDeseja = $("selDeseja");
+  const selEnvio = $("selTokenEnvio");
+
+  [selOferece, selDeseja, selEnvio].forEach(sel => {
+    if (!sel) return;
+    sel.innerHTML = sel === selEnvio
+      ? '<option value="">Selecione…</option><option value="POL">POL (nativo)</option>'
+      : '<option value="">Selecione…</option>';
+    for (const t of tokensOk()) {
+      const opt = document.createElement("option");
+      opt.value = t.address;
+      opt.textContent = t.symbol + " — " + t.name;
+      sel.appendChild(opt);
+    }
+  });
+
+  // Popular filtros
+  [$("filtroOferece"), $("filtroPede")].forEach(sel => {
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Todos</option>';
+    for (const t of tokensOk()) {
+      const opt = document.createElement("option");
+      opt.value = t.address;
+      opt.textContent = t.symbol;
+      sel.appendChild(opt);
+    }
+  });
+
+  // Lista de tokens na aba Ajuda
+  const listaTokens = $("listaTokens");
+  if (listaTokens) {
+    listaTokens.innerHTML = `<li><strong>POL</strong> — Polygon (moeda nativa da rede)</li>` +
+      tokensOk().map(t => `<li><strong>${t.symbol}</strong> — ${t.name}: <code>${t.address}</code></li>`).join("");
+  }
+
+  // Eventos — Navegação
+  document.querySelectorAll("[data-tab]").forEach(btn => {
+    btn.addEventListener("click", () => trocarAba(btn.dataset.tab));
+  });
+
+  // Eventos — Conexão carteira
+  $("btnConnect")?.addEventListener("click", conectarCarteira);
+  $("btnDisconnect")?.addEventListener("click", desconectarCarteira);
+
+  // Eventos — Criar ordem
+  $("btnCriarOrdem")?.addEventListener("click", criarOrdem);
+  $("btnApprove")?.addEventListener("click", aprovarToken);
+
+  // Eventos — Enviar
+  $("btnEnviar")?.addEventListener("click", enviarToken);
+
+  // Eventos — Conversão POL ↔ WPOL
+  $("btnConverterWPOL")?.addEventListener("click", converterWPOL);
+  $("btnConverterPOL")?.addEventListener("click", converterPOL);
+
+  // Eventos — MAX
+  $("btnMaxOf")?.addEventListener("click", () => {
+    const sel = $("selOferece");
+    if (!sel || !sel.value) return;
+    const sym = sel.value === "POL" ? "POL" : (tokenOk(sel.value)?.symbol);
+    if (sym) preencherMax("valorOferece", sym);
+  });
+  $("btnMaxSend")?.addEventListener("click", () => {
+    const sel = $("selTokenEnvio");
+    if (!sel || !sel.value) return;
+    const sym = sel.value === "POL" ? "POL" : (tokenOk(sel.value)?.symbol);
+    if (sym) preencherMax("valorEnvio", sym);
+  });
+  $("btnMaxWrap")?.addEventListener("click", () => preencherMax("valorWPOL", "POL"));
+  $("btnMaxUnwrap")?.addEventListener("click", () => preencherMax("valorPOL", "WPOL"));
+
+  // Eventos — Consulta BTC
+  $("btnCheckBtc")?.addEventListener("click", () => {
+    const end = $("btcAddressQuery").value;
+    consultarSaldoBTC(end);
+  });
+  $("btcAddressQuery")?.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      const end = $("btcAddressQuery").value;
+      consultarSaldoBTC(end);
+    }
+  });
+
+  // Eventos — Filtros
+  $("filtroMinhas")?.addEventListener("change", e => {
+    filtro.minhas = e.target.checked;
+    exibirOrdensFiltradas();
+  });
+  $("filtroOferece")?.addEventListener("change", e => {
+    filtro.oferece = e.target.value;
+    exibirOrdensFiltradas();
+  });
+  $("filtroPede")?.addEventListener("change", e => {
+    filtro.pede = e.target.value;
+    exibirOrdensFiltradas();
+  });
+  $("filtroStatus")?.addEventListener("change", e => {
+    filtro.status = e.target.value;
+    exibirOrdensFiltradas();
+  });
+  $("btnLimparFiltros")?.addEventListener("click", () => {
+    filtro.status = "todas";
+    filtro.oferece = "";
+    filtro.pede = "";
+    filtro.minhas = false;
+    if ($("filtroStatus")) $("filtroStatus").value = "todas";
+    if ($("filtroOferece")) $("filtroOferece").value = "";
+    if ($("filtroPede")) $("filtroPede").value = "";
+    if ($("filtroMinhas")) $("filtroMinhas").checked = false;
+    exibirOrdensFiltradas();
+  });
+  $("btnRefresh")?.addEventListener("click", () => {
+    carregarOrdens();
+    if (userAddress) atualizarSaldos();
+  });
+
+  // Estado inicial da rede
+  setNet("load", "Verificando rede…");
+  try {
+    await getAnyProvider();
+    setNet("ok", "Polygon OK");
+  } catch (e) {
+    setNet("off", "Sem conexão");
+  }
+
+  // Aba inicial
+  trocarAba("mural");
+}
+
+// ✅ CORREÇÃO CRÍTICA: chamar inicializar() no load
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", inicializar);
+} else {
+  inicializar();
+}
+    </script>
+</body>
+</html>
