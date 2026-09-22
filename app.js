@@ -1,18 +1,15 @@
 // ============================================================
-// APP.JS — Carteira BRN P2P (v3.2 — corrigido)
+// APP.JS — Carteira BRN P2P (v3.3 — corrigido)
 // Compatível com o EscrowFactory JÁ DEPLOYADO (sem alterar .sol)
 //
 // Correções aplicadas:
 //  - init() roda via readyState (funciona com script async/defer)
 //  - withTimeout sem unhandled rejection
-//  - mostrarErroMural com guarda de null
-//  - preencherSelect/montarSelects com guarda de null
-//  - verificarTokens protegido contra execução duplicada
 //  - guards de null em todos os getElementById críticos
-//  - LISTA COMPLETA de 21 tokens suportados (v3.2)
-//
-// IMPORTANTE: o contrato NÃO está verificado no PolygonScan.
-// Os selectors vêm do bytecode. Teste com valores pequenos.
+//  - verificarTokens protegido contra execução duplicada
+//  - LISTA COMPLETA de 21 tokens suportados
+//  - v3.3: verificação de token mais tolerante — só os DECIMALS
+//    bloqueiam; símbolo vira aviso. Falha de RPC não é definitiva.
 // ============================================================
 
 // --- CONFIGURACOES (POLYGON MAINNET) ---
@@ -21,9 +18,6 @@ const POLYGON_CHAIN_ID = 137;
 
 // ------------------------------------------------------------
 // LISTA DE TOKENS SUPORTADOS (única fonte de verdade)
-// Para suportar outro token, basta adicionar uma linha aqui.
-//   decimals : conferido on-chain; se diferente, o token é desativado
-//   symbols  : símbolos aceitos on-chain (null = não conferir)
 // ------------------------------------------------------------
 const NATIVO = { symbol: "POL", name: "POL (nativo)", decimals: 18, native: true };
 const TOKENS = [
@@ -50,7 +44,6 @@ const TOKENS = [
   { symbol: "SHIB",   name: "Shiba Inu (PoS)",    address: "0x6f8a06447Ff6FcF75d803135a7de15CE88C1d4ec", decimals: 18, symbols: ["SHIB"] },
 ];
 
-// RPCs públicos com fallback
 const RPCS = [
   "https://polygon-bor-rpc.publicnode.com",
   "https://polygon.drpc.org",
@@ -58,12 +51,11 @@ const RPCS = [
   "https://rpc.ankr.com/polygon",
 ];
 const RPC_TIMEOUT_MS = 8000;
-const MAX_ORDENS = 1000;   // limite de segurança para a lista do factory
-const CONCORRENCIA = 5;    // chamadas paralelas máximas aos RPCs públicos
+const MAX_ORDENS = 1000;
+const CONCORRENCIA = 5;
 
-// --- SELECTORS (extraídos do bytecode / padrão ERC-20) ---
 const SEL_FACTORY = {
-  criarOrdem:   "ceff4da6", // ordem dos argumentos NÃO confirmada (contrato não verificado)
+  criarOrdem:   "ceff4da6",
   ordensDe:     "0dc80995",
   ordem:        "72c453b8",
   totalOrdens:  "8275d6fa",
@@ -73,12 +65,12 @@ const SEL_ESCROW = {
   criador:        "041c797c",
   tokenDesejado:  "0cd59b77",
   executado:      "2a3a5716",
-  obterDados:     "32c9e06c", // -> (address,address,address,uint256,uint256,bool,bool)
+  obterDados:     "32c9e06c",
   valorDesejado:  "651cc708",
   cancelado:      "7766a742",
   tokenOferecido: "8a337bdc",
-  cancelar:       "8ffb1ccf", // cancelar()
-  executar:       "b2d44d08", // é executarTroca() (verificado com keccak256)
+  cancelar:       "8ffb1ccf",
+  executar:       "b2d44d08",
   factory:        "c45a0155",
   valorOferecido: "f6c467b7",
 };
@@ -86,12 +78,11 @@ const SEL_ERC20 = {
   balanceOf: "70a08231",
   allowance: "dd62ed3e",
   approve:   "095ea7b3",
-  transfer:  "a9059cbb", // transfer(address,uint256)
+  transfer:  "a9059cbb",
   decimals:  "313ce567",
   symbol:    "95d89b41",
 };
 
-// --- ESTADO GLOBAL ---
 let walletProvider = null;
 let signer = null;
 let userAddress = null;
@@ -175,7 +166,6 @@ function erroLegivel(e) {
   return String(m).slice(0, 220);
 }
 
-// --- helpers de codificação/decodificação manual (ABI) com validação ---
 const HEX_WORD = /^[0-9a-fA-F]{64}$/;
 
 function pad32(hexNo0x) { return hexNo0x.padStart(64, "0"); }
@@ -188,7 +178,6 @@ function encUint(n) {
   if (v < 0n || v >= (1n << 256n)) throw new Error("Valor fora do intervalo uint256.");
   return pad32(v.toString(16));
 }
-
 function decUint(word) {
   if (!HEX_WORD.test(word || "")) throw new Error("Resposta ABI inválida.");
   return BigInt("0x" + word);
@@ -202,7 +191,6 @@ function decBool(word) {
   if (v > 1n) throw new Error("Booleano inválido na resposta.");
   return v === 1n;
 }
-
 function splitWords(hex) {
   if (typeof hex !== "string" || !/^0x([0-9a-fA-F]{2})*$/.test(hex)) throw new Error("Resposta inválida do RPC.");
   const b = hex.slice(2);
@@ -211,7 +199,6 @@ function splitWords(hex) {
   for (let i = 0; i < b.length; i += 64) out.push(b.slice(i, i + 64));
   return out;
 }
-
 function decAddressArray(hex) {
   const w = splitWords(hex);
   if (w.length < 2) throw new Error("Lista de ordens inválida.");
@@ -227,7 +214,6 @@ function decAddressArray(hex) {
   for (let i = 0; i < len; i++) arr.push(decAddress(w[start + 1 + i]));
   return arr;
 }
-
 function decString(hex) {
   const w = splitWords(hex);
   if (w.length < 2 || Number(decUint(w[0])) !== 32) throw new Error("String inválida.");
@@ -276,6 +262,9 @@ function tokenOk(addr) { const t = tokenPorEndereco(addr); return t && t.ok ? t 
 function tokensOk() { return TOKENS.filter(t => t.ok); }
 function ativoPorId(id) { return id === "POL" ? NATIVO : tokenOk(id); }
 
+// v3.3: verificacao tolerante — DECIMALS e a checagem obrigatoria.
+// Se o RPC falhar para decimals, NAO marca como definitivo (retenta depois).
+// Se o simbolo nao bater, apenas avisa (nao bloqueia o token).
 let verificandoTokens = false;
 async function verificarTokens() {
   if (verificandoTokens) return;
@@ -283,20 +272,38 @@ async function verificarTokens() {
   try {
     await mapLimit(TOKENS, CONCORRENCIA, async (t) => {
       if (t.ok || t.definitivo) return;
+
+      let dec = null;
       try {
         const rd = await rawCall(t.address, "0x" + SEL_ERC20.decimals);
-        const dec = Number(decUint(splitWords(rd)[0]));
-        let simbolo = null;
-        try { simbolo = decString(await rawCall(t.address, "0x" + SEL_ERC20.symbol)); } catch (e) { /* símbolo opcional */ }
-        const decOk = dec === t.decimals;
-        const symOk = !t.symbols || (simbolo !== null && t.symbols.includes(simbolo.toUpperCase()));
-        t.ok = decOk && symOk;
-        if (!t.ok) {
-          t.definitivo = true;
-          t.aviso = "on-chain: " + dec + " decimais, símbolo " + (simbolo || "?");
-        } else { t.aviso = null; }
-      } catch (e) { t.ok = false; t.aviso = "não foi possível verificar agora"; }
+        dec = Number(decUint(splitWords(rd)[0]));
+      } catch (e) {
+        // RPC falhou ao ler decimals: deixa para tentar de novo
+        t.ok = false;
+        t.aviso = "RPC não respondeu — tentaremos de novo";
+        return;
+      }
+
+      if (dec !== t.decimals) {
+        // Decimais diferentes do esperado: rejeita em definitivo
+        t.ok = false;
+        t.definitivo = true;
+        t.aviso = "on-chain: " + dec + " decimais (esperado " + t.decimals + ")";
+        return;
+      }
+
+      // Decimais OK -> token aceito
+      t.ok = true;
+      t.aviso = null;
+
+      // Simbolo e apenas informativo. Nao bloqueia.
+      let simbolo = null;
+      try { simbolo = decString(await rawCall(t.address, "0x" + SEL_ERC20.symbol)); } catch (e) { /* opcional */ }
+      if (simbolo && t.symbols && !t.symbols.includes(simbolo.toUpperCase())) {
+        t.aviso = "símbolo on-chain é " + simbolo + " (esperado " + t.symbols.join("/") + ")";
+      }
     });
+
     for (const t of TOKENS) {
       if (!t.ok && t.definitivo && !t.avisado) {
         t.avisado = true;
@@ -329,10 +336,9 @@ function chipClasse(symbol) {
 }
 
 // ============================================================
-// RPCs PÚBLICOS (fallback por chamada + checagem de chainId)
+// RPCs PÚBLICOS
 // ============================================================
 async function withTimeout(promise, ms) {
-  // evita unhandled rejection se a promise rejeitar após o timeout
   Promise.resolve(promise).catch(() => {});
   let t;
   const timeout = new Promise((_, rej) => { t = setTimeout(() => rej(new Error("timeout")), ms); });
@@ -359,7 +365,7 @@ async function rawCall(to, data) {
       rpcIdx = idx; currentRpc = RPCS[idx];
       return r;
     } catch (e) {
-      if (e && e.code === "CALL_EXCEPTION") throw e; // revert real, não é falha de RPC
+      if (e && e.code === "CALL_EXCEPTION") throw e;
       ultimoErro = e;
     }
   }
@@ -417,7 +423,7 @@ function avaliar(o) {
 }
 
 // ============================================================
-// MENU (ABAS)
+// MENU
 // ============================================================
 function mostrarAba(nome, atualizarHash = true) {
   if (!ABAS.includes(nome)) nome = "mural";
@@ -428,7 +434,7 @@ function mostrarAba(nome, atualizarHash = true) {
 }
 
 // ============================================================
-// FILTROS DO MURAL
+// FILTROS
 // ============================================================
 function aplicarFiltro(orders) {
   return orders.filter(o => {
@@ -459,7 +465,7 @@ function limparFiltros() {
 }
 
 // ============================================================
-// SELECTS / LISTAS DINÂMICAS
+// SELECTS
 // ============================================================
 function preencherSelect(sel, opcoes, valorAtual) {
   if (!sel) return;
@@ -509,7 +515,7 @@ function renderListaTokens() {
 }
 
 // ============================================================
-// LEITURA DO MURAL (sem carteira)
+// MURAL
 // ============================================================
 function mostrarErroMural(msg) {
   const box = $("orders");
@@ -533,7 +539,6 @@ async function carregarMural(silencioso = false) {
   try {
     await garantirTokens();
 
-    // 1) lista de escrows
     let addrs = [];
     try {
       const r = await rawCall(ESCROW_FACTORY_ADDRESS, "0x" + SEL_FACTORY.todasOrdens);
@@ -547,7 +552,6 @@ async function carregarMural(silencioso = false) {
       addrs = rs.map(r => decAddress(splitWords(r)[0]));
     }
 
-    // 2) detalhes (paralelo limitado) + saldo do escrow das ordens ativas
     const detalhes = await mapLimit(addrs, CONCORRENCIA, async (addr, indice) => {
       try {
         const o = await lerOrdem(addr);
@@ -663,7 +667,7 @@ function renderMural(orders) {
 }
 
 // ============================================================
-// CARTEIRA (MetaMask)
+// CARTEIRA
 // ============================================================
 async function garantirPolygon() {
   if (!window.ethereum) throw new Error("MetaMask não encontrada.");
@@ -761,7 +765,7 @@ async function carregarSaldos() {
 }
 
 // ============================================================
-// TRANSAÇÕES (guarda de concorrência + rede + simulação)
+// TRANSAÇÕES
 // ============================================================
 async function comTransacao(fn) {
   if (emTransacao) { toast("Aguarde a transação atual terminar.", "warn"); return; }
@@ -816,7 +820,7 @@ async function reservaGasPOL() {
   return 10n ** 16n;
 }
 
-// ---------------- ENVIAR POL / TOKENS ----------------
+// ---------------- ENVIAR ----------------
 function enderecosBloqueados() {
   const s = new Set(["0x0000000000000000000000000000000000000000", ESCROW_FACTORY_ADDRESS.toLowerCase()]);
   TOKENS.forEach(t => { if (isAddr(t.address)) s.add(t.address.toLowerCase()); });
@@ -891,7 +895,7 @@ async function maxEnviar() {
   } catch (e) { toast(erroLegivel(e), "err"); }
 }
 
-// ---------------- VENDER (approve + criarOrdem) ----------------
+// ---------------- VENDER ----------------
 function tokensDaVenda() {
   const tOf = tokenOk($("vTokOf").value);
   const tDe = tokenOk($("vTokDe").value);
@@ -960,7 +964,7 @@ async function maxVender() {
   } catch (e) { toast(erroLegivel(e), "err"); }
 }
 
-// ---------------- EXECUTAR ORDEM ----------------
+// ---------------- EXECUTAR ----------------
 async function executarOrdem(escrowAddr) {
   await comTransacao(async () => {
     const conhecida = ordersCache.find(x => mesmoEndereco(x.endereco, escrowAddr));
@@ -1009,7 +1013,7 @@ async function executarOrdem(escrowAddr) {
   });
 }
 
-// ---------------- CANCELAR ORDEM ----------------
+// ---------------- CANCELAR ----------------
 async function cancelarOrdem(escrowAddr) {
   await comTransacao(async () => {
     const conhecida = ordersCache.find(x => mesmoEndereco(x.endereco, escrowAddr));
@@ -1031,7 +1035,7 @@ async function cancelarOrdem(escrowAddr) {
 }
 
 // ============================================================
-// HINTS (saldos nas abas) E COTAÇÃO
+// HINTS / COTAÇÃO
 // ============================================================
 function textoSaldo(ativo) {
   if (!ativo) return "";
@@ -1084,7 +1088,6 @@ function evitarIguais(mudou) {
 function init() {
   normalizarTokens();
 
-  // menu
   const tabs = $("tabs");
   if (tabs) tabs.addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-tab]");
@@ -1093,18 +1096,15 @@ function init() {
   window.addEventListener("hashchange", () => mostrarAba(location.hash.replace("#", ""), false));
   mostrarAba(location.hash.replace("#", ""), false);
 
-  // carteira
   const bc = $("btnConnect"); if (bc) bc.addEventListener("click", conectarCarteira);
   const bd = $("btnDisconnect"); if (bd) bd.addEventListener("click", desconectar);
 
-  // mural + filtros
   const br = $("btnRefresh"); if (br) br.addEventListener("click", () => carregarMural(false));
   ["fStatus", "fOferece", "fPede", "fMinhas"].forEach(id => {
     const e = $(id); if (e) e.addEventListener("change", lerFiltrosDaTela);
   });
   const fl = $("fLimpar"); if (fl) fl.addEventListener("click", limparFiltros);
 
-  // vender
   const bap = $("btnApprove"); if (bap) bap.addEventListener("click", aprovarToken);
   const bcr = $("btnCreate"); if (bcr) bcr.addEventListener("click", criarOrdem);
   const bmo = $("btnMaxOf"); if (bmo) bmo.addEventListener("click", maxVender);
@@ -1113,12 +1113,10 @@ function init() {
   const iOf = $("inOf"); if (iOf) iOf.addEventListener("input", atualizarCotacao);
   const iDe = $("inDe"); if (iDe) iDe.addEventListener("input", atualizarCotacao);
 
-  // enviar
   const bs = $("btnSend"); if (bs) bs.addEventListener("click", enviarAtivo);
   const bms = $("btnMaxSend"); if (bms) bms.addEventListener("click", maxEnviar);
   const sa = $("sAtivo"); if (sa) sa.addEventListener("change", atualizarHints);
 
-  // delegação de eventos: sem onclick inline montado com dados externos
   const orders = $("orders");
   if (orders) orders.addEventListener("click", (ev) => {
     const btn = ev.target.closest("button[data-action]");
@@ -1134,7 +1132,6 @@ function init() {
   setInterval(() => { if (!emTransacao && !document.hidden) carregarMural(true); }, 60000);
 }
 
-// funciona tanto se o DOM já estiver pronto quanto se ainda não estiver
 if (document.readyState === "loading") {
   window.addEventListener("DOMContentLoaded", init);
 } else {
