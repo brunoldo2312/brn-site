@@ -1,53 +1,38 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 3.0 (Conexões Corrigidas)
-// ✅ Conexão Polygon com RPCs Atualizados
-// ✅ Conexão Bitcoin API Independente
-// ✅ Diagnóstico e Tratamento de Erros Melhorados
+// APP.JS — BRN Exchange | Versão 3.2 (Precisa)
+// ✅ Fallback de token desconhecido
+// ✅ Debug no console para ordens
+// ✅ RPCs reordenados (publicnode primeiro)
 // ============================================================
 
 // ================= CONFIGURAÇÕES =================
 const ESCROW_FACTORY = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
 
-// Tokens suportados
 const TOKENS = [
-  { symbol: "BRN",  name: "BRN Token",         address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
-  { symbol: "USDC", name: "USD Coin",           address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
-  { symbol: "USDT", name: "Tether USD",          address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6 },
-  { symbol: "WPOL", name: "Wrapped POL",         address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
-  { symbol: "WBTC", name: "Wrapped BTC",         address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8 },
+  { symbol: "BRN",     name: "BRN Token",           address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
+  { symbol: "USDC",    name: "USD Coin (nativo)",   address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
+  { symbol: "USDC.e",  name: "USD Coin (bridged)",  address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6 },
+  { symbol: "USDT",    name: "Tether USD",          address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6 },
+  { symbol: "USDT.e",  name: "Tether USD (bridged)",address: "0x9417669fBF23357D2774e9D4234219952D36A1e5", decimals: 6 },
+  { symbol: "WPOL",    name: "Wrapped POL",         address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
+  { symbol: "WBTC",    name: "Wrapped BTC",         address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8 },
+  { symbol: "WETH",    name: "Wrapped Ether",       address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18 },
 ];
 
-// ✅ Lista de RPCs atualizada (Polygon Mainnet - Chain ID 137)
+// ✅ RPCs reordenados — publicnode primeiro (mais estável)
 const RPC_LIST = [
-  "https://polygon.api.onfinality.io/public",
   "https://polygon.publicnode.com",
+  "https://polygon-rpc.com",
   "https://1rpc.io/matic",
   "https://polygon.drpc.org"
 ];
 
-// Selectors de funções (4 bytes)
 const S = {
-  Factory: {
-    criarOrdem: "ceff4da6",
-    totalOrdens: "8275d6fa",
-    ordem: "72c453b8",
-  },
-  Escrow: {
-    obterDados: "32c9e06c",
-    executar: "b2d44d08",
-    cancelar: "8ffb1ccf",
-  },
-  ERC20: {
-    balanceOf: "70a08231",
-    allowance: "dd62ed3e",
-    approve: "095ea7b3",
-    transfer: "a9059cbb",
-  },
-  WPOL: {
-    deposit: "d0e30db0",
-    withdraw: "2e1a7d4d",
-  },
+  Factory: { criarOrdem: "ceff4da6", totalOrdens: "8275d6fa", ordem: "72c453b8" },
+  Escrow:  { obterDados: "32c9e06c", executar: "b2d44d08", cancelar: "8ffb1ccf" },
+  ERC20:   { balanceOf: "70a08231", allowance: "dd62ed3e", approve: "095ea7b3", transfer: "a9059cbb" },
+  WPOL:    { deposit: "d0e30db0", withdraw: "2e1a7d4d" }
 };
 
 // Estado global
@@ -68,7 +53,6 @@ const isAddr = a => /^0x[a-fA-F0-9]{40}$/.test(a || "");
 const short = a => isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—";
 const mesmoAddr = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
-// Formatar valores
 function fmt(bigInt, decimals, maxFrac = 6) {
   try {
     const str = ethers.utils.formatUnits(bigInt.toString(), decimals);
@@ -78,7 +62,10 @@ function fmt(bigInt, decimals, maxFrac = 6) {
   } catch { return "0"; }
 }
 
-// Notificações
+function trimZeros(str) {
+  return str.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+}
+
 function toast(texto, tipo = "info", duracao = 4000) {
   const container = $("toasts");
   if (!container) return;
@@ -100,7 +87,6 @@ function toastTx(texto, hash, tipo = "info") {
   setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, 8000);
 }
 
-// ✅ Fetch com timeout para evitar travamentos
 async function fetchTimeout(url, ms = 8000) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
@@ -124,10 +110,13 @@ function decAddr(palavra) {
   catch { return "0x0000000000000000000000000000000000000000"; }
 }
 function decUint(palavra) {
-  return BigInt("0x" + palavra);
+  if (!palavra) return 0n;
+  try { return BigInt("0x" + palavra); }
+  catch { return 0n; }
 }
 function decBool(palavra) {
-  return decUint(palavra) === 1n;
+  try { return decUint(palavra) === 1n; }
+  catch { return false; }
 }
 function splitResposta(hex) {
   const semPrefixo = hex.slice(2);
@@ -175,12 +164,12 @@ async function atualizarStatusRede() {
   } else {
     dot.className = "dot off";
     txt.textContent = "Polygon: Sem conexão ❌";
-    toast("❌ Não foi possível conectar à rede Polygon. Verifique sua internet.", "err", 10000);
+    toast("❌ Não foi possível conectar à rede Polygon.", "err", 10000);
   }
   return ok;
 }
 
-// ================= REDE REMOTA BITCOIN =================
+// ================= BITCOIN API =================
 async function verificarStatusRedeBitcoin() {
   const dot = $("btcDot");
   const txt = $("btcText");
@@ -190,7 +179,6 @@ async function verificarStatusRedeBitcoin() {
   txt.textContent = "Bitcoin API: Sincronizando…";
 
   try {
-    // ✅ Endpoint correto para obter a altura do bloco
     const resposta = await fetchTimeout("https://blockstream.info/api/blocks/tip/height", 8000);
     if (!resposta.ok) throw new Error("HTTP " + resposta.status);
     const blocoAtual = (await resposta.text()).trim();
@@ -207,9 +195,55 @@ async function verificarStatusRedeBitcoin() {
   }
 }
 
+async function consultarSaldoBTC() {
+  const input = $("btcAddressInput");
+  const card = $("btcResult");
+  const valEl = $("btcBalanceValue");
+  if (!input || !valEl) return;
+
+  const endereco = input.value.trim();
+  if (!endereco) { toast("Digite um endereço Bitcoin.", "warn"); return; }
+
+  valEl.textContent = "Consultando…";
+  card?.classList.add("show");
+
+  try {
+    const r = await fetchTimeout(
+      `https://blockstream.info/api/address/${encodeURIComponent(endereco)}`, 10000
+    );
+    if (!r.ok) throw new Error("Endereço inválido ou não encontrado");
+    const dados = await r.json();
+
+    const chain = dados.chain_stats || {};
+    const mem = dados.mempool_stats || {};
+    const satsConfirmado = (chain.funded_txo_sum || 0) - (chain.spent_txo_sum || 0);
+    const satsPendente   = (mem.funded_txo_sum || 0) - (mem.spent_txo_sum || 0);
+    const totalSats = satsConfirmado + satsPendente;
+
+    const btc = (totalSats / 1e8).toFixed(8);
+    valEl.textContent = `${btc} BTC`;
+    if (satsPendente !== 0) {
+      valEl.textContent += ` (${(satsPendente / 1e8).toFixed(8)} pendente)`;
+    }
+  } catch (e) {
+    valEl.textContent = "— BTC";
+    toast("❌ " + e.message, "err");
+  }
+}
+
 // ================= TOKENS =================
+// ✅ CORREÇÃO: fallback para token desconhecido (nunca retorna undefined)
 function tokenPorEndereco(endereco) {
-  return TOKENS.find(t => mesmoAddr(t.address, endereco));
+  if (!endereco) return null;
+  const t = TOKENS.find(t => mesmoAddr(t.address, endereco));
+  if (t) return t;
+  return {
+    symbol: endereco.slice(0, 6) + "…",
+    name: "Token não cadastrado",
+    address: endereco,
+    decimals: 18,
+    desconhecido: true
+  };
 }
 
 function preencherSeletores() {
@@ -259,10 +293,7 @@ function renderizarSaldos() {
   const add = (simbolo, valor, decimais) => {
     const div = document.createElement("div");
     div.className = "bal";
-    div.innerHTML = `
-      <span class="t">${simbolo}</span>
-      <span class="v">${fmt(valor, decimais)}</span>
-    `;
+    div.innerHTML = `<span class="t">${simbolo}</span><span class="v">${fmt(valor, decimais)}</span>`;
     container.appendChild(div);
   };
 
@@ -270,11 +301,12 @@ function renderizarSaldos() {
   TOKENS.forEach(t => add(t.symbol, saldos[t.address] || 0n, t.decimals));
 
   document.querySelectorAll("[data-hint]").forEach(el => {
-    const [tipo, ref] = el.getAttribute("data-hint").split(":");
+    const attr = el.getAttribute("data-hint") || "";
+    const [tipo, ref] = attr.split(":");
     if (tipo === "saldoPOL") el.textContent = fmt(saldos.POL, 18);
     if (tipo === "saldoWPOL") {
       const wpol = TOKENS.find(t => t.symbol === "WPOL");
-      el.textContent = fmt(saldos[wpol.address] || 0n, 18);
+      el.textContent = wpol ? fmt(saldos[wpol.address] || 0n, 18) : "0";
     }
     if (tipo === "saldo" && ref) {
       const sel = $(ref);
@@ -360,10 +392,7 @@ async function carregarOrdens() {
     counter.textContent = "⏳ Consultando…";
     container.innerHTML = '<div class="state"><div class="spinner"></div><p>Carregando ordens…</p></div>';
 
-    const totalRes = await rpcProvider.call({
-      to: ESCROW_FACTORY,
-      data: "0x" + S.Factory.totalOrdens
-    });
+    const totalRes = await rpcProvider.call({ to: ESCROW_FACTORY, data: "0x" + S.Factory.totalOrdens });
     const total = Number(decUint(totalRes.slice(2)));
     counter.textContent = `${total} ordem${total !== 1 ? "ens" : ""}`;
 
@@ -390,6 +419,19 @@ async function carregarOrdens() {
         });
         const p = splitResposta(dadosRes.slice(2));
 
+        // 🔍 DEBUG no console — mostra o que o contrato retornou
+        console.log(`[Ordem #${i}]`, {
+          endereco,
+          campos: p.length,
+          criador: decAddr(p[0]),
+          tokenOferecido: decAddr(p[1]),
+          valorOferecido: decUint(p[2]).toString(),
+          tokenDesejado: decAddr(p[3]),
+          valorDesejado: decUint(p[4]).toString(),
+          executado: p[5] ? decBool(p[5]) : null,
+          cancelado: p[6] ? decBool(p[6]) : null
+        });
+
         ordens.push({
           indice: i,
           endereco,
@@ -398,8 +440,8 @@ async function carregarOrdens() {
           valorOferecido: decUint(p[2]),
           tokenDesejado: decAddr(p[3]),
           valorDesejado: decUint(p[4]),
-          executado: decBool(p[5]),
-          cancelado: decBool(p[6]),
+          executado: p[5] ? decBool(p[5]) : false,
+          cancelado: p[6] ? decBool(p[6]) : false,
         });
       } catch (e) {
         console.warn(`Erro ao carregar ordem ${i}:`, e.message);
@@ -449,6 +491,12 @@ function renderizarOrdens(lista) {
     const minha = userAddress && mesmoAddr(o.criador, userAddress);
     const ativa = !o.executado && !o.cancelado;
 
+    // ✅ CORREÇÃO: sempre mostra quantidade — nunca "?"
+    const oferTexto = ofer ? `${fmt(o.valorOferecido, ofer.decimals)} ${ofer.symbol}` : "Token desconhecido";
+    const pedTexto = ped ? `${fmt(o.valorDesejado, ped.decimals)} ${ped.symbol}` : "Token desconhecido";
+    const oferAviso = ofer?.desconhecido ? ` <small class="dim">(token não cadastrado)</small>` : "";
+    const pedAviso = ped?.desconhecido ? ` <small class="dim">(token não cadastrado)</small>` : "";
+
     const div = document.createElement("div");
     div.className = `order ${ativa ? "active" : ""} ${o.executado ? "done" : ""} ${o.cancelado ? "cancelled" : ""}`;
     div.innerHTML = `
@@ -462,12 +510,14 @@ function renderizarOrdens(lista) {
       <div class="swap">
         <div class="swap-side">
           <div class="swap-lbl">Oferece</div>
-          <div class="swap-amt">${ofer ? fmt(o.valorOferecido, ofer.decimals) : "?"} ${ofer?.symbol || "???"}</div>
+          <div class="swap-amt">${oferTexto}</div>
+          ${oferAviso}
         </div>
         <div class="swap-icon">⇄</div>
         <div class="swap-side">
           <div class="swap-lbl">Pede</div>
-          <div class="swap-amt">${ped ? fmt(o.valorDesejado, ped.decimals) : "?"} ${ped?.symbol || "???"}</div>
+          <div class="swap-amt">${pedTexto}</div>
+          ${pedAviso}
         </div>
       </div>
       <div class="swap-escrow ok">Criador: ${short(o.criador)} ${minha ? "(você)" : ""}</div>
@@ -566,10 +616,7 @@ async function executarOrdem(escrowAddr) {
   isTxBusy = true;
 
   try {
-    const dadosRes = await rpcProvider.call({
-      to: escrowAddr,
-      data: "0x" + S.Escrow.obterDados
-    });
+    const dadosRes = await rpcProvider.call({ to: escrowAddr, data: "0x" + S.Escrow.obterDados });
     const p = splitResposta(dadosRes.slice(2));
     const tokenDesejado = decAddr(p[3]);
     const valorDesejado = decUint(p[4]);
@@ -760,23 +807,16 @@ function configurarAbas() {
 
 // ================= FILTROS =================
 function configurarFiltros() {
-  $("filtroStatus").addEventListener("change", e => {
-    filtroAtivo.status = e.target.value;
-    aplicarFiltros();
-  });
-  $("filtroOferece").addEventListener("change", e => {
-    filtroAtivo.oferece = e.target.value;
-    aplicarFiltros();
-  });
-  $("filtroPede").addEventListener("change", e => {
-    filtroAtivo.pede = e.target.value;
-    aplicarFiltros();
-  });
-  $("filtroMinhas").addEventListener("change", e => {
-    filtroAtivo.minhas = e.target.checked;
-    aplicarFiltros();
-  });
-  $("btnLimparFiltros").addEventListener("click", () => {
+  const fs = $("filtroStatus");
+  if (fs) fs.addEventListener("change", e => { filtroAtivo.status = e.target.value; aplicarFiltros(); });
+  const fo = $("filtroOferece");
+  if (fo) fo.addEventListener("change", e => { filtroAtivo.oferece = e.target.value; aplicarFiltros(); });
+  const fp = $("filtroPede");
+  if (fp) fp.addEventListener("change", e => { filtroAtivo.pede = e.target.value; aplicarFiltros(); });
+  const fm = $("filtroMinhas");
+  if (fm) fm.addEventListener("change", e => { filtroAtivo.minhas = e.target.checked; aplicarFiltros(); });
+  const bl = $("btnLimparFiltros");
+  if (bl) bl.addEventListener("click", () => {
     filtroAtivo = { status: "ativas", oferece: "", pede: "", minhas: false };
     $("filtroStatus").value = "ativas";
     $("filtroOferece").value = "";
@@ -790,23 +830,29 @@ function configurarFiltros() {
 async function init() {
   console.log("🚀 BRN Exchange — Iniciando…");
 
+  // Aguarda ethers.js carregar (fallback do HTML) até 10s
+  let aguardou = 0;
+  while (typeof ethers === "undefined" && aguardou < 100) {
+    await new Promise(r => setTimeout(r, 100));
+    aguardou++;
+  }
+
   if (typeof ethers === "undefined") {
-    console.error("❌ Ethers.js não carregado!");
-    alert("ERRO: Ethers.js não foi carregado. Verifique a ordem dos scripts.");
+    console.error("❌ Ethers.js não carregado após 10s!");
+    alert("ERRO: Ethers.js não foi carregado. Verifique sua conexão.");
     return;
   }
   console.log("✅ Ethers.js carregado");
 
-  // ✅ Inicialização independente e paralela
   Promise.allSettled([
     atualizarStatusRede(),
     verificarStatusRedeBitcoin()
-  ]).then(([polygonResult, btcResult]) => {
+  ]).then(([polygonResult]) => {
     if (polygonResult.status === "fulfilled" && polygonResult.value) {
       carregarOrdens();
     } else {
       const container = $("orders");
-      if (container) container.innerHTML = '<div class="empty">❌ Sem conexão com a rede Polygon. Verifique sua internet ou tente novamente mais tarde.</div>';
+      if (container) container.innerHTML = '<div class="empty">❌ Sem conexão com a rede Polygon. Verifique sua internet.</div>';
     }
   });
 
@@ -816,86 +862,50 @@ async function init() {
   configurarAbas();
   configurarFiltros();
 
-  $("btnConnect").addEventListener("click", conectarCarteira);
-  $("btnDisconnect").addEventListener("click", desconectarCarteira);
-  $("btnRefresh").addEventListener("click", carregarOrdens);
-  $("btnCriarOrdem").addEventListener("click", criarOrdem);
-  $("btnEnviar").addEventListener("click", enviarToken);
-  $("btnConverterWPOL").addEventListener("click", wrapPOL);
-  $("btnConverterPOL").addEventListener("click", unwrapWPOL);
-  $("btnConsultarBTC")?.addEventListener("click", consultarSaldoBTC);
-  $("btcAddressInput")?.addEventListener("keydown", e => {
-    if (e.key === "Enter") consultarSaldoBTC();
-  });
+  // Botões principais (com verificação de existência)
+  const bind = (id, fn) => { const el = $(id); if (el) el.addEventListener("click", fn); };
+  bind("btnConnect", conectarCarteira);
+  bind("btnDisconnect", desconectarCarteira);
+  bind("btnRefresh", carregarOrdens);
+  bind("btnCriarOrdem", criarOrdem);
+  bind("btnEnviar", enviarToken);
+  bind("btnConverterWPOL", wrapPOL);
+  bind("btnConverterPOL", unwrapWPOL);
+  bind("btnConsultarBTC", consultarSaldoBTC);
 
-  $("btnMaxOf")?.addEventListener("click", () => {
+  const btcInput = $("btcAddressInput");
+  if (btcInput) btcInput.addEventListener("keydown", e => { if (e.key === "Enter") consultarSaldoBTC(); });
+
+  // Botões MAX
+  bind("btnMaxOf", () => {
     const sel = $("selOferece");
     const tok = tokenPorEndereco(sel.value);
     if (!tok) return;
     const val = saldos[tok.address] || 0n;
     $("valorOferece").value = trimZeros(ethers.utils.formatUnits(val.toString(), tok.decimals));
   });
-  $("btnMaxSend")?.addEventListener("click", () => {
+  bind("btnMaxSend", () => {
     const sel = $("selTokenEnvio");
     const tok = tokenPorEndereco(sel.value);
     if (!tok) return;
     const val = saldos[tok.address] || 0n;
     $("valorEnvio").value = trimZeros(ethers.utils.formatUnits(val.toString(), tok.decimals));
   });
-  $("btnMaxWrap")?.addEventListener("click", () => {
+  bind("btnMaxWrap", () => {
     $("valorWPOL").value = trimZeros(ethers.utils.formatUnits(saldos.POL.toString(), 18));
   });
-  $("btnMaxUnwrap")?.addEventListener("click", () => {
+  bind("btnMaxUnwrap", () => {
     const wpol = TOKENS.find(t => t.symbol === "WPOL");
     const saldo = saldos[wpol.address] || 0n;
     $("valorPOL").value = trimZeros(ethers.utils.formatUnits(saldo.toString(), 18));
   });
 
   ["selOferece", "selTokenEnvio"].forEach(id => {
-    $(id)?.addEventListener("change", renderizarSaldos);
+    const el = $(id);
+    if (el) el.addEventListener("change", renderizarSaldos);
   });
 
   console.log("✅ Inicialização concluída!");
-}
-
-function trimZeros(str) {
-  return str.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
-}
-
-async function consultarSaldoBTC() {
-    const input = $("btcAddressInput");
-    const card = $("btcResult");
-    const valEl = $("btcBalanceValue");
-    if (!input || !valEl) return;
-
-    const endereco = input.value.trim();
-    if (!endereco) { toast("Digite um endereço Bitcoin.", "warn"); return; }
-
-    valEl.textContent = "Consultando…";
-    card?.classList.add("show");
-
-    try {
-        const r = await fetchTimeout(
-            `https://blockstream.info/api/address/${encodeURIComponent(endereco)}`, 10000
-        );
-        if (!r.ok) throw new Error("Endereço inválido ou não encontrado");
-        const dados = await r.json();
-
-        const chain = dados.chain_stats || {};
-        const mem = dados.mempool_stats || {};
-        const satsConfirmado = (chain.funded_txo_sum || 0) - (chain.spent_txo_sum || 0);
-        const satsPendente   = (mem.funded_txo_sum || 0) - (mem.spent_txo_sum || 0);
-        const totalSats = satsConfirmado + satsPendente;
-
-        const btc = (totalSats / 1e8).toFixed(8);
-        valEl.textContent = `${btc} BTC`;
-        if (satsPendente !== 0) {
-            valEl.textContent += ` (${(satsPendente / 1e8).toFixed(8)} pendente)`;
-        }
-    } catch (e) {
-        valEl.textContent = "— BTC";
-        toast("❌ " + e.message, "err");
-    }
 }
 
 window.addEventListener("load", init);
