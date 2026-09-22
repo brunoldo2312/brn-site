@@ -1,231 +1,189 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BRN Exchange — Mural de Ordens</title>
+    <title>BRN Exchange — Mural de Ordens P2P</title>
     <link rel="stylesheet" href="style.css">
-    <!-- ⚠️ NÃO ALTERAR A ORDEM! Ethers primeiro, depois app.js -->
-    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <link rel="stylesheet" href="style-melhorias.css">
 </head>
 <body>
     <div class="container">
-        <!-- Cabeçalho -->
+        <!-- HEADER COM AS REDES SEPARADAS E SINCRONIZADAS -->
         <header>
             <div class="header-left">
                 <h1>🔷 BRN Exchange</h1>
-                <p>Mural de Ordens — Polygon Mainnet</p>
+                <p>Ecossistema Descentralizado de Troca de Ativos P2P</p>
             </div>
-            <div class="net-status">
-                <span class="dot load" id="netDot"></span>
-                <span id="netText">Verificando rede…</span>
+            <div class="net-status-container" style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px;">
+                <!-- Status Isolado da Rede Polygon -->
+                <div class="net-status" id="statusPolygon">
+                    <div id="netDot" class="dot load"></div>
+                    <span id="netText">Polygon: Conectando…</span>
+                </div>
+                <!-- Status Isolado da API de Monitoramento Bitcoin -->
+                <div class="net-status" id="statusBitcoin">
+                    <div id="btcDot" class="dot btc-status load"></div>
+                    <span id="btcText">Bitcoin API: Sincronizando…</span>
+                </div>
             </div>
         </header>
 
-        <!-- Barra da Carteira -->
+        <!-- BARRA DA CARTEIRA METAMASK -->
         <div class="wallet-bar">
-            <button id="btnConnect" class="btn btn-primary">🔗 Conectar MetaMask</button>
+            <button id="btnConnect" class="btn btn-primary">🔌 Conectar Carteira</button>
             <div id="walletInfo" class="wallet-info" style="display: none;">
-                <span>✅ Conectado:</span>
-                <code id="addr"></code>
-                <button id="btnDisconnect" class="btn btn-sm">Desconectar</button>
+                <span>Conectado: <code id="addr">—</code></span>
+                <button id="btnDisconnect" class="btn btn-sm btn-err">Desconectar</button>
             </div>
         </div>
 
-        <!-- Saldos -->
-        <div class="card">
-            <h2>💰 Meus Saldos</h2>
-            <div id="balances" class="balances">
-                <p class="dim">Conecte sua carteira para ver os saldos</p>
-            </div>
-        </div>
-
-        <!-- Abas -->
+        <!-- ABAS DE NAVEGAÇÃO DO SISTEMA -->
         <div class="tabs">
-            <button data-tab="mural" class="active">📋 Mural de Ordens</button>
-            <button data-tab="vender">➕ Criar Ordem</button>
+            <button class="active" data-tab="mural">📋 Mural de Ordens</button>
+            <button data-tab="vender">💰 Criar Ordem</button>
             <button data-tab="enviar">📤 Enviar Tokens</button>
-            <button data-tab="converter">🔄 POL ↔ WPOL</button>
+            <button data-tab="wpol">🔄 POL ↔ WPOL</button>
             <button data-tab="btc">₿ Consultar BTC</button>
-            <button data-tab="ajuda">❓ Ajuda</button>
+            <button data-tab="ajuda">❓ Ajuda & Contratos</button>
         </div>
 
-        <!-- Painel: Mural de Ordens -->
+        <!-- CONTAINER PARA TOASTS/NOTIFICAÇÕES -->
+        <div id="toasts" class="toast-container"></div>
+
+        <!-- PAINEL 1: MURAL DE ORDENS -->
         <div id="panel-mural" class="panel">
             <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                    <h2 id="counter">⏳ Consultando ordens…</h2>
-                    <button id="btnRefresh" class="btn btn-sm">🔄 Atualizar</button>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                    <h2>📋 Livro de Ofertas Ativas</h2>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <span id="counter" class="dim">0 ordens</span>
+                        <button id="btnRefresh" class="btn btn-sm btn-primary">🔄 Atualizar</button>
+                    </div>
                 </div>
-                <p id="muralInfo" class="dim" style="margin-bottom: 16px;"></p>
 
-                <!-- Filtros -->
+                <!-- FILTROS DO MURAL -->
                 <div class="filters">
                     <select id="filtroStatus">
-                        <option value="todas">📋 Todas</option>
-                        <option value="ativas" selected>🔵 Ativas</option>
+                        <option value="ativas">🔵 Ativas</option>
                         <option value="executaveis">⚡ Posso Executar</option>
                         <option value="executadas">✅ Executadas</option>
                         <option value="canceladas">❌ Canceladas</option>
                     </select>
                     <select id="filtroOferece">
                         <option value="">Todos os ativos oferecidos</option>
+                        <option value="0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210">Oferece: BRN</option>
+                        <option value="0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359">Oferece: USDC</option>
                     </select>
                     <select id="filtroPede">
                         <option value="">Todos os ativos desejados</option>
+                        <option value="0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359">Pede: USDC</option>
+                        <option value="0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210">Pede: BRN</option>
                     </select>
-                    <label style="white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem;">
                         <input type="checkbox" id="filtroMinhas"> Minhas ordens
                     </label>
                     <button id="btnLimparFiltros" class="btn btn-sm">✕ Limpar</button>
                 </div>
+                <small id="muralInfo" class="dim" style="display: block; margin-bottom: 12px;"></small>
 
+                <!-- LISTA DINÂMICA DE ORDENS -->
                 <div id="orders" class="orders">
-                    <div class="state">
-                        <div class="spinner"></div>
-                        <p>Carregando ordens da blockchain…</p>
-                    </div>
+                    <div class="empty">Carregando ordens da blockchain…</div>
                 </div>
             </div>
         </div>
 
-        <!-- Painel: Criar Ordem -->
+        <!-- PAINEL 2: CRIAR ORDEM -->
         <div id="panel-vender" class="panel" hidden>
             <div class="card">
                 <h2>➕ Criar Nova Ordem de Troca</h2>
-                <p class="dim" style="margin-bottom: 16px;">Defina o que você oferece e o que deseja receber em troca.</p>
-                
                 <div class="input-group">
                     <label>Você OFERECE:</label>
-                    <div class="row">
-                        <select id="selOferece"></select>
-                        <input type="text" id="valorOferece" placeholder="0.0" style="flex: 2;">
-                        <button id="btnMaxOf" class="btn btn-sm">MAX</button>
-                    </div>
-                    <small data-hint="saldo:selOferece" class="dim">Saldo: —</small>
+                    <select id="selOferece"></select>
                 </div>
-
                 <div class="input-group">
-                    <label>Você DESEJA receber:</label>
                     <div class="row">
-                        <select id="selDeseja"></select>
-                        <input type="text" id="valorDeseja" placeholder="0.0" style="flex: 2;">
+                        <input type="text" id="valorOferece" placeholder="Quantidade oferecida (Ex: 100.0)">
+                        <button id="btnMaxOf" class="btn">MAX</button>
                     </div>
+                    <small id="saldoOfereceHint" data-hint="saldo:selOferece" class="dim">Saldo: —</small>
                 </div>
-
-                <button id="btnCriarOrdem" class="btn btn-primary" style="width: 100%; margin-top: 16px;">✅ Criar Ordem</button>
-                <p class="dim" style="margin-top: 12px; font-size: 0.8rem;">
-                    ⚠️ Ao criar uma ordem, o valor oferecido fica bloqueado no contrato até que seja executado ou cancelado por você.
-                </p>
+                <div class="input-group" style="margin-top: 20px;">
+                    <label>Você DESEJA receber em troca:</label>
+                    <select id="selDeseja"></select>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="valorDeseja" placeholder="Quantidade desejada (Ex: 50.0)">
+                </div>
+                <button id="btnCriarOrdem" class="btn btn-success" style="margin-top: 12px;">📋 Criar Ordem no Escrow</button>
+                <div class="order-note warn" style="margin-top: 16px;">
+                    ⚠️ Ao submeter, seus fundos ficam protegidos sob custódia do contrato inteligente até a execução por terceiros ou seu cancelamento manual.
+                </div>
             </div>
         </div>
 
-        <!-- Painel: Enviar -->
+        <!-- PAINEL 3: ENVIAR TOKENS DIRETO -->
         <div id="panel-enviar" class="panel" hidden>
             <div class="card">
-                <h2>📤 Enviar Tokens</h2>
-                
+                <h2>📤 Enviar Ativos Direto (Transferência)</h2>
                 <div class="input-group">
                     <label>Token:</label>
                     <select id="selTokenEnvio"></select>
                 </div>
                 <div class="input-group">
-                    <label>Endereço de destino:</label>
+                    <label>Endereço de Destino EVM:</label>
                     <input type="text" id="destinoEnvio" placeholder="0x...">
                 </div>
                 <div class="input-group">
                     <label>Valor:</label>
                     <div class="row">
                         <input type="text" id="valorEnvio" placeholder="0.0">
-                        <button id="btnMaxSend" class="btn btn-sm">MAX</button>
+                        <button id="btnMaxSend" class="btn">MAX</button>
                     </div>
                     <small data-hint="saldo:selTokenEnvio" class="dim">Saldo: —</small>
                 </div>
-
-                <button id="btnEnviar" class="btn btn-primary" style="width: 100%; margin-top: 16px;">📤 Enviar</button>
+                <button id="btnEnviar" class="btn btn-primary" style="width: 100%; margin-top: 12px;">📤 Enviar Fundos</button>
             </div>
         </div>
 
-        <!-- Painel: Converter POL/WPOL -->
-        <div id="panel-converter" class="panel" hidden>
+        <!-- PAINEL 4: CONVERSÃO DE WRAPPERS POL -->
+        <div id="panel-wpol" class="panel" hidden>
             <div class="card">
-                <h2>🔄 Converter POL ↔ WPOL</h2>
-                
-                <h3>🔁 POL → WPOL</h3>
-                <div class="input-group">
-                    <label>Saldo disponível: <span data-hint="saldoPOL">0.00</span> POL</label>
-                    <div class="row">
-                        <input type="text" id="valorWPOL" placeholder="0.0">
-                        <button id="btnMaxWrap" class="btn btn-sm">MAX</button>
+                <h2>🔄 Swap Nativo 1:1 (POL ↔ WPOL)</h2>
+                <div class="trade-forms">
+                    <div class="form-card">
+                        <h3>🔁 Embrulhar (POL → WPOL)</h3>
+                        <p class="dim" style="font-size: 0.85rem; margin-bottom: 8px;">Saldo: <span data-hint="saldoPOL:">0.00</span> POL</p>
+                        <div class="row" style="margin-bottom: 8px;">
+                            <input type="text" id="valorWPOL" placeholder="Quantidade POL">
+                            <button id="btnMaxWrap" class="btn">MAX</button>
+                        </div>
+                        <button id="btnConverterWPOL" class="btn btn-success">Converter para WPOL</button>
+                    </div>
+                    <div class="form-card">
+                        <h3>🔁 Desembrulhar (WPOL → POL)</h3>
+                        <p class="dim" style="font-size: 0.85rem; margin-bottom: 8px;">Saldo: <span data-hint="saldoWPOL:">0.00</span> WPOL</p>
+                        <div class="row" style="margin-bottom: 8px;">
+                            <input type="text" id="valorPOL" placeholder="Quantidade WPOL">
+                            <button id="btnMaxUnwrap" class="btn">MAX</button>
+                        </div>
+                        <button id="btnConverterPOL" class="btn btn-danger">Converter para POL</button>
                     </div>
                 </div>
-                <button id="btnConverterWPOL" class="btn btn-primary" style="width: 100%; margin-bottom: 24px;">🔄 Converter para WPOL</button>
-
-                <hr>
-
-                <h3>🔁 WPOL → POL</h3>
-                <div class="input-group">
-                    <label>Saldo disponível: <span data-hint="saldoWPOL">0.00</span> WPOL</label>
-                    <div class="row">
-                        <input type="text" id="valorPOL" placeholder="0.0">
-                        <button id="btnMaxUnwrap" class="btn btn-sm">MAX</button>
-                    </div>
-                </div>
-                <button id="btnConverterPOL" class="btn btn-primary" style="width: 100%;">🔄 Converter para POL</button>
             </div>
         </div>
 
-        <!-- Painel: Consultar BTC -->
+        <!-- PAINEL 5: EXPLORADOR BITCOIN -->
         <div id="panel-btc" class="panel" hidden>
             <div class="card">
-                <h2>₿ Consultar Saldo BTC</h2>
-                <p class="dim" style="margin-bottom: 16px;">Consulte o saldo de qualquer endereço Bitcoin.</p>
-                
+                <h2>🟠 Consultar Saldo em Conta Bitcoin</h2>
+                <p class="dim" style="font-size: 0.85rem; margin-bottom: 12px;">Consulte saldos reais e atualizados de carteiras na rede nativa do Bitcoin.</p>
                 <div class="input-group">
-                    <label>Endereço Bitcoin:</label>
-                    <input type="text" id="btcAddressQuery" placeholder="bc1q... ou 1... ou 3...">
+                    <input type="text" id="btcAddressInput" placeholder="Digite o endereço BTC (Ex: bc1...)">
                 </div>
-                <button id="btnCheckBtc" class="btn btn-btc" style="width: 100%;">₿ Consultar Saldo</button>
-
-                <div id="btcBalanceResult" class="btc-balance-result">
-                    <div class="t">Saldo Confirmado</div>
-                    <div class="v" id="btcBalanceValue">—</div>
-                    <div class="dim" id="btcBalanceDetails"></div>
+                <button id="btnConsultarBtc" class="btn btn-btc" style="width: 100%; margin-top: 4px;">₿ Buscar Dados Públicos</button>
+                <div class="btc-balance-result" id="btcResultCard">
+                    <div class="t">Saldo Líquido Confirmado</div>
+                    <div class="v" id="btcBalanceValue">— BTC</div>
                 </div>
-            </div>
-        </div>
-
-        <!-- Painel: Ajuda -->
-        <div id="panel-ajuda" class="panel" hidden>
-            <div class="card">
-                <h2>❓ Ajuda e Informações</h2>
-                <h3>Como usar?</h3>
-                <ul>
-                    <li>1. Instale a extensão <strong>MetaMask</strong> no navegador</li>
-                    <li>2. Configure a rede <strong>Polygon Mainnet</strong>:</li>
-                    <ul style="margin-left: 16px;">
-                        <li>• RPC: https://polygon-rpc.com</li>
-                        <li>• Chain ID: 137</li>
-                        <li>• Símbolo: POL</li>
-                    </ul>
-                    <li>3. Clique em "Conectar MetaMask"</li>
-                    <li>4. Visualize, crie ou execute ordens de troca</li>
-                </ul>
-                
-                <h3 style="margin-top: 20px;">Contratos</h3>
-                <ul>
-                    <li><strong>Escrow Factory:</strong> <code>0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8</code></li>
-                    <li><strong>Token BRN:</strong> <code>0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210</code></li>
-                    <li><strong>WPOL:</strong> <code>0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270</code></li>
-                </ul>
-            </div>
-        </div>
-    </div>
-
-    <!-- Notificações -->
-    <div id="toasts" class="toast-container"></div>
-
-    <!-- ⚠️ app.js SEMPRE DEPOIS do ethers -->
-    <script src="app.js"></script>
-</body>
-</html>
