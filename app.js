@@ -1,17 +1,22 @@
 // ============================================================
-// APP.JS — Carteira BRN P2P (v4 — CORRIGIDO)
+// APP.JS — Carteira BRN P2P (v5 — WRAP AUTOMÁTICO)
 // Compatível com o EscrowFactory JÁ DEPLOYADO (sem alterar .sol)
 //
-// Correções desta versão (v4):
-//  [FIX 1] decString aceita bytes32 (tokens antigos)
+// Novidades v5:
+//  [WRAP] POL aparece como opção em Vender e Executar
+//  [WRAP] App faz wrap/unwrap automático nos bastidores
+//  [WRAP] Usuário confirma UMA vez; app encadeia as txs
+//
+// Correções v4 mantidas:
+//  [FIX 1] decString aceita bytes32
 //  [FIX 2] decAddressArray tolerante a offsets variados
 //  [FIX 3] decBoolSeguro valida se é realmente bool
 //  [FIX 4] verificarTokens marca definitivo após N tentativas
 //  [FIX 5] renderMural usa fallback em o.indice
-//  [FIX 6] enviarTx estima gasLimit com margem de 20%
+//  [FIX 6] enviarTx estima gasLimit com margem
 //  [FIX 7] accountsChanged reconecta sem reload
 //  [FIX 8] rawCall só interrompe fallback em revert REAL
-//  [FIX 9] aviso visível quando há ordens com erro de leitura
+//  [FIX 9] aviso visível quando há ordens com erro
 //  [FIX 10] lerOrdem valida layout de obterDados()
 // ============================================================
 
@@ -19,8 +24,15 @@
 const ESCROW_FACTORY_ADDRESS = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
 
+// WPOL (Wrapped POL) — usado para wrap/unwrap automático
+const WPOL_ADDRESS = "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270";
+const SEL_WPOL = {
+  deposit:  "d0e30db0", // deposit() payable
+  withdraw: "2e1a7d4d", // withdraw(uint256)
+};
+
 // ------------------------------------------------------------
-// LISTA DE TOKENS SUPORTADOS (única fonte de verdade)
+// LISTA DE TOKENS SUPORTADOS
 // ------------------------------------------------------------
 const NATIVO = { symbol: "POL", name: "POL (nativo)", decimals: 18, native: true };
 const TOKENS = [
@@ -42,7 +54,7 @@ const RPCS = [
 const RPC_TIMEOUT_MS = 8000;
 const MAX_ORDENS = 1000;
 const CONCORRENCIA = 5;
-const MAX_TENTATIVAS_TOKEN = 3; // [FIX 4]
+const MAX_TENTATIVAS_TOKEN = 3;
 
 // --- SELECTORS ---
 const SEL_FACTORY = {
@@ -183,7 +195,6 @@ function decBool(word) {
   if (v > 1n) throw new Error("Booleano inválido na resposta.");
   return v === 1n;
 }
-// [FIX 3] retorna null se não for bool (em vez de lançar)
 function decBoolSeguro(word) {
   try {
     const v = decUint(word);
@@ -201,12 +212,10 @@ function splitWords(hex) {
   return out;
 }
 
-// [FIX 2] decodifica address[] com tolerância a offsets variados
 function decAddressArray(hex) {
   const w = splitWords(hex);
   if (w.length < 1) throw new Error("Lista de ordens inválida.");
 
-  // Caso 1: array dinâmico normal (offset + length + itens)
   if (w.length >= 2) {
     try {
       const off = Number(decUint(w[0]));
@@ -224,7 +233,6 @@ function decAddressArray(hex) {
     } catch (e) { /* tenta caso 2 */ }
   }
 
-  // Caso 2: array fixo inline (sem offset) — cada palavra é um endereço
   const arr = [];
   for (const word of w) {
     try { arr.push(decAddress(word)); } catch (e) { break; }
@@ -234,11 +242,9 @@ function decAddressArray(hex) {
   return arr;
 }
 
-// [FIX 1] decString aceita string dinâmica OU bytes32
 function decString(hex) {
   const w = splitWords(hex);
 
-  // Caso 1: string dinâmica (offset 32 + length + dados)
   if (w.length >= 2 && Number(decUint(w[0])) === 32) {
     const len = Number(decUint(w[1]));
     if (Number.isSafeInteger(len) && len <= 64 && 2 + Math.ceil(len / 32) <= w.length) {
@@ -247,14 +253,12 @@ function decString(hex) {
     }
   }
 
-  // Caso 2: bytes32 (tokens antigos)
   if (w.length === 1) {
     const raw = w[0].replace(/(00)+$/, "");
     if (!raw) return "";
     try { return ethers.utils.toUtf8String("0x" + raw); } catch (e) { /* falha */ }
   }
 
-  // Caso 3: string com padding extra — tenta ler como bytes32 do primeiro word
   if (w.length >= 1) {
     const raw = w[0].replace(/(00)+$/, "");
     if (raw) {
@@ -300,25 +304,4 @@ function normalizarTokens() {
     if (t.tentativas === undefined) t.tentativas = 0;
   }
 }
-function tokenPorEndereco(addr) { return TOKENS.find(t => mesmoEndereco(t.address, addr)) || null; }
-function tokenOk(addr) { const t = tokenPorEndereco(addr); return t && t.ok ? t : null; }
-function tokensOk() { return TOKENS.filter(t => t.ok); }
-function ativoPorId(id) { return id === "POL" ? NATIVO : tokenOk(id); }
-
-// [FIX 4] marca definitivo após N tentativas (evita oscilação)
-async function verificarTokens() {
-  await mapLimit(TOKENS, CONCORRENCIA, async (t) => {
-    if (t.ok || t.definitivo) return;
-    t.tentativas++;
-    try {
-      const rd = await rawCall(t.address, "0x" + SEL_ERC20.decimals);
-      const dec = Number(decUint(splitWords(rd)[0]));
-
-      let simbolo = null;
-      try { simbolo = decString(await rawCall(t.address, "0x" + SEL_ERC20.symbol)); }
-      catch (e) { /* símbolo opcional */ }
-
-      const decOk = dec === t.decimals;
-      const symOk = !t.symbols || (simbolo !== null && t.symbols.includes(simbolo.toUpperCase()));
-      t.ok = decOk && symOk;
-      if (!t
+function tokenPorEndereco(addr) { return TOKENS.find(t => mesmo
