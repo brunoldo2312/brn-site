@@ -107,6 +107,7 @@
         .chip.brn { background: #4f46f1; color: white; }
         .chip.pol { background: #8247e5; color: white; }
         .chip.usdc { background: #2775ca; color: white; }
+        .chip.btc { background: var(--btc); color: #000; }
         .chip.other { background: var(--border); color: var(--text); }
         .filters {
             display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
@@ -185,14 +186,6 @@
         .wallet-info { display: flex; align-items: center; gap: 10px; }
         .wallet-info code { font-family: monospace; font-size: 0.85rem; color: var(--text-muted); }
         .wallet-info span { font-size: 0.9rem; }
-        .converter-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-        .conv-tab {
-            flex: 1; padding: 10px; background: var(--bg); border: 1px solid var(--border);
-            color: var(--text-muted); border-radius: var(--radius); cursor: pointer;
-        }
-        .conv-tab.active { background: var(--accent); color: white; border-color: var(--accent); }
-        .conv-tab.btc { border-color: var(--btc); color: var(--btc); }
-        .conv-tab.btc.active { background: var(--btc); color: #000; }
         .bal-row {
             display: flex; justify-content: space-between; padding: 8px 0;
             font-size: 0.9rem; border-bottom: 1px solid var(--border); margin-bottom: 12px;
@@ -207,12 +200,23 @@
             display: block; font-family: monospace; word-break: break-all;
             margin-top: 8px; color: var(--btc); font-size: 0.9rem;
         }
+        .btc-balance-result {
+            background: rgba(247, 147, 26, 0.05);
+            border: 1px solid var(--btc);
+            border-radius: var(--radius);
+            padding: 16px; margin-top: 12px;
+            display: none;
+        }
+        .btc-balance-result.show { display: block; }
+        .btc-balance-result .v { font-size: 1.4rem; font-weight: 700; color: var(--btc); }
+        .btc-balance-result .t { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; }
         ul { padding-left: 20px; font-size: 0.85rem; color: var(--text-muted); }
         ul li { margin: 4px 0; }
         a { color: #58a6ff; text-decoration: none; }
         a:hover { text-decoration: underline; }
         small { font-size: 0.75rem; }
         .hidden { display: none !important; }
+        .source-note { font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; }
     </style>
 
     <!-- Ethers.js v5.7.2 -->
@@ -247,6 +251,7 @@
             <button data-tab="vender">💰 Vender</button>
             <button data-tab="enviar">📤 Enviar</button>
             <button data-tab="converter">🔄 POL/WPOL</button>
+            <button data-tab="btc">🟠 Bitcoin</button>
             <button data-tab="ajuda">❓ Ajuda</button>
         </nav>
 
@@ -293,7 +298,7 @@
             </div>
 
             <div class="card">
-                <h3>💰 Seus Saldos</h3>
+                <h3>💰 Seus Saldos (Polygon)</h3>
                 <div class="balances" id="balances"></div>
             </div>
         </div>
@@ -342,7 +347,7 @@
         <div data-panel="enviar" class="panel" hidden>
             <div class="card">
                 <h2>📤 Enviar Ativos</h2>
-                <p class="dim" style="margin-bottom:16px;">Envie POL ou tokens ERC20 para outro endereço</p>
+                <p class="dim" style="margin-bottom:16px;">Envie POL ou tokens ERC20 para outro endereço na Polygon</p>
 
                 <div class="input-group">
                     <label>Ativo</label>
@@ -350,7 +355,7 @@
                     <small class="dim" data-hint="saldo:sendToken">—</small>
                 </div>
                 <div class="input-group">
-                    <label>Endereço de destino</label>
+                    <label>Endereço de destino (0x…)</label>
                     <input type="text" id="sendDestino" placeholder="0x…">
                 </div>
                 <div class="input-group">
@@ -404,6 +409,70 @@
         </div>
 
         <!-- ===================================================== -->
+        <!-- ABA: BITCOIN — BTC ↔ WBTC + CONSULTA BTC -->
+        <!-- ===================================================== -->
+        <div data-panel="btc" class="panel" hidden>
+            <div class="card">
+                <h2>🟠 Bitcoin — BTC & WBTC</h2>
+                <p class="dim" style="margin-bottom:20px;">Consulte saldos na rede Bitcoin e saiba mais sobre WBTC</p>
+
+                <!-- CONSULTA SALDO BTC NATIVO -->
+                <h3 style="font-size:0.95rem; margin-bottom:12px;">📥 Consultar Saldo de Endereço BTC</h3>
+                <div class="input-group">
+                    <label>Endereço Bitcoin</label>
+                    <div class="row">
+                        <input type="text" id="btcAddressQuery" placeholder="bc1q… / 1… / 3…">
+                        <button class="btn-btc" id="btnCheckBtc">🔍 Consultar</button>
+                    </div>
+                </div>
+                
+                <div class="btc-balance-result" id="btcBalanceResult">
+                    <div class="t">Saldo do endereço:</div>
+                    <div class="v" id="btcBalanceValue">— BTC</div>
+                    <div class="bal-sub" id="btcBalanceDetails"></div>
+                    <div class="source-note">Fonte: <a href="https://mempool.space" target="_blank" rel="noopener noreferrer">mempool.space ↗</a> • Apenas consulta, sem acesso à sua carteira</div>
+                </div>
+
+                <div style="margin-top:24px; padding-top:20px; border-top: 1px solid var(--border);"></div>
+
+                <!-- SALDO WBTC NA POLYGON -->
+                <h3 style="font-size:0.95rem; margin-bottom:12px;">💰 Seu Saldo WBTC (Polygon)</h3>
+                <div class="balances">
+                    <div class="bal">
+                        <span class="t">
+                            <span class="chip btc">₿</span>
+                            WBTC<br><small>• Rede Polygon</small>
+                        </span>
+                        <span class="v" data-hint="saldo:0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6">—</span>
+                    </div>
+                </div>
+
+                <div style="margin-top:24px; padding-top:20px; border-top: 1px solid var(--border);"></div>
+
+                <!-- INFORMAÇÕES SOBRE A PONTE -->
+                <h3 style="font-size:0.95rem; margin-bottom:12px;">🔄 Ponte BTC ↔ WBTC</h3>
+                <div class="btc-address">
+                    <h4 style="font-size:0.9rem; margin-bottom:10px; color:var(--btc);">Como funciona:</h4>
+                    <ul style="margin-left:16px;">
+                        <li><strong>WBTC</strong> = Wrapped Bitcoin na rede Polygon</li>
+                        <li><strong>1 WBTC ≈ 1 BTC</strong> (valor de mercado)</li>
+                        <li>Para converter, use a <strong>ponte oficial</strong>: <a href="https://wbtc.network/" target="_blank" rel="noopener noreferrer">wbtc.network ↗</a></li>
+                        <li>Você não precisa "importar" seu endereço BTC — basta informá-lo ao sacar</li>
+                    </ul>
+                </div>
+                
+                <div style="margin-top:16px;">
+                    <h4 style="font-size:0.9rem; margin-bottom:8px;">⚠️ Importante:</h4>
+                    <ul>
+                        <li>Esta aplicação <strong>não controla</strong> a ponte WBTC — use sempre o site oficial</li>
+                        <li>Endereços BTC começam com: <code>bc1q…</code>, <code>1…</code> ou <code>3…</code></li>
+                        <li>Endereços WBTC começam com: <code>0x…</code> (Polygon)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================================================== -->
         <!-- ABA: AJUDA -->
         <!-- ===================================================== -->
         <div data-panel="ajuda" class="panel" hidden>
@@ -420,7 +489,7 @@
                     <li>Veja as ordens no mural ou crie a sua</li>
                     <li>Para trocar: clique em "Executar" na ordem desejada</li>
                     <li>Para converter POL ↔ WPOL: use a aba "POL/WPOL"</li>
-                    <li>Para enviar tokens: use a aba "Enviar"</li>
+                    <li>Para consultar saldo BTC: use a aba "Bitcoin" — é só leitura, seguro e gratuito</li>
                 </ul>
 
                 <h3 style="margin-top:20px;">⚠️ Avisos</h3>
@@ -428,7 +497,7 @@
                     <li>O contrato EscrowFactory não é verificado no PolygonScan — use valores pequenos</li>
                     <li>Verifique sempre os endereços antes de confirmar transações</li>
                     <li>As taxas de gás são pagas em POL (MATIC)</li>
-                    <li>Perdeu a conexão? Atualize a página e reconecte</li>
+                    <li>Consulta de saldo BTC usa API pública externa — não precisa de chave</li>
                 </ul>
             </div>
         </div>
@@ -437,6 +506,334 @@
     <!-- TOAST NOTIFICAÇÕES -->
     <div class="toast-container" id="toasts"></div>
 
-    <script src="app.js"></script>
-</body>
-</html>
+    <script>
+// ============================================================
+// APP.JS — Carteira BRN P2P + CONSULTA BTC
+// ============================================================
+
+const ESCROW_FACTORY_ADDRESS = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
+const POLYGON_CHAIN_ID = 137;
+const APP_VERSION = "v5.0";
+
+const NATIVO = { symbol: "POL", name: "POL (nativo)", decimals: 18, native: true };
+const TOKENS = [
+  { symbol: "BRN",    name: "BRN",                address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
+  { symbol: "USDC.e", name: "USD Coin (PoS)",     address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6 },
+  { symbol: "USDC",   name: "USD Coin (nativo)",  address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
+  { symbol: "USDT",   name: "Tether USD",         address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6 },
+  { symbol: "DAI",    name: "Dai Stablecoin",     address: "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063", decimals: 18 },
+  { symbol: "WPOL",   name: "Wrapped POL",        address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
+  { symbol: "WBTC",   name: "Wrapped BTC",        address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8 },
+  { symbol: "WETH",   name: "Wrapped Ether",      address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18 },
+];
+
+const RPCS = [
+  "https://polygon-bor-rpc.publicnode.com",
+  "https://polygon.drpc.org",
+  "https://polygon-rpc.com",
+  "https://rpc.ankr.com/polygon",
+];
+const RPC_TIMEOUT_MS = 8000;
+const MAX_ORDENS = 1000;
+const CONCORRENCIA = 8;
+
+const SEL_FACTORY = {
+  criarOrdem:   "ceff4da6",
+  ordensDe:     "0dc80995",
+  ordem:        "72c453b8",
+  totalOrdens:  "8275d6fa",
+  todasOrdens:  "e9b1e327",
+};
+const SEL_ESCROW = {
+  criador:        "041c797c",
+  tokenDesejado:  "0cd59b77",
+  executado:      "2a3a5716",
+  obterDados:     "32c9e06c",
+  valorDesejado:  "651cc708",
+  cancelado:      "7766a742",
+  tokenOferecido: "8a337bdc",
+  cancelar:       "8ffb1ccf",
+  executar:       "b2d44d08",
+  factory:        "c45a0155",
+  valorOferecido: "f6c467b7",
+};
+const SEL_ERC20 = {
+  balanceOf: "70a08231",
+  allowance: "dd62ed3e",
+  approve:   "095ea7b3",
+  transfer:  "a9059cbb",
+  decimals:  "313ce567",
+};
+const SEL_WPOL = { deposit: "d0e30db0", withdraw: "2e1a7d4d" };
+
+let walletProvider = null;
+let signer = null;
+let userAddress = null;
+let currentRpc = null;
+let rpcIdx = 0;
+const providersOk = {};
+let ordersCache = [];
+let carregando = false;
+let emTransacao = false;
+let listenersRegistrados = false;
+const saldos = {};
+const filtro = { status: "todas", oferece: "", pede: "", minhas: false };
+const ABAS = ["mural", "vender", "enviar", "converter", "btc", "ajuda"];
+
+// ============================================================
+// 🟠 CONSULTA DE SALDO BTC — API PÚBLICA
+// ============================================================
+
+/**
+ * Valida formato de endereço Bitcoin
+ * Suporta: bc1q… (SegWit), 1… (Legacy), 3… (P2SH)
+ */
+function validarEnderecoBTC(endereco) {
+  if (!endereco || typeof endereco !== "string") return false;
+  const s = endereco.trim();
+  // bc1q… (Bech32 / SegWit)
+  if (/^bc1q[a-z0-9]{38,59}$/i.test(s)) return true;
+  // 1… (Legacy)
+  if (/^1[a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(s)) return true;
+  // 3… (P2SH)
+  if (/^3[a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(s)) return true;
+  return false;
+}
+
+/**
+ * Consulta saldo de endereço BTC via API pública do mempool.space
+ * NÃO precisa de chave — apenas leitura pública
+ */
+async function consultarSaldoBTC(enderecoBTC) {
+  const resultadoEl = document.getElementById("btcBalanceResult");
+  const valorEl = document.getElementById("btcBalanceValue");
+  const detalhesEl = document.getElementById("btcBalanceDetails");
+  
+  if (!validarEnderecoBTC(enderecoBTC)) {
+    toast("Endereço BTC inválido. Verifique o formato.", "warn");
+    resultadoEl.classList.remove("show");
+    return null;
+  }
+
+  try {
+    const apiUrl = `https://mempool.space/api/address/${enderecoBTC.trim()}`;
+    const resposta = await fetch(apiUrl, {
+      method: "GET",
+      cache: "no-cache",
+      signal: AbortSignal.timeout(10000)
+    });
+
+    if (!resposta.ok) {
+      throw new Error(`Endereço não encontrado ou API indisponível (${resposta.status})`);
+    }
+
+    const dados = await resposta.json();
+    
+    // Converter satoshis para BTC (1 BTC = 100.000.000 sats)
+    const saldoTotal = dados.chain_stats.funded_txo_sum / 100000000;
+    const saldoGasto = dados.chain_stats.spent_txo_sum / 100000000;
+    const saldoConfirmado = saldoTotal - saldoGasto;
+    const saldoPendenteEntrada = dados.mempool_stats.funded_txo_sum / 100000000;
+    const saldoPendenteSaida = dados.mempool_stats.spent_txo_sum / 100000000;
+    const saldoPendente = saldoPendenteEntrada - saldoPendenteSaida;
+
+    // Exibir resultado
+    valorEl.textContent = `${saldoConfirmado.toFixed(8)} BTC`;
+    detalhesEl.textContent = saldoPendente > 0 
+      ? `Pendente: +${saldoPendente.toFixed(8)} BTC` 
+      : saldoPendente < 0
+        ? `Pendente: ${saldoPendente.toFixed(8)} BTC`
+        : "Nenhuma transação pendente";
+    
+    resultadoEl.classList.add("show");
+    toast("✅ Saldo consultado com sucesso!", "ok");
+    
+    return { 
+      endereco: enderecoBTC,
+      saldoConfirmado,
+      saldoPendente,
+      totalRecebido: saldoTotal,
+      totalGasto: saldoGasto
+    };
+  } catch (erro) {
+    console.error("Erro na consulta BTC:", erro);
+    valorEl.textContent = "Erro na consulta";
+    detalhesEl.textContent = erro.message || "Tente novamente mais tarde";
+    resultadoEl.classList.add("show");
+    toast("Falha ao consultar: " + erro.message, "err");
+    return null;
+  }
+}
+
+// ============================================================
+// UTILITÁRIOS
+// ============================================================
+function $(id) { return document.getElementById(id); }
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function isAddr(a) { return typeof a === "string" && /^0x[0-9a-fA-F]{40}$/.test(a); }
+function short(a) { return isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—"; }
+function shortHash(h) { return typeof h === "string" && /^0x[0-9a-fA-F]{64}$/.test(h) ? h.slice(0, 10) + "…" + h.slice(-6) : "—"; }
+function mesmoEndereco(a, b) { return !!a && !!b && a.toLowerCase() === b.toLowerCase(); }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function fmt(value, decimals, maxFrac = 8) {
+  try {
+    const s = ethers.utils.formatUnits(value.toString(), decimals);
+    const partes = s.split(".");
+    const inteiro = BigInt(partes[0]).toLocaleString("pt-BR");
+    const frac = (partes[1] || "").slice(0, maxFrac).replace(/0+$/, "");
+    if (BigInt(value) > 0n && inteiro === "0" && !frac) return "< 0," + "0".repeat(maxFrac - 1) + "1";
+    return frac ? inteiro + "," + frac : inteiro;
+  } catch (e) { return String(value); }
+}
+
+function paraInput(valor, decimals) {
+  const s = ethers.utils.formatUnits(valor.toString(), decimals);
+  return s.replace(/\.0+$/, "");
+}
+
+function toast(msg, type = "info", ms = 5000, href = null) {
+  const box = $("toasts"); if (!box) return;
+  const t = el("div", "toast " + type, msg);
+  if (href && /^https:\/\/polygonscan\.com\/tx\/0x[0-9a-fA-F]{64}$/.test(href)) {
+    const a = el("a", "", " · ver no PolygonScan ↗");
+    a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer";
+    t.appendChild(a);
+  }
+  box.appendChild(t);
+  setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, ms);
+}
+function toastTx(msg, hash, type = "info") {
+  toast(msg + " " + shortHash(hash), type, 12000, "https://polygonscan.com/tx/" + hash);
+}
+
+function setNet(state, text) {
+  const dot = $("netDot"), txt = $("netText");
+  if (dot) dot.className = "dot " + (state === "ok" ? "" : state);
+  if (txt) txt.textContent = text;
+}
+
+function erroLegivel(e) {
+  if (!e) return "Erro desconhecido.";
+  if (e.code === 4001 || e.code === "ACTION_REJECTED") return "Transação recusada na carteira.";
+  const m = e.reason || (e.data && e.data.message) || (e.error && e.error.message) || e.message || String(e);
+  return String(m).slice(0, 220);
+}
+
+const HEX_WORD = /^[0-9a-fA-F]{64}$/;
+function pad32(hexNo0x) { return hexNo0x.padStart(64, "0"); }
+function encAddress(addr) {
+  if (!isAddr(addr)) throw new Error("Endereço inválido.");
+  return pad32(addr.toLowerCase().slice(2));
+}
+function encUint(n) {
+  const v = BigInt(n);
+  if (v < 0n || v >= (1n << 256n)) throw new Error("Valor fora do intervalo uint256.");
+  return pad32(v.toString(16));
+}
+function decUint(word) {
+  if (!HEX_WORD.test(word || "")) throw new Error("Resposta ABI inválida.");
+  return BigInt("0x" + word);
+}
+function decAddress(word) {
+  if (!HEX_WORD.test(word || "") || !/^0{24}/.test(word)) throw new Error("Endereço inválido na resposta.");
+  return ethers.utils.getAddress("0x" + word.slice(24).toLowerCase());
+}
+function decBool(word) {
+  const v = decUint(word);
+  if (v > 1n) throw new Error("Booleano inválido na resposta.");
+  return v === 1n;
+}
+function splitWords(hex) {
+  if (typeof hex !== "string" || !/^0x([0-9a-fA-F]{2})*$/.test(hex)) throw new Error("Resposta inválida do RPC.");
+  const b = hex.slice(2);
+  if (b.length % 64 !== 0) throw new Error("Resposta com tamanho inesperado.");
+  const out = [];
+  for (let i = 0; i < b.length; i += 64) out.push(b.slice(i, i + 64));
+  return out;
+}
+function decAddressArray(hex) {
+  const w = splitWords(hex);
+  if (w.length < 2) throw new Error("Lista de ordens inválida.");
+  const off = Number(decUint(w[0]));
+  if (off % 32 !== 0) throw new Error("Lista de ordens inválida.");
+  const start = off / 32;
+  if (start >= w.length) throw new Error("Lista de ordens inválida.");
+  const len = Number(decUint(w[start]));
+  if (!Number.isSafeInteger(len) || len > MAX_ORDENS || start + 1 + len > w.length) throw new Error("Lista de ordens inválida.");
+  const arr = [];
+  for (let i = 0; i < len; i++) arr.push(decAddress(w[start + 1 + i]));
+  return arr;
+}
+
+function lerValor(txt, dec, nome) {
+  const s = String(txt || "").trim().replace(",", ".");
+  if (!/^\d+(\.\d+)?$/.test(s)) throw new Error("Informe um valor válido de " + nome + ".");
+  let v;
+  try { v = BigInt(ethers.utils.parseUnits(s, dec).toString()); }
+  catch (e) { throw new Error(nome + ": no máximo " + dec + " casas decimais."); }
+  if (v <= 0n) throw new Error("O valor de " + nome + " deve ser maior que zero.");
+  return v;
+}
+
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+// ============================================================
+// TOKENS
+// ============================================================
+function normalizarTokens() {
+  for (const t of TOKENS) {
+    try { t.address = ethers.utils.getAddress(t.address.toLowerCase()); }
+    catch (e) { t.address = null; }
+  }
+}
+function tokenPorEndereco(addr) { return TOKENS.find(t => t.address && mesmoEndereco(t.address, addr)) || null; }
+function tokenOk(addr) { return tokenPorEndereco(addr); }
+function tokensOk() { return TOKENS.filter(t => !!t.address); }
+function fmtToken(valor, tokenAddr) {
+  const t = tokenOk(tokenAddr);
+  if (t) return fmt(valor, t.decimals) + " " + t.symbol;
+  return valor.toString() + " unid. de " + short(tokenAddr);
+}
+function chipClasse(symbol) {
+  if (symbol === "BRN") return "brn";
+  if (symbol === "POL" || symbol === "WPOL") return "pol";
+  if (symbol === "WBTC") return "btc";
+  if (symbol.indexOf("USD") === 0) return "usdc";
+  return "other";
+}
+
+// ============================================================
+// RPCs
+// ============================================================
+async function withTimeout(promise, ms) {
+  Promise.resolve(promise).catch(() => {});
+  let t;
+  const timeout = new Promise((_, rej) => { t = setTimeout(() => rej(new Error("timeout")), ms); });
+  try { return await Promise.race([promise, timeout]); }
+  finally { clearTimeout(t); }
+}
+
+async function getProvider
