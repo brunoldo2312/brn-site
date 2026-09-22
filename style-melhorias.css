@@ -1,3 +1,4 @@
+
 /* === Saldos === */
 .balances-grid {
     display: grid;
@@ -168,7 +169,7 @@
     padding: 1rem;
 }
 
-/* === Responsividade === */
+/* === Responsivo === */
 @media (max-width: 768px) {
     .orderbook-grid, .trade-forms {
         grid-template-columns: 1fr;
