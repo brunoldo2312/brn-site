@@ -4,227 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BRN Exchange — Mural de Ordens</title>
-    <style>
-        :root {
-            color-scheme: dark;
-            --bg: #0d1117;
-            --card: #161b22;
-            --border: #30363d;
-            --accent: #238636;
-            --accent-hover: #2ea043;
-            --text: #e6edf3;
-            --text-muted: #8b949e;
-            --danger: #da3633;
-            --btc: #f7931a;
-            --radius: 8px;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            padding: 16px;
-            line-height: 1.5;
-        }
-        .container { max-width: 900px; margin: 0 auto; }
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid var(--border);
-        }
-        .header-left h1 { font-size: 1.4rem; }
-        .header-left p { font-size: 0.85rem; color: var(--text-muted); }
-        .net-status { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; }
-        .dot {
-            width: 10px; height: 10px; border-radius: 50%;
-            background: var(--accent);
-        }
-        .dot.off { background: var(--danger); }
-        .dot.load { background: #d29922; animation: pulse 1s infinite; }
-        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-        .btn {
-            padding: 8px 16px; border-radius: var(--radius); border: none;
-            cursor: pointer; font-size: 0.9rem; font-weight: 500;
-            transition: opacity 0.2s;
-        }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
-        .btn-primary { background: var(--accent); color: white; }
-        .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
-        .btn-ok { background: var(--accent); color: white; }
-        .btn-err { background: var(--danger); color: white; }
-        .btn-btc { background: var(--btc); color: #000; font-weight: 600; }
-        .btn-btc:hover { background: #f9a847; }
-        .tabs {
-            display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 20px;
-            border-bottom: 1px solid var(--border); padding-bottom: 4px;
-        }
-        .tabs button {
-            background: transparent; border: none; color: var(--text-muted);
-            padding: 8px 12px; border-radius: var(--radius); cursor: pointer;
-            font-size: 0.9rem;
-        }
-        .tabs button.active { background: var(--card); color: var(--text); }
-        .panel { animation: fadeIn 0.2s ease; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .card {
-            background: var(--card); border: 1px solid var(--border);
-            border-radius: var(--radius); padding: 20px; margin-bottom: 16px;
-        }
-        .card h2 { font-size: 1.1rem; margin-bottom: 16px; }
-        .card h3 { font-size: 0.95rem; margin-bottom: 8px; }
-        .dim { color: var(--text-muted); }
-        .input-group { margin-bottom: 12px; }
-        .input-group label {
-            display: block; margin-bottom: 6px; font-size: 0.85rem; color: var(--text-muted);
-        }
-        input, select {
-            width: 100%; padding: 10px 12px; background: var(--bg);
-            border: 1px solid var(--border); border-radius: var(--radius);
-            color: var(--text); font-size: 0.95rem;
-        }
-        input:focus, select:focus { outline: none; border-color: var(--accent); }
-        .row { display: flex; gap: 8px; }
-        .row input { flex: 1; }
-        .balances { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-        .bal {
-            background: var(--bg); border: 1px solid var(--border);
-            border-radius: var(--radius); padding: 12px;
-        }
-        .bal .t { font-size: 0.85rem; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
-        .bal .v { font-size: 1.1rem; font-weight: 600; }
-        .bal .v.dim { color: var(--text-muted); }
-        .bal-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
-        .chip {
-            display: inline-flex; align-items: center; justify-content: center;
-            width: 24px; height: 24px; border-radius: 50%;
-            font-weight: bold; font-size: 0.75rem;
-        }
-        .chip.brn { background: #4f46f1; color: white; }
-        .chip.pol { background: #8247e5; color: white; }
-        .chip.usdc { background: #2775ca; color: white; }
-        .chip.btc { background: var(--btc); color: #000; }
-        .chip.other { background: var(--border); color: var(--text); }
-        .filters {
-            display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
-            padding: 12px; background: var(--bg); border-radius: var(--radius);
-        }
-        .filters > * { flex: 1; min-width: 120px; }
-        .orders { display: flex; flex-direction: column; gap: 12px; }
-        .order {
-            background: var(--bg); border: 1px solid var(--border);
-            border-radius: var(--radius); padding: 16px;
-            transition: border-color 0.2s;
-        }
-        .order.active { border-color: var(--accent); }
-        .order.done { border-color: #1a7f37; opacity: 0.8; }
-        .order.cancelled { border-color: var(--danger); opacity: 0.6; }
-        .order.blocked { border-color: #d29922; opacity: 0.7; }
-        .order.error { border-color: var(--danger); opacity: 0.6; }
-        .order-head {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 12px;
-        }
-        .order-num { font-weight: bold; color: var(--text-muted); }
-        .order-id { font-family: monospace; font-size: 0.8rem; color: var(--text-muted); }
-        .tag {
-            padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;
-        }
-        .tag.active { background: rgba(35,134,54,0.15); color: #3fb950; }
-        .tag.done { background: rgba(26,127,55,0.15); color: #3fb950; }
-        .tag.cancelled { background: rgba(218,54,51,0.15); color: #da3633; }
-        .tag.blocked { background: rgba(210,153,34,0.15); color: #d29922; }
-        .swap { display: flex; align-items: center; justify-content: space-around; margin: 12px 0; }
-        .swap-side { text-align: center; flex: 1; }
-        .swap-lbl { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; }
-        .swap-amt { font-size: 1.1rem; font-weight: 600; }
-        .swap-icon { font-size: 1.2rem; padding: 0 8px; color: var(--text-muted); }
-        .swap-escrow { font-size: 0.75rem; margin-top: 4px; }
-        .swap-escrow.ok { color: var(--accent); }
-        .swap-escrow.bad { color: var(--danger); }
-        .order-foot {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
-        }
-        .order-meta { font-size: 0.8rem; color: var(--text-muted); }
-        .order-actions { display: flex; gap: 6px; }
-        .order-note { margin-top: 8px; padding: 6px 8px; border-radius: 4px; font-size: 0.8rem; }
-        .warn { background: rgba(210,153,34,0.1); color: #d29922; border: 1px solid rgba(210,153,34,0.3); }
-        .empty { text-align: center; padding: 40px 20px; color: var(--text-muted); }
-        .empty .big { font-size: 2.5rem; margin-bottom: 12px; }
-        .state { text-align: center; padding: 30px; color: var(--text-muted); }
-        .spinner {
-            width: 30px; height: 30px; border: 3px solid var(--border);
-            border-top-color: var(--accent); border-radius: 50%;
-            animation: spin 0.8s linear infinite; margin: 0 auto 12px;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .toast-container {
-            position: fixed; top: 16px; right: 16px; z-index: 1000;
-            display: flex; flex-direction: column; gap: 8px; max-width: 380px;
-        }
-        .toast {
-            padding: 12px 16px; border-radius: var(--radius);
-            background: var(--card); border: 1px solid var(--border);
-            animation: slideIn 0.2s ease;
-        }
-        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        .toast.ok { border-left: 3px solid var(--accent); }
-        .toast.err { border-left: 3px solid var(--danger); }
-        .toast.warn { border-left: 3px solid #d29922; }
-        .toast.info { border-left: 3px solid #58a6ff; }
-        .toast a { color: #58a6ff; font-size: 0.8rem; margin-left: 6px; }
-        .wallet-bar {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 10px 14px; background: var(--card); border: 1px solid var(--border);
-            border-radius: var(--radius); margin-bottom: 16px;
-        }
-        .wallet-info { display: flex; align-items: center; gap: 10px; }
-        .wallet-info code { font-family: monospace; font-size: 0.85rem; color: var(--text-muted); }
-        .wallet-info span { font-size: 0.9rem; }
-        .bal-row {
-            display: flex; justify-content: space-between; padding: 8px 0;
-            font-size: 0.9rem; border-bottom: 1px solid var(--border); margin-bottom: 12px;
-        }
-        .btc-address {
-            background: rgba(247, 147, 26, 0.08);
-            border: 1px solid var(--btc);
-            border-radius: var(--radius);
-            padding: 14px; margin: 12px 0;
-        }
-        .btc-address code {
-            display: block; font-family: monospace; word-break: break-all;
-            margin-top: 8px; color: var(--btc); font-size: 0.9rem;
-        }
-        .btc-balance-result {
-            background: rgba(247, 147, 26, 0.05);
-            border: 1px solid var(--btc);
-            border-radius: var(--radius);
-            padding: 16px; margin-top: 12px;
-            display: none;
-        }
-        .btc-balance-result.show { display: block; }
-        .btc-balance-result .v { font-size: 1.4rem; font-weight: 700; color: var(--btc); }
-        .btc-balance-result .t { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; }
-        ul { padding-left: 20px; font-size: 0.85rem; color: var(--text-muted); }
-        ul li { margin: 4px 0; }
-        a { color: #58a6ff; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        small { font-size: 0.75rem; }
-        .hidden { display: none !important; }
-        .source-note { font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; }
-        .debug-info { font-size: 0.75rem; margin-top: 8px; padding: 8px; background: rgba(88,166,255,0.05); border-radius: 4px; }
-    </style>
-
-    <!-- Ethers.js v5.7.2 -->
+    <link rel="stylesheet" href="style.css">
+    <!-- ✅ Ethers.js PRIMEIRO — NÃO ALTERAR A ORDEM! -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
 <body>
     <div class="container">
+        <!-- Cabeçalho -->
         <header>
             <div class="header-left">
                 <h1>🔷 BRN Exchange</h1>
@@ -236,576 +22,213 @@
             </div>
         </header>
 
-        <!-- BARRA DA CARTEIRA -->
+        <!-- Barra da Carteira -->
         <div class="wallet-bar">
-            <div class="wallet-info" id="walletInfo" style="display:none;">
+            <button id="btnConnect" class="btn btn-primary">🔗 Conectar MetaMask</button>
+            <div id="walletInfo" class="wallet-info" style="display: none;">
                 <span>✅ Conectado:</span>
                 <code id="addr"></code>
-                <button class="btn btn-sm" id="btnDisconnect">Desconectar</button>
+                <button id="btnDisconnect" class="btn btn-sm">Desconectar</button>
             </div>
-            <button class="btn btn-primary" id="btnConnect">🔌 Conectar carteira</button>
         </div>
 
-        <!-- ABAS -->
-        <nav class="tabs" id="tabs">
-            <button data-tab="mural" class="active">📋 Mural</button>
-            <button data-tab="vender">💰 Vender</button>
-            <button data-tab="enviar">📤 Enviar</button>
-            <button data-tab="converter">🔄 POL/WPOL</button>
-            <button data-tab="btc">🟠 Bitcoin</button>
+        <!-- Saldos -->
+        <div class="card">
+            <h2>💰 Meus Saldos</h2>
+            <div id="balances" class="balances">
+                <p class="dim">Conecte sua carteira para ver os saldos</p>
+            </div>
+        </div>
+
+        <!-- Abas -->
+        <div class="tabs">
+            <button data-tab="mural" class="active">📋 Mural de Ordens</button>
+            <button data-tab="vender">➕ Criar Ordem</button>
+            <button data-tab="enviar">📤 Enviar Tokens</button>
+            <button data-tab="converter">🔄 POL ↔ WPOL</button>
+            <button data-tab="btc">₿ Consultar BTC</button>
             <button data-tab="ajuda">❓ Ajuda</button>
-        </nav>
+        </div>
 
-        <!-- ===================================================== -->
-        <!-- ABA: MURAL DE ORDENS -->
-        <!-- ===================================================== -->
-        <div data-panel="mural" class="panel">
+        <!-- Painel: Mural de Ordens -->
+        <div id="panel-mural" class="panel">
             <div class="card">
-                <h2>📋 Mural de Ordens</h2>
-                <p class="dim" id="counter">⏳ Consultando…</p>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h2 id="counter">⏳ Consultando ordens…</h2>
+                    <button id="btnRefresh" class="btn btn-sm">🔄 Atualizar</button>
+                </div>
+                <p id="muralInfo" class="dim" style="margin-bottom: 12px;"></p>
 
+                <!-- Filtros -->
                 <div class="filters">
-                    <div>
-                        <label style="font-size:0.8rem; color:var(--text-muted);">Status</label>
-                        <select id="filtroStatus">
-                            <option value="todas">Todas</option>
-                            <option value="ativas">Ativas</option>
-                            <option value="executaveis">Executáveis</option>
-                            <option value="executadas">Executadas</option>
-                            <option value="canceladas">Canceladas</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="font-size:0.8rem; color:var(--text-muted);">Oferece</label>
-                        <select id="filtroOferece"></select>
-                    </div>
-                    <div>
-                        <label style="font-size:0.8rem; color:var(--text-muted);">Pede</label>
-                        <select id="filtroPede"></select>
-                    </div>
-                    <div style="display:flex; align-items:flex-end; padding-bottom:6px;">
-                        <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem;">
-                            <input type="checkbox" id="filtroMinhas"> Minhas ordens
-                        </label>
-                    </div>
-                    <div style="display:flex; align-items:flex-end; padding-bottom:6px;">
-                        <button class="btn btn-sm" id="btnLimparFiltros">Limpar</button>
+                    <select id="filtroStatus">
+                        <option value="todas">📋 Todas as ordens</option>
+                        <option value="ativas" selected>🔵 Ativas</option>
+                        <option value="executaveis">⚡ Posso executar</option>
+                        <option value="executadas">✅ Executadas</option>
+                        <option value="canceladas">❌ Canceladas</option>
+                    </select>
+                    <select id="filtroOferece">
+                        <option value="">Todos os ativos oferecidos</option>
+                    </select>
+                    <select id="filtroPede">
+                        <option value="">Todos os ativos desejados</option>
+                    </select>
+                    <label style="white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" id="filtroMinhas"> Minhas ordens
+                    </label>
+                    <button id="btnLimparFiltros" class="btn btn-sm">✕ Limpar</button>
+                </div>
+
+                <div id="orders" class="orders">
+                    <div class="state">
+                        <div class="spinner"></div>
+                        <p>Carregando ordens da blockchain…</p>
                     </div>
                 </div>
-                <p class="dim" id="muralInfo"></p>
-
-                <div class="orders" id="orders"></div>
-                <button class="btn btn-sm" id="btnRefresh" style="margin-top:12px;">🔄 Recarregar</button>
-            </div>
-
-            <div class="card">
-                <h3>💰 Seus Saldos (Polygon)</h3>
-                <div class="balances" id="balances"></div>
             </div>
         </div>
 
-        <!-- ===================================================== -->
-        <!-- ABA: CRIAR ORDEM / VENDER -->
-        <!-- ===================================================== -->
-        <div data-panel="vender" class="panel" hidden>
+        <!-- Painel: Criar Ordem -->
+        <div id="panel-vender" class="panel" hidden>
             <div class="card">
-                <h2>💰 Criar Ordem de Troca</h2>
-                <p class="dim" style="margin-bottom:16px;">Ofereça um token e receba outro diretamente no contrato</p>
-
+                <h2>➕ Criar Nova Ordem de Troca</h2>
+                <p class="dim" style="margin-bottom: 16px;">Defina o que você oferece e o que deseja receber em troca.</p>
+                
                 <div class="input-group">
-                    <label>Você oferece</label>
-                    <select id="selOferece"></select>
-                    <small class="dim" data-hint="saldo:selOferece">—</small>
-                </div>
-                <div class="input-group">
-                    <label>Quantidade</label>
+                    <label>Você OFERECE:</label>
                     <div class="row">
-                        <input type="text" id="valorOferece" placeholder="0.0">
-                        <button class="btn-sm" id="btnMaxOf">MAX</button>
+                        <select id="selOferece"></select>
+                        <input type="text" id="valorOferece" placeholder="0.0" style="flex: 2;">
+                        <button id="btnMaxOf" class="btn btn-sm">MAX</button>
+                    </div>
+                    <small data-hint="saldo:selOferece" class="dim">Saldo: —</small>
+                </div>
+
+                <div class="input-group">
+                    <label>Você DESEJA receber:</label>
+                    <div class="row">
+                        <select id="selDeseja"></select>
+                        <input type="text" id="valorDeseja" placeholder="0.0" style="flex: 2;">
                     </div>
                 </div>
 
-                <div class="input-group">
-                    <label>Você pede</label>
-                    <select id="selDeseja"></select>
-                    <small class="dim" data-hint="saldo:selDeseja">—</small>
-                </div>
-                <div class="input-group">
-                    <label>Quantidade</label>
-                    <input type="text" id="valorDeseja" placeholder="0.0">
-                </div>
-
-                <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
-                    <button class="btn" id="btnApprove">✅ Aprovar</button>
-                    <button class="btn btn-primary" id="btnCriarOrdem">📋 Criar Ordem</button>
-                </div>
+                <button id="btnCriarOrdem" class="btn btn-primary" style="width: 100%; margin-top: 16px;">✅ Criar Ordem</button>
+                <p class="dim" style="margin-top: 12px; font-size: 0.8rem;">
+                    ⚠️ Ao criar uma ordem, o valor oferecido fica bloqueado no contrato até que seja executado ou cancelado por você.
+                </p>
             </div>
         </div>
 
-        <!-- ===================================================== -->
-        <!-- ABA: ENVIAR -->
-        <!-- ===================================================== -->
-        <div data-panel="enviar" class="panel" hidden>
+        <!-- Painel: Enviar -->
+        <div id="panel-enviar" class="panel" hidden>
             <div class="card">
-                <h2>📤 Enviar Ativos</h2>
-                <p class="dim" style="margin-bottom:16px;">Envie POL ou tokens ERC20 para outro endereço na Polygon</p>
-
+                <h2>📤 Enviar Tokens</h2>
+                
                 <div class="input-group">
-                    <label>Ativo</label>
+                    <label>Token:</label>
                     <select id="selTokenEnvio"></select>
-                    <small class="dim" data-hint="saldo:selTokenEnvio">—</small>
                 </div>
                 <div class="input-group">
-                    <label>Endereço de destino (0x…)</label>
-                    <input type="text" id="destinoEnvio" placeholder="0x…">
+                    <label>Endereço de destino:</label>
+                    <input type="text" id="destinoEnvio" placeholder="0x...">
                 </div>
                 <div class="input-group">
-                    <label>Quantidade</label>
+                    <label>Valor:</label>
                     <div class="row">
                         <input type="text" id="valorEnvio" placeholder="0.0">
-                        <button class="btn-sm" id="btnMaxSend">MAX</button>
+                        <button id="btnMaxSend" class="btn btn-sm">MAX</button>
                     </div>
+                    <small data-hint="saldo:selTokenEnvio" class="dim">Saldo: —</small>
                 </div>
-                <button class="btn btn-primary" id="btnEnviar">📤 Enviar</button>
+
+                <button id="btnEnviar" class="btn btn-primary" style="width: 100%; margin-top: 16px;">📤 Enviar</button>
             </div>
         </div>
 
-        <!-- ===================================================== -->
-        <!-- ABA: CONVERSÃO POL ↔ WPOL -->
-        <!-- ===================================================== -->
-        <div data-panel="converter" class="panel" hidden>
+        <!-- Painel: Converter POL/WPOL -->
+        <div id="panel-converter" class="panel" hidden>
             <div class="card">
                 <h2>🔄 Converter POL ↔ WPOL</h2>
-                <p class="dim" style="margin-bottom:16px;">1 POL = 1 WPOL • Sem taxas • Rede Polygon</p>
-
-                <div class="bal-row">
-                    <span>Seu saldo de POL:</span>
-                    <span id="polBalance" data-hint="saldoPOL">—</span>
-                </div>
-                <div class="bal-row">
-                    <span>Seu saldo de WPOL:</span>
-                    <span id="wpolBalance" data-hint="saldoWPOL">—</span>
-                </div>
-
-                <h3 style="margin:20px 0 10px; font-size:0.95rem;">Converter POL → WPOL</h3>
+                
+                <h3>Converter POL → WPOL</h3>
                 <div class="input-group">
-                    <label>Quantidade de POL</label>
+                    <label>Saldo disponível: <span data-hint="saldoPOL">—</span> POL</label>
                     <div class="row">
                         <input type="text" id="valorWPOL" placeholder="0.0">
-                        <button class="btn-sm" id="btnMaxWrap">MAX</button>
+                        <button id="btnMaxWrap" class="btn btn-sm">MAX</button>
                     </div>
                 </div>
-                <button class="btn-primary" id="btnConverterWPOL">🔄 Converter para WPOL</button>
+                <button id="btnConverterWPOL" class="btn btn-primary" style="width: 100%; margin-bottom: 24px;">🔄 Converter para WPOL</button>
 
-                <h3 style="margin:24px 0 10px; font-size:0.95rem;">Converter WPOL → POL</h3>
+                <hr>
+
+                <h3>Converter WPOL → POL</h3>
                 <div class="input-group">
-                    <label>Quantidade de WPOL</label>
+                    <label>Saldo disponível: <span data-hint="saldoWPOL">—</span> WPOL</label>
                     <div class="row">
                         <input type="text" id="valorPOL" placeholder="0.0">
-                        <button class="btn-sm" id="btnMaxUnwrap">MAX</button>
+                        <button id="btnMaxUnwrap" class="btn btn-sm">MAX</button>
                     </div>
                 </div>
-                <button class="btn-primary" id="btnConverterPOL">🔄 Converter para POL</button>
+                <button id="btnConverterPOL" class="btn btn-primary" style="width: 100%;">🔄 Converter para POL</button>
             </div>
         </div>
 
-        <!-- ===================================================== -->
-        <!-- ABA: BITCOIN — BTC ↔ WBTC + CONSULTA BTC -->
-        <!-- ===================================================== -->
-        <div data-panel="btc" class="panel" hidden>
+        <!-- Painel: Consultar BTC -->
+        <div id="panel-btc" class="panel" hidden>
             <div class="card">
-                <h2>🟠 Bitcoin — BTC & WBTC</h2>
-                <p class="dim" style="margin-bottom:20px;">Consulte saldos na rede Bitcoin e saiba mais sobre WBTC</p>
-
-                <h3 style="font-size:0.95rem; margin-bottom:12px;">📥 Consultar Saldo de Endereço BTC</h3>
+                <h2>₿ Consultar Saldo BTC</h2>
+                <p class="dim" style="margin-bottom: 16px;">Consulte o saldo de qualquer endereço Bitcoin. Não precisa de carteira conectada.</p>
+                
                 <div class="input-group">
-                    <label>Endereço Bitcoin</label>
-                    <div class="row">
-                        <input type="text" id="btcAddressQuery" placeholder="bc1q… / 1… / 3…">
-                        <button class="btn-btc" id="btnCheckBtc">🔍 Consultar</button>
-                    </div>
+                    <label>Endereço Bitcoin:</label>
+                    <input type="text" id="btcAddressQuery" placeholder="bc1q... ou 1... ou 3...">
                 </div>
+                <button id="btnCheckBtc" class="btn btn-btc" style="width: 100%;">₿ Consultar Saldo</button>
 
-                <div class="btc-balance-result" id="btcBalanceResult">
-                    <div class="t">Saldo do endereço:</div>
-                    <div class="v" id="btcBalanceValue">— BTC</div>
-                    <div class="bal-sub" id="btcBalanceDetails"></div>
-                    <div class="source-note">Fonte: <a href="https://mempool.space" target="_blank" rel="noopener noreferrer">mempool.space ↗</a> • Apenas consulta, sem acesso à sua carteira</div>
-                </div>
-
-                <div style="margin-top:24px; padding-top:20px; border-top: 1px solid var(--border);"></div>
-
-                <h3 style="font-size:0.95rem; margin-bottom:12px;">💰 Seu Saldo WBTC (Polygon)</h3>
-                <div class="balances">
-                    <div class="bal">
-                        <span class="t">
-                            <span class="chip btc">₿</span>
-                            WBTC<br><small>• Rede Polygon</small>
-                        </span>
-                        <span class="v" data-hint="saldo:0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6">—</span>
-                    </div>
-                </div>
-
-                <div style="margin-top:24px; padding-top:20px; border-top: 1px solid var(--border);"></div>
-
-                <h3 style="font-size:0.95rem; margin-bottom:12px;">🔄 Ponte BTC ↔ WBTC</h3>
-                <div class="btc-address">
-                    <h4 style="font-size:0.9rem; margin-bottom:10px; color:var(--btc);">Como funciona:</h4>
-                    <ul style="margin-left:16px;">
-                        <li><strong>WBTC</strong> = Wrapped Bitcoin na rede Polygon</li>
-                        <li><strong>1 WBTC ≈ 1 BTC</strong> (valor de mercado)</li>
-                        <li>Para converter, use a <strong>ponte oficial</strong>: <a href="https://wbtc.network/" target="_blank" rel="noopener noreferrer">wbtc.network ↗</a></li>
-                        <li>Você não precisa "importar" seu endereço BTC — basta informá-lo ao sacar</li>
-                    </ul>
-                </div>
-
-                <div style="margin-top:16px;">
-                    <h4 style="font-size:0.9rem; margin-bottom:8px;">⚠️ Importante:</h4>
-                    <ul>
-                        <li>Esta aplicação <strong>não controla</strong> a ponte WBTC — use sempre o site oficial</li>
-                        <li>Endereços BTC começam com: <code>bc1q…</code>, <code>1…</code> ou <code>3…</code></li>
-                        <li>Endereços WBTC começam com: <code>0x…</code> (Polygon)</li>
-                    </ul>
+                <div id="btcBalanceResult" class="btc-balance-result">
+                    <div class="t">Saldo Confirmado</div>
+                    <div class="v" id="btcBalanceValue">—</div>
+                    <div class="dim" id="btcBalanceDetails"></div>
                 </div>
             </div>
         </div>
 
-        <!-- ===================================================== -->
-        <!-- ABA: AJUDA -->
-        <!-- ===================================================== -->
-        <div data-panel="ajuda" class="panel" hidden>
+        <!-- Painel: Ajuda -->
+        <div id="panel-ajuda" class="panel" hidden>
             <div class="card">
-                <h2>❓ Ajuda & Informações</h2>
-
-                <h3 style="margin-top:16px;">🔗 Contratos</h3>
-                <ul id="listaTokens"></ul>
-
-                <h3 style="margin-top:20px;">📌 Como usar</h3>
+                <h2>❓ Ajuda e Informações</h2>
+                <h3>Como usar?</h3>
                 <ul>
-                    <li>Instale a MetaMask no seu navegador</li>
-                    <li>Conecte a carteira e selecione a rede Polygon</li>
-                    <li>Veja as ordens no mural ou crie a sua</li>
-                    <li>Para trocar: clique em "Executar" na ordem desejada</li>
-                    <li>Para converter POL ↔ WPOL: use a aba "POL/WPOL"</li>
-                    <li>Para consultar saldo BTC: use a aba "Bitcoin" — é só leitura, seguro e gratuito</li>
+                    <li>1. Instale a extensão <strong>MetaMask</strong> no seu navegador</li>
+                    <li>2. Configure a rede <strong>Polygon Mainnet</strong> na MetaMask</li>
+                    <li>3. Clique em "Conectar MetaMask" e aprove a conexão</li>
+                    <li>4. Visualize ordens no mural, crie suas próprias ordens ou execute ordens de outros usuários</li>
                 </ul>
-
-                <h3 style="margin-top:20px;">⚠️ Avisos</h3>
+                
+                <h3 style="margin-top: 20px;">Contratos</h3>
                 <ul>
-                    <li>O contrato EscrowFactory não é verificado no PolygonScan — use valores pequenos</li>
-                    <li>Verifique sempre os endereços antes de confirmar transações</li>
-                    <li>As taxas de gás são pagas em POL (MATIC)</li>
-                    <li>Consulta de saldo BTC usa API pública externa — não precisa de chave</li>
+                    <li><strong>Escrow Factory:</strong> <code>0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8</code></li>
+                    <li><strong>Token BRN:</strong> <code>0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210</code></li>
                 </ul>
-
-                <h3 style="margin-top:20px;">🔧 Solução de Problemas</h3>
+                
+                <h3 style="margin-top: 20px;">Redes suportadas</h3>
                 <ul>
-                    <li><strong>"MetaMask não detectada":</strong> Instale a extensão MetaMask e recarregue a página</li>
-                    <li><strong>"Sem conexão":</strong> Verifique sua internet ou desative VPN/antivírus temporariamente</li>
-                    <li><strong>Nada acontece ao clicar em conectar:</strong> Pressione F12 → Console e veja se há erros vermelhos</li>
-                    <li><strong>MetaMask abre mas não conecta:</strong> Verifique se o site tem permissão nas configurações da MetaMask</li>
+                    <li>✅ Polygon Mainnet (Chain ID: 137)</li>
                 </ul>
+                
+                <p class="dim" style="margin-top: 20px; font-size: 0.8rem;">
+                    ⚠️ Este aplicativo é uma interface para interagir com contratos na blockchain. Sempre verifique os endereços dos contratos antes de confirmar transações.
+                </p>
             </div>
         </div>
     </div>
 
-    <!-- TOAST NOTIFICAÇÕES -->
-    <div class="toast-container" id="toasts"></div>
+    <!-- Container de Notificações -->
+    <div id="toasts" class="toast-container"></div>
 
-    <script>
-// ============================================================
-// APP.JS — Carteira BRN P2P + CONSULTA BTC
-// Versão: 5.2 | Data: 2026-09-22
-// ✅ Melhorias: Mais RPCs, diagnóstico de conexão, tratamento de erros aprimorado
-// ============================================================
-
-const ESCROW_FACTORY_ADDRESS = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
-const POLYGON_CHAIN_ID = 137;
-const APP_VERSION = "v5.2";
-
-const NATIVO = { symbol: "POL", name: "POL (nativo)", decimals: 18, native: true };
-const TOKENS = [
-  { symbol: "BRN",    name: "BRN",                address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
-  { symbol: "USDC.e", name: "USD Coin (PoS)",     address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6 },
-  { symbol: "USDC",   name: "USD Coin (nativo)",  address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
-  { symbol: "USDT",   name: "Tether USD",         address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6 },
-  { symbol: "DAI",    name: "Dai Stablecoin",     address: "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063", decimals: 18 },
-  { symbol: "WPOL",   name: "Wrapped POL",        address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
-  { symbol: "WBTC",   name: "Wrapped BTC",        address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8 },
-  { symbol: "WETH",   name: "Wrapped Ether",      address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18 },
-];
-
-// ✅ ATUALIZADO: Mais RPCs para maior confiabilidade
-const RPCS = [
-  "https://polygon-rpc.com",
-  "https://rpc.ankr.com/polygon",
-  "https://polygon-bor-rpc.publicnode.com",
-  "https://polygon.drpc.org",
-  "https://api.securerpc.com/v1",
-  "https://polygon.publicnode.com",
-];
-const RPC_TIMEOUT_MS = 5000;
-const MAX_ORDENS = 1000;
-const CONCORRENCIA = 8;
-
-const SEL_FACTORY = {
-  criarOrdem:   "ceff4da6",
-  ordensDe:     "0dc80995",
-  ordem:        "72c453b8",
-  totalOrdens:  "8275d6fa",
-  todasOrdens:  "e9b1e327",
-};
-const SEL_ESCROW = {
-  criador:        "041c797c",
-  tokenDesejado:  "0cd59b77",
-  executado:      "2a3a5716",
-  obterDados:     "32c9e06c",
-  valorDesejado:  "651cc708",
-  cancelado:      "7766a742",
-  tokenOferecido: "8a337bdc",
-  cancelar:       "8ffb1ccf",
-  executar:       "b2d44d08",
-  factory:        "c45a0155",
-  valorOferecido: "f6c467b7",
-};
-const SEL_ERC20 = {
-  balanceOf: "70a08231",
-  allowance: "dd62ed3e",
-  approve:   "095ea7b3",
-  transfer:  "a9059cbb",
-  decimals:  "313ce567",
-};
-const SEL_WPOL = { deposit: "d0e30db0", withdraw: "2e1a7d4d" };
-
-let walletProvider = null;
-let signer = null;
-let userAddress = null;
-let currentRpc = null;
-let rpcIdx = 0;
-const providersOk = {};
-let ordersCache = [];
-let carregando = false;
-let emTransacao = false;
-let listenersRegistrados = false;
-const saldos = {};
-const filtro = { status: "todas", oferece: "", pede: "", minhas: false };
-const ABAS = ["mural", "vender", "enviar", "converter", "btc", "ajuda"];
-
-// ============================================================
-// CONSULTA DE SALDO BTC — API PÚBLICA
-// ============================================================
-function validarEnderecoBTC(endereco) {
-  if (!endereco || typeof endereco !== "string") return false;
-  const s = endereco.trim();
-  if (/^bc1q[a-z0-9]{38,59}$/i.test(s)) return true;
-  if (/^1[a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(s)) return true;
-  if (/^3[a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(s)) return true;
-  return false;
-}
-
-async function consultarSaldoBTC(enderecoBTC) {
-  const resultadoEl = document.getElementById("btcBalanceResult");
-  const valorEl = document.getElementById("btcBalanceValue");
-  const detalhesEl = document.getElementById("btcBalanceDetails");
-
-  if (!validarEnderecoBTC(enderecoBTC)) {
-    toast("Endereço BTC inválido. Verifique o formato.", "warn");
-    if (resultadoEl) resultadoEl.classList.remove("show");
-    return null;
-  }
-
-  try {
-    const apiUrl = `https://mempool.space/api/address/${enderecoBTC.trim()}`;
-    const resposta = await fetch(apiUrl, {
-      method: "GET",
-      cache: "no-cache",
-      signal: AbortSignal.timeout(10000)
-    });
-
-    if (!resposta.ok) {
-      throw new Error(`Endereço não encontrado ou API indisponível (${resposta.status})`);
-    }
-
-    const dados = await resposta.json();
-    const saldoTotal = dados.chain_stats.funded_txo_sum / 100000000;
-    const saldoGasto = dados.chain_stats.spent_txo_sum / 100000000;
-    const saldoConfirmado = saldoTotal - saldoGasto;
-    const saldoPendenteEntrada = dados.mempool_stats.funded_txo_sum / 100000000;
-    const saldoPendenteSaida = dados.mempool_stats.spent_txo_sum / 100000000;
-    const saldoPendente = saldoPendenteEntrada - saldoPendenteSaida;
-
-    if (valorEl) valorEl.textContent = `${saldoConfirmado.toFixed(8)} BTC`;
-    if (detalhesEl) {
-      detalhesEl.textContent = saldoPendente > 0
-        ? `Pendente: +${saldoPendente.toFixed(8)} BTC`
-        : saldoPendente < 0
-          ? `Pendente: ${saldoPendente.toFixed(8)} BTC`
-          : "Nenhuma transação pendente";
-    }
-    if (resultadoEl) resultadoEl.classList.add("show");
-    toast("✅ Saldo consultado com sucesso!", "ok");
-
-    return { endereco: enderecoBTC, saldoConfirmado, saldoPendente, totalRecebido: saldoTotal, totalGasto: saldoGasto };
-  } catch (erro) {
-    console.error("Erro na consulta BTC:", erro);
-    if (valorEl) valorEl.textContent = "Erro na consulta";
-    if (detalhesEl) detalhesEl.textContent = erro.message || "Tente novamente mais tarde";
-    if (resultadoEl) resultadoEl.classList.add("show");
-    toast("Falha ao consultar: " + erro.message, "err");
-    return null;
-  }
-}
-
-// ============================================================
-// UTILITÁRIOS
-// ============================================================
-function $(id) { return document.getElementById(id); }
-function el(tag, cls, text) {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-function elHTML(tag, cls, html) {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (html !== undefined) e.innerHTML = html;
-  return e;
-}
-function isAddr(a) { return typeof a === "string" && /^0x[0-9a-fA-F]{40}$/.test(a); }
-function short(a) { return isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—"; }
-function shortHash(h) { return typeof h === "string" && /^0x[0-9a-fA-F]{64}$/.test(h) ? h.slice(0, 10) + "…" + h.slice(-6) : "—"; }
-function mesmoEndereco(a, b) { return !!a && !!b && a.toLowerCase() === b.toLowerCase(); }
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-function esc(s) {
-  return String(s).replace(/[&<>"']/g, c =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
-function fmt(value, decimals, maxFrac = 8) {
-  try {
-    const s = ethers.utils.formatUnits(value.toString(), decimals);
-    const partes = s.split(".");
-    const inteiro = BigInt(partes[0]).toLocaleString("pt-BR");
-    const frac = (partes[1] || "").slice(0, maxFrac).replace(/0+$/, "");
-    if (BigInt(value) > 0n && inteiro === "0" && !frac) return "< 0," + "0".repeat(maxFrac - 1) + "1";
-    return frac ? inteiro + "," + frac : inteiro;
-  } catch (e) { return String(value); }
-}
-
-function paraInput(valor, decimals) {
-  const s = ethers.utils.formatUnits(valor.toString(), decimals);
-  return s.replace(/\.0+$/, "");
-}
-
-function toast(msg, type = "info", ms = 5000, href = null) {
-  const box = $("toasts"); if (!box) return;
-  const t = el("div", "toast " + type, msg);
-  if (href && /^https:\/\/polygonscan\.com\/tx\/0x[0-9a-fA-F]{64}$/.test(href)) {
-    const a = el("a", "", " · ver no PolygonScan ↗");
-    a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer";
-    t.appendChild(a);
-  }
-  box.appendChild(t);
-  setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, ms);
-}
-function toastTx(msg, hash, type = "info") {
-  toast(msg + " " + shortHash(hash), type, 12000, "https://polygonscan.com/tx/" + hash);
-}
-
-function setNet(state, text) {
-  const dot = $("netDot"), txt = $("netText");
-  if (dot) dot.className = "dot " + (state === "ok" ? "" : state);
-  if (txt) txt.textContent = text;
-}
-
-function erroLegivel(e) {
-  if (!e) return "Erro desconhecido.";
-  if (e.code === 4001 || e.code === "ACTION_REJECTED") return "Transação recusada na carteira.";
-  const m = e.reason || (e.data && e.data.message) || (e.error && e.error.message) || e.message || String(e);
-  return String(m).slice(0, 220);
-}
-
-const HEX_WORD = /^[0-9a-fA-F]{64}$/;
-function pad32(hexNo0x) { return hexNo0x.padStart(64, "0"); }
-function encAddress(addr) {
-  if (!isAddr(addr)) throw new Error("Endereço inválido.");
-  return pad32(addr.toLowerCase().slice(2));
-}
-function encUint(n) {
-  const v = BigInt(n);
-  if (v < 0n || v >= (1n << 256n)) throw new Error("Valor fora do intervalo uint256.");
-  return pad32(v.toString(16));
-}
-function decUint(word) {
-  if (!HEX_WORD.test(word || "")) throw new Error("Resposta ABI inválida.");
-  return BigInt("0x" + word);
-}
-function decAddress(word) {
-  if (!HEX_WORD.test(word || "") || !/^0{24}/.test(word)) throw new Error("Endereço inválido na resposta.");
-  return ethers.utils.getAddress("0x" + word.slice(24).toLowerCase());
-}
-function decBool(word) {
-  const v = decUint(word);
-  if (v > 1n) throw new Error("Booleano inválido na resposta.");
-  return v === 1n;
-}
-function splitWords(hex) {
-  if (typeof hex !== "string" || !/^0x([0-9a-fA-F]{2})*$/.test(hex)) throw new Error("Resposta inválida do RPC.");
-  const b = hex.slice(2);
-  if (b.length % 64 !== 0) throw new Error("Resposta com tamanho inesperado.");
-  const out = [];
-  for (let i = 0; i < b.length; i += 64) out.push(b.slice(i, i + 64));
-  return out;
-}
-function decAddressArray(hex) {
-  const w = splitWords(hex);
-  if (w.length < 2) throw new Error("Lista de ordens inválida.");
-  const off = Number(decUint(w[0]));
-  if (off % 32 !== 0) throw new Error("Lista de ordens inválida.");
-  const start = off / 32;
-  if (start >= w.length) throw new Error("Lista de ordens inválida.");
-  const len = Number(decUint(w[start]));
-  if (!Number.isSafeInteger(len) || len > MAX_ORDENS || start + 1 + len > w.length) throw new Error("Lista de ordens inválida.");
-  const arr = [];
-  for (let i = 0; i < len; i++) arr.push(decAddress(w[start + 1 + i]));
-  return arr;
-}
-
-function lerValor(txt, dec, nome) {
-  const s = String(txt || "").trim().replace(",", ".");
-  if (!/^\d+(\.\d+)?$/.test(s)) throw new Error("Informe um valor válido de " + nome + ".");
-  let v;
-  try { v = BigInt(ethers.utils.parseUnits(s, dec).toString()); }
-  catch (e) { throw new Error(nome + ": no máximo " + dec + " casas decimais."); }
-  if (v <= 0n) throw new Error("O valor de " + nome + " deve ser maior que zero.");
-  return v;
-}
-
-async function mapLimit(items, limit, fn) {
-  const out = new Array(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (true) {
-      const i = next++;
-      if (i >= items.length) return;
-      out[i] = await fn(items[i], i);
-    }
-  });
-  await Promise.all(workers);
-  return out;
-}
-
-// ============================================================
-// TOKENS
-// ============================================================
-function normalizarTokens() {
-  for (const t of TOKENS) {
-    try { t.address = ethers.utils.getAddress(t.address.toLowerCase()); }
-    catch (e) { t.address = null; }
-  }
-}
-function tokenPorEndereco(addr) { return TOKENS.find(t => t.address && mesmoEndereco(t.address, addr)) || null; }
-function tokenOk(addr) { return tokenPorEndereco(addr); }
-function tokensOk() { return TOK
+    <!-- ✅ app.js DEPOIS do ethers -->
+    <script src="app.js"></script>
+</body>
+</html>
