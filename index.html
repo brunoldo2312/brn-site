@@ -163,7 +163,7 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         .toast-container {
-            position: fixed; bottom: 16px; right: 16px; z-index: 1000;
+            position: fixed; top: 16px; right: 16px; z-index: 1000;
             display: flex; flex-direction: column; gap: 8px; max-width: 380px;
         }
         .toast {
@@ -184,6 +184,7 @@
         }
         .wallet-info { display: flex; align-items: center; gap: 10px; }
         .wallet-info code { font-family: monospace; font-size: 0.85rem; color: var(--text-muted); }
+        .wallet-info span { font-size: 0.9rem; }
         .converter-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
         .conv-tab {
             flex: 1; padding: 10px; background: var(--bg); border: 1px solid var(--border);
@@ -206,13 +207,14 @@
             display: block; font-family: monospace; word-break: break-all;
             margin-top: 8px; color: var(--btc); font-size: 0.9rem;
         }
-        .copy-btn { font-size: 0.75rem; padding: 4px 8px; margin-left: 8px; }
         ul { padding-left: 20px; font-size: 0.85rem; color: var(--text-muted); }
         ul li { margin: 4px 0; }
         a { color: #58a6ff; text-decoration: none; }
         a:hover { text-decoration: underline; }
         small { font-size: 0.75rem; }
+        .hidden { display: none !important; }
     </style>
+
     <!-- Ethers.js v5.7.2 -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
@@ -245,7 +247,6 @@
             <button data-tab="vender">💰 Vender</button>
             <button data-tab="enviar">📤 Enviar</button>
             <button data-tab="converter">🔄 POL/WPOL</button>
-            <button data-tab="btc">🟠 BTC/WBTC</button>
             <button data-tab="ajuda">❓ Ajuda</button>
         </nav>
 
@@ -282,7 +283,7 @@
                         </label>
                     </div>
                     <div style="display:flex; align-items:flex-end; padding-bottom:6px;">
-                        <button class="btn btn-sm" id="fLimpar">Limpar</button>
+                        <button class="btn btn-sm" id="btnLimparFiltros">Limpar</button>
                     </div>
                 </div>
                 <p class="dim" id="muralInfo"></p>
@@ -308,12 +309,12 @@
                 <div class="input-group">
                     <label>Você oferece</label>
                     <select id="vTokOf"></select>
-                    <small class="dim" id="vSaldoOf"></small>
+                    <small class="dim" data-hint="saldo:vTokOf">—</small>
                 </div>
                 <div class="input-group">
                     <label>Quantidade</label>
                     <div class="row">
-                        <input type="text" id="inOf" placeholder="0.0">
+                        <input type="text" id="vValOf" placeholder="0.0">
                         <button class="btn-sm" id="btnMaxOf">MAX</button>
                     </div>
                 </div>
@@ -321,16 +322,14 @@
                 <div class="input-group">
                     <label>Você pede</label>
                     <select id="vTokDe"></select>
-                    <small class="dim" id="vSaldoDe"></small>
+                    <small class="dim" data-hint="saldo:vTokDe">—</small>
                 </div>
                 <div class="input-group">
                     <label>Quantidade</label>
-                    <input type="text" id="inDe" placeholder="0.0">
+                    <input type="text" id="vValDe" placeholder="0.0">
                 </div>
 
-                <div class="input-group" id="rateInfo" style="display:none; padding:8px; background:rgba(88,166,255,0.1); border-radius:var(--radius);"></div>
-
-                <div style="display:flex; gap:8px; margin-top:16px;">
+                <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
                     <button class="btn" id="btnApprove">✅ Aprovar</button>
                     <button class="btn btn-primary" id="btnCreate">📋 Criar Ordem</button>
                 </div>
@@ -347,17 +346,17 @@
 
                 <div class="input-group">
                     <label>Ativo</label>
-                    <select id="sAtivo"></select>
-                    <small class="dim" id="sSaldo"></small>
+                    <select id="sendToken"></select>
+                    <small class="dim" data-hint="saldo:sendToken">—</small>
                 </div>
                 <div class="input-group">
                     <label>Endereço de destino</label>
-                    <input type="text" id="sDestino" placeholder="0x…">
+                    <input type="text" id="sendDestino" placeholder="0x…">
                 </div>
                 <div class="input-group">
                     <label>Quantidade</label>
                     <div class="row">
-                        <input type="text" id="sValor" placeholder="0.0">
+                        <input type="text" id="sendValor" placeholder="0.0">
                         <button class="btn-sm" id="btnMaxSend">MAX</button>
                     </div>
                 </div>
@@ -373,107 +372,34 @@
                 <h2>🔄 Converter POL ↔ WPOL</h2>
                 <p class="dim" style="margin-bottom:16px;">1 POL = 1 WPOL • Sem taxas • Rede Polygon</p>
 
-                <div class="converter-tabs">
-                    <button class="conv-tab active" data-mode="wrap">POL → WPOL</button>
-                    <button class="conv-tab" data-mode="unwrap">WPOL → POL</button>
+                <div class="bal-row">
+                    <span>Seu saldo de POL:</span>
+                    <span id="polBalance" data-hint="saldoPOL">—</span>
+                </div>
+                <div class="bal-row">
+                    <span>Seu saldo de WPOL:</span>
+                    <span id="wpolBalance" data-hint="saldoWPOL">—</span>
                 </div>
 
-                <div class="conv-mode" id="modeWrap">
-                    <div class="bal-row">
-                        <span>Seu saldo de POL:</span>
-                        <span id="polBalance">—</span>
-                    </div>
-                    <div class="input-group">
-                        <label>Quantidade de POL</label>
-                        <div class="row">
-                            <input type="text" id="polAmount" placeholder="0.0">
-                            <button class="btn-sm" id="btnMaxWrap">MAX</button>
-                        </div>
-                    </div>
-                    <button class="btn-primary" id="btnWrap">🔄 Converter para WPOL</button>
-                </div>
-
-                <div class="conv-mode" id="modeUnwrap" style="display:none;">
-                    <div class="bal-row">
-                        <span>Seu saldo de WPOL:</span>
-                        <span id="wpolBalance">—</span>
-                    </div>
-                    <div class="input-group">
-                        <label>Quantidade de WPOL</label>
-                        <div class="row">
-                            <input type="text" id="wpolAmount" placeholder="0.0">
-                            <button class="btn-sm" id="btnMaxUnwrap">MAX</button>
-                        </div>
-                    </div>
-                    <button class="btn-primary" id="btnUnwrap">🔄 Converter para POL</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- ===================================================== -->
-        <!-- ABA: BTC ↔ WBTC -->
-        <!-- ===================================================== -->
-        <div data-panel="btc" class="panel" hidden>
-            <div class="card">
-                <h2>🟠 Bitcoin — BTC ↔ WBTC</h2>
-                <p class="dim" style="margin-bottom:16px;">Converta entre Bitcoin nativo e WBTC na Polygon</p>
-
-                <div class="btc-address">
-                    <h3 style="font-size:0.95rem; margin-bottom:8px; color:var(--btc);">📥 Informações</h3>
-                    <p class="dim" style="font-size:0.85rem;">
-                        • <strong>WBTC</strong> = Wrapped Bitcoin na rede Polygon<br>
-                        • <strong>1 WBTC ≈ 1 BTC</strong> (valor de mercado)<br>
-                        • Para converter BTC ↔ WBTC use a ponte oficial da Polygon
-                    </p>
-                </div>
-
-                <div style="margin:20px 0;">
-                    <h3 style="font-size:0.95rem; margin-bottom:10px;">💰 Seus Saldos</h3>
-                    <div class="balances">
-                        <div class="bal">
-                            <span class="t">🟠 WBTC<br><small>• Polygon</small></span>
-                            <span class="v" id="wbtcBalanceConv">—</span>
-                        </div>
+                <h3 style="margin:20px 0 10px; font-size:0.95rem;">Converter POL → WPOL</h3>
+                <div class="input-group">
+                    <label>Quantidade de POL</label>
+                    <div class="row">
+                        <input type="text" id="wpolValor" placeholder="0.0">
+                        <button class="btn-sm" id="btnMaxWrap">MAX</button>
                     </div>
                 </div>
+                <button class="btn-primary" id="btnWrapPol">🔄 Converter para WPOL</button>
 
-                <h3 style="font-size:0.95rem; margin:20px 0 10px;">🔄 Trocar BTC ↔ WBTC</h3>
-
-                <div class="converter-tabs">
-                    <button class="conv-tab btc active" data-btc-mode="wrap">BTC → WBTC</button>
-                    <button class="conv-tab btc" data-btc-mode="unwrap">WBTC → BTC</button>
+                <h3 style="margin:24px 0 10px; font-size:0.95rem;">Converter WPOL → POL</h3>
+                <div class="input-group">
+                    <label>Quantidade de WPOL</label>
+                    <div class="row">
+                        <input type="text" id="unwrapValor" placeholder="0.0">
+                        <button class="btn-sm" id="btnMaxUnwrap">MAX</button>
+                    </div>
                 </div>
-
-                <div class="btc-mode" id="btcWrapMode">
-                    <div class="bal-row">
-                        <span>Converter BTC para WBTC</span>
-                        <span class="dim">1:1</span>
-                    </div>
-                    <p class="dim" style="font-size:0.85rem; margin:10px 0;">
-                        Você precisará de um endereço BTC e usar a ponte oficial da Polygon.
-                        Envie BTC para o endereço da ponte e receba WBTC aqui.
-                    </p>
-                    <button class="btn-btc" id="btnBtcWrap" style="width:100%;">🔄 Abrir Ponte — BTC → WBTC</button>
-                </div>
-
-                <div class="btc-mode" id="btcUnwrapMode" style="display:none;">
-                    <div class="bal-row">
-                        <span>Saldo WBTC disponível:</span>
-                        <span id="btcUnwrapBal">—</span>
-                    </div>
-                    <div class="input-group">
-                        <label>Quantidade de WBTC</label>
-                        <div class="row">
-                            <input type="text" id="wbtcToUnwrap" placeholder="0.0">
-                            <button class="btn-sm" id="btnMaxBtcUnwrap">MAX</button>
-                        </div>
-                    </div>
-                    <div class="input-group">
-                        <label>Seu endereço BTC (para receber)</label>
-                        <input type="text" id="btcUnwrapDest" placeholder="bc1q…">
-                    </div>
-                    <button class="btn-btc" id="btnBtcUnwrap" style="width:100%;">🔄 Abrir Ponte — WBTC → BTC</button>
-                </div>
+                <button class="btn-primary" id="btnUnwrapPol">🔄 Converter para POL</button>
             </div>
         </div>
 
@@ -494,7 +420,7 @@
                     <li>Veja as ordens no mural ou crie a sua</li>
                     <li>Para trocar: clique em "Executar" na ordem desejada</li>
                     <li>Para converter POL ↔ WPOL: use a aba "POL/WPOL"</li>
-                    <li>Para BTC ↔ WBTC: use a ponte oficial da Polygon</li>
+                    <li>Para enviar tokens: use a aba "Enviar"</li>
                 </ul>
 
                 <h3 style="margin-top:20px;">⚠️ Avisos</h3>
