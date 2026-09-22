@@ -1,28 +1,32 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 2.0 (Corrigida)
+// APP.JS — BRN Exchange | Versão 3.0 (Conexões Corrigidas)
+// ✅ Conexão Polygon com RPCs Atualizados
+// ✅ Conexão Bitcoin API Independente
+// ✅ Diagnóstico e Tratamento de Erros Melhorados
 // ============================================================
 
 // ================= CONFIGURAÇÕES =================
 const ESCROW_FACTORY = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
 
+// Tokens suportados
 const TOKENS = [
-  { symbol: "BRN",  name: "BRN Token",   address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
-  { symbol: "USDC", name: "USD Coin",    address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
-  { symbol: "USDT", name: "Tether USD",  address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6 },
-  { symbol: "WPOL", name: "Wrapped POL", address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
-  { symbol: "WBTC", name: "Wrapped BTC", address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8 },
+  { symbol: "BRN",  name: "BRN Token",         address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
+  { symbol: "USDC", name: "USD Coin",           address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
+  { symbol: "USDT", name: "Tether USD",          address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6 },
+  { symbol: "WPOL", name: "Wrapped POL",         address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
+  { symbol: "WBTC", name: "Wrapped BTC",         address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8 },
 ];
 
-// ✅ Endpoints JSON-RPC válidos
+// ✅ Lista de RPCs atualizada (Polygon Mainnet - Chain ID 137)
 const RPC_LIST = [
-  "https://polygon-rpc.com",
-  "https://rpc.ankr.com/polygon",
-  "https://polygon-bor.publicnode.com",
-  "https://polygon.drpc.org",
-  "https://1rpc.io/matic"
+  "https://polygon.api.onfinality.io/public",
+  "https://polygon.publicnode.com",
+  "https://1rpc.io/matic",
+  "https://polygon.drpc.org"
 ];
 
+// Selectors de funções (4 bytes)
 const S = {
   Factory: {
     criarOrdem: "ceff4da6",
@@ -46,6 +50,7 @@ const S = {
   },
 };
 
+// Estado global
 let provider = null;
 let signer = null;
 let userAddress = null;
@@ -63,6 +68,7 @@ const isAddr = a => /^0x[a-fA-F0-9]{40}$/.test(a || "");
 const short = a => isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—";
 const mesmoAddr = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
+// Formatar valores
 function fmt(bigInt, decimals, maxFrac = 6) {
   try {
     const str = ethers.utils.formatUnits(bigInt.toString(), decimals);
@@ -72,10 +78,7 @@ function fmt(bigInt, decimals, maxFrac = 6) {
   } catch { return "0"; }
 }
 
-function trimZeros(str) {
-  return str.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
-}
-
+// Notificações
 function toast(texto, tipo = "info", duracao = 4000) {
   const container = $("toasts");
   if (!container) return;
@@ -86,7 +89,6 @@ function toast(texto, tipo = "info", duracao = 4000) {
   setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, duracao);
 }
 
-// ✅ Link correto do PolygonScan
 function toastTx(texto, hash, tipo = "info") {
   const link = `https://polygonscan.com/tx/${hash}`;
   const container = $("toasts");
@@ -98,7 +100,7 @@ function toastTx(texto, hash, tipo = "info") {
   setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, 8000);
 }
 
-// ✅ fetch com timeout real (AbortController)
+// ✅ Fetch com timeout para evitar travamentos
 async function fetchTimeout(url, ms = 8000) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
@@ -173,13 +175,12 @@ async function atualizarStatusRede() {
   } else {
     dot.className = "dot off";
     txt.textContent = "Polygon: Sem conexão ❌";
-    toast("❌ Não foi possível conectar à rede Polygon.", "err", 10000);
+    toast("❌ Não foi possível conectar à rede Polygon. Verifique sua internet.", "err", 10000);
   }
   return ok;
 }
 
-// ================= BITCOIN API =================
-// ✅ Agora usa endpoint correto (/api/blocks/tip/height)
+// ================= REDE REMOTA BITCOIN =================
 async function verificarStatusRedeBitcoin() {
   const dot = $("btcDot");
   const txt = $("btcText");
@@ -189,6 +190,7 @@ async function verificarStatusRedeBitcoin() {
   txt.textContent = "Bitcoin API: Sincronizando…";
 
   try {
+    // ✅ Endpoint correto para obter a altura do bloco
     const resposta = await fetchTimeout("https://blockstream.info/api/blocks/tip/height", 8000);
     if (!resposta.ok) throw new Error("HTTP " + resposta.status);
     const blocoAtual = (await resposta.text()).trim();
@@ -202,43 +204,6 @@ async function verificarStatusRedeBitcoin() {
     dot.className = "dot btc-status off";
     txt.textContent = "Bitcoin API: Fora do Ar ❌";
     console.warn("⚠️ Bitcoin API indisponível:", e.message);
-  }
-}
-
-// ✅ Consulta de saldo BTC (estava faltando)
-async function consultarSaldoBTC() {
-  const input = $("btcAddressInput");
-  const card = $("btcResult");
-  const valEl = $("btcBalanceValue");
-  if (!input || !valEl) return;
-
-  const endereco = input.value.trim();
-  if (!endereco) { toast("Digite um endereço Bitcoin.", "warn"); return; }
-
-  valEl.textContent = "Consultando…";
-  card?.classList.add("show");
-
-  try {
-    const r = await fetchTimeout(
-      `https://blockstream.info/api/address/${encodeURIComponent(endereco)}`, 10000
-    );
-    if (!r.ok) throw new Error("Endereço inválido ou não encontrado");
-    const dados = await r.json();
-
-    const chain = dados.chain_stats || {};
-    const mem = dados.mempool_stats || {};
-    const satsConfirmado = (chain.funded_txo_sum || 0) - (chain.spent_txo_sum || 0);
-    const satsPendente   = (mem.funded_txo_sum || 0) - (mem.spent_txo_sum || 0);
-    const totalSats = satsConfirmado + satsPendente;
-
-    const btc = (totalSats / 1e8).toFixed(8);
-    valEl.textContent = `${btc} BTC`;
-    if (satsPendente !== 0) {
-      valEl.textContent += ` (${(satsPendente / 1e8).toFixed(8)} pendente)`;
-    }
-  } catch (e) {
-    valEl.textContent = "— BTC";
-    toast("❌ " + e.message, "err");
   }
 }
 
@@ -408,7 +373,6 @@ async function carregarOrdens() {
       return;
     }
 
-    // ✅ Paraleliza chamadas RPC
     const indices = Array.from({ length: total }, (_, i) => i);
     const ordens = [];
 
@@ -518,7 +482,6 @@ function renderizarOrdens(lista) {
     container.appendChild(div);
   }
 
-  // ✅ Eventos delegados (sem onclick inline)
   container.querySelectorAll("[data-action]").forEach(btn => {
     btn.addEventListener("click", () => {
       const escrow = btn.getAttribute("data-escrow");
@@ -598,7 +561,6 @@ async function criarOrdem() {
 }
 
 // ================= EXECUTAR / CANCELAR =================
-// ✅ Agora faz approve do token desejado antes de executar
 async function executarOrdem(escrowAddr) {
   if (!signer || !userAddress || isTxBusy) return;
   isTxBusy = true;
@@ -835,15 +797,19 @@ async function init() {
   }
   console.log("✅ Ethers.js carregado");
 
-  atualizarStatusRede().then(ok => {
-    if (ok && rpcProvider) carregarOrdens();
-    else {
+  // ✅ Inicialização independente e paralela
+  Promise.allSettled([
+    atualizarStatusRede(),
+    verificarStatusRedeBitcoin()
+  ]).then(([polygonResult, btcResult]) => {
+    if (polygonResult.status === "fulfilled" && polygonResult.value) {
+      carregarOrdens();
+    } else {
       const container = $("orders");
-      if (container) container.innerHTML = '<div class="empty">❌ Sem conexão com Polygon.</div>';
+      if (container) container.innerHTML = '<div class="empty">❌ Sem conexão com a rede Polygon. Verifique sua internet ou tente novamente mais tarde.</div>';
     }
   });
 
-  verificarStatusRedeBitcoin();
   setInterval(verificarStatusRedeBitcoin, 60000);
 
   preencherSeletores();
@@ -862,7 +828,6 @@ async function init() {
     if (e.key === "Enter") consultarSaldoBTC();
   });
 
-  // Botões MAX — ✅ sintaxe correta
   $("btnMaxOf")?.addEventListener("click", () => {
     const sel = $("selOferece");
     const tok = tokenPorEndereco(sel.value);
@@ -891,6 +856,46 @@ async function init() {
   });
 
   console.log("✅ Inicialização concluída!");
+}
+
+function trimZeros(str) {
+  return str.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+}
+
+async function consultarSaldoBTC() {
+    const input = $("btcAddressInput");
+    const card = $("btcResult");
+    const valEl = $("btcBalanceValue");
+    if (!input || !valEl) return;
+
+    const endereco = input.value.trim();
+    if (!endereco) { toast("Digite um endereço Bitcoin.", "warn"); return; }
+
+    valEl.textContent = "Consultando…";
+    card?.classList.add("show");
+
+    try {
+        const r = await fetchTimeout(
+            `https://blockstream.info/api/address/${encodeURIComponent(endereco)}`, 10000
+        );
+        if (!r.ok) throw new Error("Endereço inválido ou não encontrado");
+        const dados = await r.json();
+
+        const chain = dados.chain_stats || {};
+        const mem = dados.mempool_stats || {};
+        const satsConfirmado = (chain.funded_txo_sum || 0) - (chain.spent_txo_sum || 0);
+        const satsPendente   = (mem.funded_txo_sum || 0) - (mem.spent_txo_sum || 0);
+        const totalSats = satsConfirmado + satsPendente;
+
+        const btc = (totalSats / 1e8).toFixed(8);
+        valEl.textContent = `${btc} BTC`;
+        if (satsPendente !== 0) {
+            valEl.textContent += ` (${(satsPendente / 1e8).toFixed(8)} pendente)`;
+        }
+    } catch (e) {
+        valEl.textContent = "— BTC";
+        toast("❌ " + e.message, "err");
+    }
 }
 
 window.addEventListener("load", init);
