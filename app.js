@@ -1,14 +1,13 @@
 // ============================================================
-// APP.JS — Carteira BRN P2P (v6 — CONEXÃO + FILTROS MELHORADOS)
+// APP.JS — Carteira BRN P2P (v7 — ANTI-TRAVAMENTO)
 //
-// Novidades v6:
-//  [NET]  Conexão Polygon robusta (switch + add + validação dupla)
-//  [FILT] Busca por texto (endereço, símbolo, valor)
-//  [FILT] Ordenação (recentes, maior valor, melhor preço, executáveis)
-//  [FILT] Filtro "só com saldo" e "só executáveis"
-//  [FILT] Contador por filtro e botão de reset
-//  [FILT] Filtros separados: mural (compra) e vender (venda)
-//  [WRAP] POL ↔ WPOL automático em Vender e Executar
+// Correções v7:
+//  [NET]  Timeout curto (3s) + fallback agressivo entre RPCs
+//  [NET]  Watchdog global de 15s — nunca trava a UI
+//  [NET]  Logs detalhados no console (F12) para debug
+//  [RENDER] Renderização progressiva (não espera todas as ordens)
+//  [RENDER] Timeout individual por ordem (2s)
+//  [NET]  Detecta CORS/rede e mostra mensagem clara
 // ============================================================
 
 const ESCROW_FACTORY_ADDRESS = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
@@ -35,16 +34,19 @@ const TOKENS = [
   { symbol: "WETH",   name: "Wrapped Ether",       address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18, symbols: ["WETH"] },
 ];
 
+// [NET] Timeout curto — RPC público que não responde em 3s é descartado
 const RPCS = [
+  "https://polygon-rpc.com",
   "https://polygon-bor-rpc.publicnode.com",
   "https://polygon.drpc.org",
-  "https://polygon-rpc.com",
   "https://rpc.ankr.com/polygon",
 ];
-const RPC_TIMEOUT_MS = 8000;
+const RPC_TIMEOUT_MS = 3000;      // [NET] era 8000
+const WATCHDOG_MS = 15000;        // [NET] watchdog global
 const MAX_ORDENS = 1000;
 const CONCORRENCIA = 5;
 const MAX_TENTATIVAS_TOKEN = 3;
+const DEBUG = true;               // [NET] logs no console
 
 const SEL_FACTORY = {
   criarOrdem:   "ceff4da6",
@@ -89,7 +91,6 @@ const saldos = {};
 const ABAS = ["mural", "vender", "enviar", "ajuda"];
 const IDS_ACOES = ["btnCreate", "btnApprove", "btnSend", "btnMaxOf", "btnMaxSend"];
 
-// [FILT] Filtros separados
 const filtro = {
   status: "todas",
   oferece: "",
@@ -100,6 +101,10 @@ const filtro = {
   soExecutaveis: false,
   soComSaldo: false,
 };
+
+// [NET] log helper
+function log(...args) { if (DEBUG) console.log("[BRN]", ...args); }
+function logErr(...args) { if (DEBUG) console.error("[BRN]", ...args); }
 
 // ============================================================
 // UTILITÁRIOS
@@ -142,6 +147,7 @@ function paraInput(valor, decimals) {
 
 function toast(msg, type = "info", ms = 5000, href = null) {
   const box = $("toasts");
+  if (!box) return;
   const t = el("div", "toast " + type, msg);
   if (href && /^https:\/\/polygonscan\.com\/tx\/0x[0-9a-fA-F]{64}$/.test(href)) {
     const a = el("a", "", " · ver no PolygonScan ↗");
@@ -156,8 +162,9 @@ function toastTx(msg, hash, type = "info") {
 }
 
 function setNet(state, text) {
-  $("netDot").className = "dot " + (state === "ok" ? "" : state);
-  $("netText").textContent = text;
+  const dot = $("netDot"), txt = $("netText");
+  if (dot) dot.className = "dot " + (state === "ok" ? "" : state);
+  if (txt) txt.textContent = text;
 }
 
 function erroLegivel(e) {
@@ -169,7 +176,6 @@ function erroLegivel(e) {
 
 // --- helpers ABI ---
 const HEX_WORD = /^[0-9a-fA-F]{64}$/;
-
 function pad32(hexNo0x) { return hexNo0x.padStart(64, "0"); }
 function encAddress(addr) {
   if (!isAddr(addr)) throw new Error("Endereço inválido.");
@@ -180,7 +186,6 @@ function encUint(n) {
   if (v < 0n || v >= (1n << 256n)) throw new Error("Valor fora do intervalo uint256.");
   return pad32(v.toString(16));
 }
-
 function decUint(word) {
   if (!HEX_WORD.test(word || "")) throw new Error("Resposta ABI inválida.");
   return BigInt("0x" + word);
@@ -201,7 +206,6 @@ function decBoolSeguro(word) {
     return v === 1n;
   } catch (e) { return null; }
 }
-
 function splitWords(hex) {
   if (typeof hex !== "string" || !/^0x([0-9a-fA-F]{2})*$/.test(hex)) throw new Error("Resposta inválida do RPC.");
   const b = hex.slice(2);
@@ -210,7 +214,6 @@ function splitWords(hex) {
   for (let i = 0; i < b.length; i += 64) out.push(b.slice(i, i + 64));
   return out;
 }
-
 function decAddressArray(hex) {
   const w = splitWords(hex);
   if (w.length < 1) throw new Error("Lista de ordens inválida.");
@@ -238,7 +241,6 @@ function decAddressArray(hex) {
   if (arr.length > MAX_ORDENS) throw new Error("Lista de ordens grande demais.");
   return arr;
 }
-
 function decString(hex) {
   const w = splitWords(hex);
   if (w.length >= 2 && Number(decUint(w[0])) === 32) {
@@ -261,7 +263,6 @@ function decString(hex) {
   }
   throw new Error("String inválida.");
 }
-
 function lerValor(txt, dec, nome) {
   const s = String(txt || "").trim().replace(",", ".");
   if (!/^\d+(\.\d+)?$/.test(s)) throw new Error("Informe um valor válido de " + nome + ".");
@@ -271,7 +272,6 @@ function lerValor(txt, dec, nome) {
   if (v <= 0n) throw new Error("O valor de " + nome + " deve ser maior que zero.");
   return v;
 }
-
 async function mapLimit(items, limit, fn) {
   const out = new Array(items.length);
   let next = 0;
@@ -299,16 +299,4 @@ function normalizarTokens() {
 }
 function tokenPorEndereco(addr) { return TOKENS.find(t => mesmoEndereco(t.address, addr)) || null; }
 function tokenOk(addr) { const t = tokenPorEndereco(addr); return t && t.ok ? t : null; }
-function tokensOk() { return TOKENS.filter(t => t.ok); }
-function ativoPorId(id) { return id === "POL" ? NATIVO : tokenOk(id); }
-
-async function verificarTokens() {
-  await mapLimit(TOKENS, CONCORRENCIA, async (t) => {
-    if (t.ok || t.definitivo) return;
-    t.tentativas++;
-    try {
-      const rd = await rawCall(t.address, "0x" + SEL_ERC20.decimals);
-      const dec = Number(decUint(splitWords(rd)[0]));
-      let simbolo = null;
-      try { simbolo = decString(await rawCall(t.address, "0x" + SEL_ERC20.symbol)); }
-      catch (e) { /* símbol
+function tokensOk() { return TOKENS
