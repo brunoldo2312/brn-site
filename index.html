@@ -6,8 +6,40 @@
     <title>BRN Exchange — Mural de Ordens P2P</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="style-melhorias.css">
-    <!-- ✅ Ethers.js v5 — CDN cdnjs (funcional) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+
+    <!-- =============================================
+         CARREGAMENTO RESILIENTE DO ETHERS.JS
+         1) Tenta arquivo LOCAL (mais confiável)
+         2) Se falhar, tenta jsDelivr
+         3) Se falhar, tenta unpkg
+         4) Se falhar, tenta cdnjs
+         ============================================= -->
+    <script>
+      (function carregarEthers() {
+        const fontes = [
+          "ethers.min.js",                                                            // 1) LOCAL
+          "https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js",         // 2) jsDelivr
+          "https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js",                    // 3) unpkg
+          "https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"     // 4) cdnjs
+        ];
+        let i = 0;
+        function tentar() {
+          if (i >= fontes.length) {
+            console.error("❌ Nenhuma fonte do Ethers.js funcionou.");
+            return;
+          }
+          const s = document.createElement("script");
+          s.src = fontes[i++];
+          s.onload = () => console.log("✅ Ethers.js carregado de:", s.src);
+          s.onerror = () => {
+            console.warn("⚠️ Falhou:", s.src, "— tentando próxima fonte…");
+            tentar();
+          };
+          document.head.appendChild(s);
+        }
+        tentar();
+      })();
+    </script>
 </head>
 <body>
     <div class="container">
