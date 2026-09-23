@@ -1,11 +1,20 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 5.1
+// APP.JS — BRN Exchange | Versão 5.2
+// ✅ Seletores ABI calculados após ethers carregar
+// ✅ Ordem correta de criarOrdem: (addr, addr, uint, uint)
+// ✅ Mural em 1 chamada via obterContratosGerados()
+// ✅ Conversão WBTC → BTC via SideShift (bridge serverless)
+// ✅ NOVO: Envio de POL nativo (com reserva de gas)
+// ✅ init() com try/catch por etapa
 // ============================================================
 
 const ESCROW_FACTORY = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
 const REFRESH_MS = 30000;
 const SIDESHIFT_API_URL = "https://brn-site.vercel.app/api/sideshift";
+
+// Reserva mínima de POL que fica na carteira (para não travar futuras transações)
+const RESERVA_GAS_POL = "0.05";
 
 const TOKENS = [
   { symbol: "BRN",     name: "BRN Token",            address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
@@ -375,6 +384,65 @@ async function copiarDepositAddress() {
   }
 }
 
+// ================= ENVIO DE POL (NATIVO) =================
+function calcularPOLDisponivel() {
+  const reserva = ethers.utils.parseUnits(RESERVA_GAS_POL, 18);
+  return saldos.POL > reserva ? saldos.POL - reserva : 0n;
+}
+
+async function enviarPOL() {
+  if (!signer || !userAddress || isTxBusy) return;
+  isTxBusy = true;
+  try {
+    const destino = $("destinoPOL").value.trim();
+    const valorStr = $("valorPOLEnvio").value.trim().replace(",", ".");
+
+    if (!isAddr(destino)) throw new Error("Endereço de destino inválido");
+    if (mesmoAddr(destino, userAddress)) throw new Error("Não pode enviar para você mesmo");
+    if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
+
+    const valor = ethers.utils.parseUnits(valorStr, 18);
+    const disponivel = calcularPOLDisponivel();
+
+    if (valor > disponivel) {
+      throw new Error(
+        `Saldo insuficiente. Você tem ${fmt(saldos.POL, 18)} POL ` +
+        `(reservando ${RESERVA_GAS_POL} POL para gas). ` +
+        `Disponível: ${fmt(disponivel, 18)} POL.`
+      );
+    }
+
+    const confirmar = window.confirm(
+      `Enviar ${valorStr} POL para:\n${destino}\n\n` +
+      `⚠️ Transação irreversível. Confira o endereço.\nContinuar?`
+    );
+    if (!confirmar) { isTxBusy = false; return; }
+
+    toast(`⏳ Enviando ${fmt(valor, 18, 6)} POL…`, "info");
+
+    // POL é nativo: value vai no campo da transação, sem data
+    const tx = await signer.sendTransaction({
+      to: destino,
+      value: valor,
+      gasLimit: 21000
+    });
+
+    toastTx("📤 POL enviado:", tx.hash, "ok");
+    await tx.wait();
+    toast(`✅ POL enviado com sucesso!`, "ok", 6000);
+
+    $("destinoPOL").value = "";
+    $("valorPOLEnvio").value = "";
+    await carregarSaldos();
+  } catch (e) {
+    console.error("Erro enviarPOL:", e);
+    if (e.code === 4001) toast("Envio cancelado.", "warn");
+    else toast("❌ " + (e.message || "Erro desconhecido"), "err", 8000);
+  } finally {
+    isTxBusy = false;
+  }
+}
+
 function preencherSeletores() {
   const opts = TOKENS.map(t => `<option value="${t.address}">${t.symbol} — ${t.name}</option>`).join("");
   ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
@@ -425,6 +493,7 @@ function renderizarSaldos() {
     const tipo = partes[0], ref = partes[1];
 
     if (tipo === "saldoPOL") el.textContent = fmt(saldos.POL, 18);
+    if (tipo === "saldoPOLDisponivel") el.textContent = fmt(calcularPOLDisponivel(), 18);
     if (tipo === "saldoWPOL") {
       const wpol = TOKENS.find(t => t.symbol === "WPOL");
       el.textContent = wpol ? fmt(saldos[wpol.address] || 0n, 18) : "0";
@@ -1023,6 +1092,17 @@ function configurarMax() {
     const saldo = saldos[wbtc.address] || 0n;
     if (saldo > 0n) $("valorWbtcBridge").value = ethers.utils.formatUnits(saldo, wbtc.decimals);
   });
+
+  // ✅ NOVO: MAX para envio de POL (com reserva de gas)
+  const m6 = $("btnMaxPOLEnvio");
+  if (m6) m6.addEventListener("click", () => {
+    const disponivel = calcularPOLDisponivel();
+    if (disponivel > 0n) {
+      $("valorPOLEnvio").value = ethers.utils.formatUnits(disponivel, 18);
+    } else {
+      toast("Saldo insuficiente (reserva de gas).", "warn");
+    }
+  });
 }
 
 function configurarBotoes() {
@@ -1041,6 +1121,9 @@ function configurarBotoes() {
   const bb = $("btnAbrirBridge");    if (bb) bb.addEventListener("click", criarOrdemSideShift);
   const bc = $("btnCopyDeposit");    if (bc) bc.addEventListener("click", copiarDepositAddress);
 
+  // ✅ NOVO: envio de POL
+  const ep = $("btnEnviarPOL");      if (ep) ep.addEventListener("click", enviarPOL);
+
   ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
     const el = $(id);
     if (el) el.addEventListener("change", renderizarSaldos);
@@ -1051,6 +1134,10 @@ function configurarBotoes() {
 
   const btcDest = $("btcDestinoBridge");
   if (btcDest) btcDest.addEventListener("keydown", e => { if (e.key === "Enter") criarOrdemSideShift(); });
+
+  // ✅ NOVO: Enter no endereço de POL para enviar
+  const polDest = $("destinoPOL");
+  if (polDest) polDest.addEventListener("keydown", e => { if (e.key === "Enter") enviarPOL(); });
 }
 
 function iniciarAutoRefresh() {
