@@ -14,7 +14,7 @@ const REFRESH_MS = 30000;
 
 // ⚠️ Troque pelo domínio da sua função serverless na Vercel
 // Ex: se seu projeto Vercel é "brn-site", vira "https://brn-site.vercel.app/api/sideshift"
-const SIDESHIFT_API_URL = "https://SEU-PROJETO.vercel.app/api/sideshift";
+const SIDESHIFT_API_URL = "https://brn-exchange.vercel.app/api/sideshift";
 
 const TOKENS = [
   { symbol: "BRN",     name: "BRN Token",            address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
