@@ -1,8 +1,8 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 3.4 (Debug RAW HEX)
+// APP.JS — BRN Exchange | Versão 3.5 (Auto-Detect Layout)
+// ✅ Auto-detecção da ordem dos campos do obterDados()
+// ✅ Mostra "SYMBOL (Polygon)" no mural
 // ✅ Fallback de token desconhecido
-// ✅ Debug do HEX cru para diagnóstico de decodificação
-// ✅ RPCs reordenados (publicnode primeiro)
 // ✅ Compartilhar endereço BRN
 // ============================================================
 
@@ -126,6 +126,116 @@ function splitResposta(hex) {
   return partes;
 }
 
+// ================= TOKENS =================
+function tokenPorEndereco(endereco) {
+  if (!endereco) return null;
+  const t = TOKENS.find(t => mesmoAddr(t.address, endereco));
+  if (t) return t;
+  return {
+    symbol: endereco.slice(0, 6) + "…",
+    name: "Token não cadastrado",
+    address: endereco,
+    decimals: 18,
+    desconhecido: true
+  };
+}
+
+// ✅ Retorna "BRN (Polygon)" ou "USDC (Polygon)"
+function nomeComRede(tok) {
+  if (!tok) return "???";
+  const rede = tok.desconhecido ? "" : " (Polygon)";
+  return `${tok.symbol}${rede}`;
+}
+
+// ================= AUTO-DETECÇÃO DO LAYOUT =================
+// O contrato pode retornar os campos em ordem diferente.
+// Esta função tenta múltiplas ordens e escolhe a que faz sentido.
+function decodificarOrdem(hex) {
+  const p = splitResposta(hex.slice(2));
+  if (p.length < 6) throw new Error("Resposta curta: " + p.length + " words");
+
+  // Endereços conhecidos para validação
+  const knownAddrs = new Set(TOKENS.map(t => t.address.toLowerCase()));
+
+  // Helper: verifica se uma word "parece" com um endereço conhecido
+  const pareceToken = (word) => {
+    try {
+      const a = decAddr(word).toLowerCase();
+      return knownAddrs.has(a);
+    } catch { return false; }
+  };
+
+  // Helper: verifica se uma word tem valor "razoável" como quantidade
+  const pareceQuantidade = (word) => {
+    try {
+      const n = decUint(word);
+      return n > 0n && n < 10n ** 30n;
+    } catch { return false; }
+  };
+
+  // Helper: verifica se é bool (0 ou 1)
+  const pareceBool = (word) => {
+    try {
+      const n = decUint(word);
+      return n === 0n || n === 1n;
+    } catch { return false; }
+  };
+
+  // Layouts candidatos (índices onde cada campo estaria em p[])
+  const layouts = [
+    // Layout A (padrão esperado): [criador, tokenOf, valOf, tokenDe, valDe, exec, canc]
+    { nome: "A", c: 0, tof: 1, vof: 2, tde: 3, vde: 4, ex: 5, ca: 6 },
+    // Layout B (valor antes do token): [criador, valOf, tokenOf, valDe, tokenDe, exec, canc]
+    { nome: "B", c: 0, tof: 2, vof: 1, tde: 4, vde: 3, ex: 5, ca: 6 },
+    // Layout C (exec/canc trocados): [criador, tokenOf, valOf, tokenDe, valDe, canc, exec]
+    { nome: "C", c: 0, tof: 1, vof: 2, tde: 3, vde: 4, ex: 6, ca: 5 },
+  ];
+
+  // Pontua cada layout
+  let melhor = layouts[0];
+  let melhorScore = -1;
+
+  for (const L of layouts) {
+    let score = 0;
+
+    // Deve ter ao menos 6 words para este layout
+    if (p.length < 7) continue;
+
+    // Token oferecido: +5 se for conhecido, +3 se endereço válido
+    if (pareceToken(p[L.tof])) score += 5;
+    else if (isAddr(decAddr(p[L.tof]))) score += 3;
+
+    // Token desejado: idem
+    if (pareceToken(p[L.tde])) score += 5;
+    else if (isAddr(decAddr(p[L.tde]))) score += 3;
+
+    // Valores: +3 se parece quantidade
+    if (pareceQuantidade(p[L.vof])) score += 3;
+    if (pareceQuantidade(p[L.vde])) score += 3;
+
+    // Booleans: +2 se parece bool
+    if (pareceBool(p[L.ex])) score += 2;
+    if (pareceBool(p[L.ca])) score += 2;
+
+    if (score > melhorScore) {
+      melhorScore = score;
+      melhor = L;
+    }
+  }
+
+  const L = melhor;
+  return {
+    layoutUsado: L.nome,
+    criador: decAddr(p[L.c]),
+    tokenOferecido: decAddr(p[L.tof]),
+    valorOferecido: decUint(p[L.vof]),
+    tokenDesejado: decAddr(p[L.tde]),
+    valorDesejado: decUint(p[L.vde]),
+    executado: p[L.ex] ? decBool(p[L.ex]) : false,
+    cancelado: p[L.ca] ? decBool(p[L.ca]) : false,
+  };
+}
+
 // ================= REDE POLYGON =================
 async function testarRPC(url) {
   try {
@@ -230,20 +340,6 @@ async function consultarSaldoBTC() {
   }
 }
 
-// ================= TOKENS =================
-function tokenPorEndereco(endereco) {
-  if (!endereco) return null;
-  const t = TOKENS.find(t => mesmoAddr(t.address, endereco));
-  if (t) return t;
-  return {
-    symbol: endereco.slice(0, 6) + "…",
-    name: "Token não cadastrado",
-    address: endereco,
-    decimals: 18,
-    desconhecido: true
-  };
-}
-
 function preencherSeletores() {
   const opts = TOKENS.map(t => `<option value="${t.address}">${t.symbol} — ${t.name}</option>`).join("");
   ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
@@ -295,8 +391,8 @@ function renderizarSaldos() {
     container.appendChild(div);
   };
 
-  add("POL", saldos.POL, 18);
-  TOKENS.forEach(t => add(t.symbol, saldos[t.address] || 0n, t.decimals));
+  add("POL (Polygon)", saldos.POL, 18);
+  TOKENS.forEach(t => add(`${t.symbol} (Polygon)`, saldos[t.address] || 0n, t.decimals));
 
   document.querySelectorAll("[data-hint]").forEach(el => {
     const attr = el.getAttribute("data-hint") || "";
@@ -381,10 +477,7 @@ function desconectarCarteira() {
 
 // ================= COMPARTILHAR ENDEREÇO =================
 function abrirPainelCompartilhar() {
-  if (!userAddress) {
-    toast("Conecte a carteira primeiro.", "warn");
-    return;
-  }
+  if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
 
   const painel = $("sharePanel");
   const addrFull = $("shareAddrFull");
@@ -448,7 +541,7 @@ async function copiarEndereco() {
       document.execCommand("copy");
       toast("✅ Endereço copiado!", "ok");
     } catch {
-      toast("❌ Não foi possível copiar. Selecione manualmente.", "err");
+      toast("❌ Não foi possível copiar.", "err");
     }
     ta.remove();
   }
@@ -471,7 +564,7 @@ async function carregarOrdens() {
     counter.textContent = `${total} ordem${total !== 1 ? "ens" : ""}`;
 
     if (total === 0) {
-      container.innerHTML = '<div class="empty"><div class="big">📋</div><p>Nenhuma ordem encontrada. Seja o primeiro a criar uma!</p></div>';
+      container.innerHTML = '<div class="empty"><div class="big">📋</div><p>Nenhuma ordem encontrada.</p></div>';
       ordersCache = [];
       return;
     }
@@ -492,44 +585,39 @@ async function carregarOrdens() {
           data: "0x" + S.Escrow.obterDados
         });
 
-        // 🔍 DEBUG: dump do hex cru (só na primeira ordem, para não poluir)
+        // Debug completo da primeira ordem
         if (i === 0) {
           console.log("🔍 RAW HEX (ordem #0):", dadosRes);
-          console.log("🔍 Tamanho do HEX:", dadosRes.length, "chars");
-          console.log("🔍 Número de words (64 chars cada):", (dadosRes.length - 2) / 64);
+          console.log("🔍 Tamanho:", dadosRes.length, "chars =", (dadosRes.length - 2) / 64, "words");
+          const words = splitResposta(dadosRes.slice(2));
+          words.forEach((w, idx) => console.log(`  Word[${idx}]: ${w}`));
         }
 
-        const p = splitResposta(dadosRes.slice(2));
+        const decoded = decodificarOrdem(dadosRes);
 
-        // 🔍 DEBUG: cada word separada (só na primeira ordem)
         if (i === 0) {
-          p.forEach((word, idx) => {
-            console.log(`  Word[${idx}]: ${word}`);
+          console.log("🔍 Layout detectado:", decoded.layoutUsado);
+          console.log("🔍 Decodificado:", {
+            criador: decoded.criador,
+            tokenOferecido: decoded.tokenOferecido,
+            valorOferecido: decoded.valorOferecido.toString(),
+            tokenDesejado: decoded.tokenDesejado,
+            valorDesejado: decoded.valorDesejado.toString(),
+            executado: decoded.executado,
+            cancelado: decoded.cancelado,
           });
         }
-
-        console.log(`[Ordem #${i}]`, {
-          endereco,
-          campos: p.length,
-          criador: decAddr(p[0]),
-          tokenOferecido: decAddr(p[1]),
-          valorOferecido: decUint(p[2]).toString(),
-          tokenDesejado: decAddr(p[3]),
-          valorDesejado: decUint(p[4]).toString(),
-          executado: p[5] ? decBool(p[5]) : null,
-          cancelado: p[6] ? decBool(p[6]) : null
-        });
 
         ordens.push({
           indice: i,
           endereco,
-          criador: decAddr(p[0]),
-          tokenOferecido: decAddr(p[1]),
-          valorOferecido: decUint(p[2]),
-          tokenDesejado: decAddr(p[3]),
-          valorDesejado: decUint(p[4]),
-          executado: p[5] ? decBool(p[5]) : false,
-          cancelado: p[6] ? decBool(p[6]) : false,
+          criador: decoded.criador,
+          tokenOferecido: decoded.tokenOferecido,
+          valorOferecido: decoded.valorOferecido,
+          tokenDesejado: decoded.tokenDesejado,
+          valorDesejado: decoded.valorDesejado,
+          executado: decoded.executado,
+          cancelado: decoded.cancelado,
         });
       } catch (e) {
         console.warn(`Erro ao carregar ordem ${i}:`, e.message);
@@ -579,10 +667,16 @@ function renderizarOrdens(lista) {
     const minha = userAddress && mesmoAddr(o.criador, userAddress);
     const ativa = !o.executado && !o.cancelado;
 
-    const oferTexto = ofer ? `${fmt(o.valorOferecido, ofer.decimals)} ${ofer.symbol}` : "Token desconhecido";
-    const pedTexto = ped ? `${fmt(o.valorDesejado, ped.decimals)} ${ped.symbol}` : "Token desconhecido";
-    const oferAviso = ofer?.desconhecido ? ` <small class="dim">(token não cadastrado)</small>` : "";
-    const pedAviso = ped?.desconhecido ? ` <small class="dim">(token não cadastrado)</small>` : "";
+    // ✅ Nome do token com rede
+    const oferNome = nomeComRede(ofer);
+    const pedNome = nomeComRede(ped);
+
+    // ✅ Quantidade formatada
+    const oferQtd = ofer ? fmt(o.valorOferecido, ofer.decimals) : "—";
+    const pedQtd = ped ? fmt(o.valorDesejado, ped.decimals) : "—";
+
+    const oferAviso = ofer?.desconhecido ? ` <small class="dim">(não cadastrado)</small>` : "";
+    const pedAviso = ped?.desconhecido ? ` <small class="dim">(não cadastrado)</small>` : "";
 
     const div = document.createElement("div");
     div.className = `order ${ativa ? "active" : ""} ${o.executado ? "done" : ""} ${o.cancelado ? "cancelled" : ""}`;
@@ -597,13 +691,13 @@ function renderizarOrdens(lista) {
       <div class="swap">
         <div class="swap-side">
           <div class="swap-lbl">Oferece</div>
-          <div class="swap-amt">${oferTexto}</div>
+          <div class="swap-amt">${oferQtd} ${oferNome}</div>
           ${oferAviso}
         </div>
         <div class="swap-icon">⇄</div>
         <div class="swap-side">
           <div class="swap-lbl">Pede</div>
-          <div class="swap-amt">${pedTexto}</div>
+          <div class="swap-amt">${pedQtd} ${pedNome}</div>
           ${pedAviso}
         </div>
       </div>
@@ -704,9 +798,9 @@ async function executarOrdem(escrowAddr) {
 
   try {
     const dadosRes = await rpcProvider.call({ to: escrowAddr, data: "0x" + S.Escrow.obterDados });
-    const p = splitResposta(dadosRes.slice(2));
-    const tokenDesejado = decAddr(p[3]);
-    const valorDesejado = decUint(p[4]);
+    const decoded = decodificarOrdem(dadosRes);
+    const tokenDesejado = decoded.tokenDesejado;
+    const valorDesejado = decoded.valorDesejado;
 
     const allowance = decUint((await rpcProvider.call({
       to: tokenDesejado,
@@ -938,7 +1032,7 @@ async function init() {
       carregarOrdens();
     } else {
       const container = $("orders");
-      if (container) container.innerHTML = '<div class="empty">❌ Sem conexão com a rede Polygon. Verifique sua internet.</div>';
+      if (container) container.innerHTML = '<div class="empty">❌ Sem conexão com a rede Polygon.</div>';
     }
   });
 
