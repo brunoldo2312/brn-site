@@ -21,6 +21,8 @@
                 <h1>🔷 BRN Exchange</h1>
                 <p>Ecossistema Descentralizado de Troca de Ativos P2P</p>
             </div>
+
+            <!-- Status das redes -->
             <div class="net-status">
                 <div id="netDot" class="dot off"></div>
                 <span id="netText">Polygon: Desconectado ❌</span>
@@ -28,6 +30,16 @@
             <div class="net-status">
                 <div id="btcDot" class="dot btc-status off"></div>
                 <span id="btcText">Bitcoin API: Desconectado ❌</span>
+            </div>
+
+            <!-- ✅ NOVO: Status das carteiras conectadas -->
+            <div class="net-status">
+                <div id="evmWalletDot" class="dot off"></div>
+                <span id="evmWalletText">MetaMask: Desconectada</span>
+            </div>
+            <div class="net-status">
+                <div id="btcWalletDot" class="dot btc-status off"></div>
+                <span id="btcWalletText">BTC Wallet: Desconectada</span>
             </div>
         </header>
 
@@ -278,6 +290,51 @@
                     </p>
                     <button id="btnCopyDeposit" class="btn btn-sm" style="margin-top:8px;">📋 Copiar endereço</button>
                 </div>
+
+                <!-- ==================== ENVIO DE BTC NATIVO ==================== -->
+                <hr style="margin: 24px 0; border-color: var(--border);">
+
+                <h3>📤 Enviar BTC (rede nativa)</h3>
+                <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">
+                    Conecte uma carteira Bitcoin (UniSat, OKX Wallet, Leather) e envie BTC direto para qualquer endereço.
+                    A carteira assina — sua chave privada nunca sai dela.
+                </p>
+
+                <div class="input-group">
+                    <label>Carteira Bitcoin:</label>
+                    <div class="row">
+                        <button id="btnConectarBTC" class="btn btn-btc">🔌 Conectar carteira BTC</button>
+                        <button id="btnDesconectarBTC" class="btn btn-sm" style="display:none;">Desconectar</button>
+                    </div>
+                    <small id="btcWalletStatus" class="dim" style="display:block; margin-top:6px;">Não conectada</small>
+                </div>
+
+                <div class="input-group">
+                    <label>Endereço Bitcoin de destino:</label>
+                    <input type="text" id="btcDestinoEnvio" placeholder="bc1... / 1... / 3...">
+                    <small class="dim" style="display:block; margin-top:4px;">
+                        ⚠️ Confira duas vezes. Transação irreversível.
+                    </small>
+                </div>
+
+                <div class="input-group">
+                    <label>Valor em BTC:</label>
+                    <div class="row">
+                        <input type="text" id="btcValorEnvio" placeholder="0.00000000">
+                        <button id="btnMaxBTCEnvio" class="btn btn-sm">MAX</button>
+                    </div>
+                    <small class="dim" style="display:block; margin-top:4px;">
+                        Disponível: <span id="btcSaldoDisponivel">—</span>
+                    </small>
+                </div>
+
+                <button id="btnEnviarBTC" class="btn btn-btc" style="width:100%; margin-top:12px;">
+                    🟠 Enviar BTC
+                </button>
+
+                <p class="source-note">
+                    ⚠️ Transações Bitcoin são irreversíveis. Reserva automática de ~2000 sats mantida para taxa de rede.
+                </p>
             </div>
         </div>
 
