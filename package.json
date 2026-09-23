@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "BRN Exchange — API serverless para SideShift (WBTC → BTC)",
   "private": true,
+  "type": "module",
   "engines": {
     "node": ">=18"
   }
