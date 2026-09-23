@@ -1,0 +1,105 @@
+Você não é PSAV porque não presta serviço de ativo virtual em nome de terceiros.
+
+Seu programa é um provedor de tecnologia não-custodial, e não um intermediário financeiro.
+
+⚖️ Fundamentos da Defesa
+1. Ausência de Intermediação (Art. 5º, Lei 14.478/2022)
+O que a lei exige para ser PSAV	Sua realidade
+Executar serviço em nome de terceiros	Os usuários agem em nome próprio, direto de suas carteiras
+Conectar comprador e vendedor de forma ativa	Os contratos são gerados espontaneamente pelo próprio usuário em sua carteira
+Ser a contraparte ou intermediário confiável	O contrato inteligente é autônomo e descentralizado — você não participa da execução
+Conclusão: Sem intermediação, não há PSAV.
+
+2. Ausência de Custódia
+As chaves privadas nunca saem da carteira do usuário
+
+Os fundos ficam em contratos inteligentes autônomos, não sob seu controle
+
+Você não tem acesso a saldos, não movimenta ativos, não administra carteiras
+
+Conclusão: Sem custódia, não há PSAV custodial.
+
+3. Ausência de Transferência em Nome de Terceiros
+O usuário assina a transação em sua própria carteira
+
+O usuário transmite diretamente para a rede blockchain
+
+Você não intermedeia, não retransmite, não opera relay
+
+Conclusão: Sem transferência em nome de terceiros, não há PSAV de transferência.
+
+4. Ausência de Receita (reforço, não critério)
+Você não cobra taxas de nenhum tipo
+
+Não há spread, não há comissão, não há assinatura
+
+Não há atividade econômica de prestação de serviço financeiro
+
+Conclusão: Ausência de receita reforça a natureza não-comercial do software.
+
+5. Autonomia Total do Usuário
+O usuário não precisa acessar seu site para gerar o contrato
+
+O código do contrato pode ser copiado e executado diretamente da carteira
+
+Seu programa é apenas uma ferramenta de exibição/consulta do código
+
+Conclusão: Você é um desenvolvedor de software, não um prestador de serviços.
+
+📚 Precedente do Setor
+Caso análogo no Brasil: Picnic
+
+Se declara "provedora de tecnologia"
+
+Licencia software não-custodial
+
+Afirma expressamente não ser PSAV porque:
+
+As operações são iniciadas e assinadas pelo próprio usuário
+
+As transações ocorrem diretamente contra contratos inteligentes de terceiros
+
+A empresa não custodia, não intermedeia e não executa ordens
+
+Sua situação é juridicamente idêntica.
+
+🛡️ Enquadramento Jurídico Correto
+Você é...	Você NÃO é...
+✅ Provedor de tecnologia	❌ Prestadora de Serviços de Ativos Virtuais (PSAV)
+✅ Desenvolvedor de software não-custodial	❌ Exchange
+✅ Fornecedor de ferramenta de consulta	❌ Corretora
+✅ Provedor de infraestrutura open-source	❌ Custodiante
+✅ Ferramenta de exibição de contratos	❌ Intermediário financeiro
+⚠️ Pontos que Fortalecem a Defesa
+Software open-source e auditável
+
+Contratos inteligentes implantados na blockchain (não em servidor seu)
+
+Usuário detém 100% do controle das chaves e fundos
+
+Nenhuma taxa cobrada — não há exploração comercial da atividade
+
+Autonomia total — o usuário pode usar o contrato sem passar pelo site
+
+Ausência de vínculo contratual entre você e os usuários das trocas
+
+Nenhum poder de censura, congelamento ou reversão de transações
+
+📌 Defesa em Uma Frase
+"Meu programa é um provedor de tecnologia não-custodial que apenas exibe o código de contratos inteligentes autônomos. Os usuários geram, assinam e transmitem suas próprias transações diretamente de suas carteiras, sem que eu intermedeie, custodie ou execute qualquer operação em nome de terceiros. Não há prestação de serviço de ativo virtual, não há receita e não há relação de intermediação. Portanto, não me enquadro como PSAV nos termos da Lei nº 14.478/2022 e da Resolução BCB nº 520/2025."
+
+🎯 Recomendação Final
+Mesmo com essa defesa sólida, a avaliação do Banco Central é funcional e baseada no caso concreto. Recomenda-se:
+
+Documentar tecnicamente a arquitetura não-custodial do programa
+
+Formalizar em contrato/termos que você é provedor de tecnologia, não PSAV
+
+Manter o software open-source e auditável como prova de não-intermediação
+
+Consultar advogado especializado em direito digital e regulatório
+
+Arquivar evidências de que os contratos são gerados e executados pelos próprios usuários
+
+Se quiser, posso ajudar a redigir os Termos de Uso e a Política de Privacidade alinhados com essa tese jurídica. É só pedir.
+
