@@ -7,6 +7,11 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="style-melhorias.css">
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script>
+      if (typeof ethers === "undefined") {
+        document.write('<script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"><\/script>');
+      }
+    </script>
 </head>
 <body>
     <div class="container">
@@ -189,6 +194,48 @@
                 <div id="btcResult" class="btc-balance-result">
                     <div class="t">Saldo Líquido Confirmado</div>
                     <div id="btcBalanceValue" class="v">— BTC</div>
+                </div>
+
+                <!-- ==================== WBTC → BTC (SideShift) ==================== -->
+                <hr style="margin: 24px 0; border-color: var(--border);">
+
+                <h3>🔄 Converter WBTC (Polygon) → BTC nativo</h3>
+                <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">
+                    Cotação e custódia feitas pela <a href="https://sideshift.ai" target="_blank" rel="noopener">SideShift.ai</a>
+                    (não-custodial). Você recebe BTC direto na sua carteira Bitcoin.
+                </p>
+
+                <div class="input-group">
+                    <label>Quantidade de WBTC:</label>
+                    <div class="row">
+                        <input type="text" id="valorWbtcBridge" placeholder="0.0">
+                        <button id="btnMaxWbtcBridge" class="btn btn-sm">MAX</button>
+                    </div>
+                    <small id="hintWbtcBridge" class="dim" style="display:block; margin-top:4px;">Saldo: —</small>
+                </div>
+
+                <div class="input-group">
+                    <label>Seu endereço Bitcoin (destino):</label>
+                    <input type="text" id="btcDestinoBridge" placeholder="bc1... / 1... / 3...">
+                    <small class="dim" style="display:block; margin-top:4px;">
+                        ⚠️ Confira duas vezes. Enviar para endereço errado = fundos perdidos.
+                    </small>
+                </div>
+
+                <button id="btnAbrirBridge" class="btn btn-btc" style="width:100%; margin-top:12px;">
+                    🟠 Criar ordem de troca
+                </button>
+
+                <div id="bridge-result" style="display:none; margin-top:16px; padding:14px; background:rgba(247,147,26,0.08); border:1px solid var(--btc); border-radius:8px;">
+                    <p style="margin-bottom:8px;">
+                        Envie <strong id="bridge-deposit-amount">—</strong> WBTC para:
+                    </p>
+                    <code id="bridge-deposit-address" style="display:block; word-break:break-all; background:var(--bg); padding:10px; border-radius:5px; font-size:0.85rem;">—</code>
+                    <p class="dim" style="font-size:0.8rem; margin-top:8px;">
+                        Você receberá <strong id="bridge-settle-amount">—</strong> BTC em ~10-30 min após a confirmação.
+                        Ordem expira em <span id="bridge-expires">—</span>.
+                    </p>
+                    <button id="btnCopyDeposit" class="btn btn-sm" style="margin-top:8px;">📋 Copiar endereço</button>
                 </div>
             </div>
         </div>
