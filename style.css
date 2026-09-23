@@ -1,10 +1,11 @@
 /* ============================================================
    STYLE.CSS — BRN Exchange
-   Versão: 5.4 | Data: 2026-09-23
+   Versão: 5.5 | Data: 2026-09-23
    ✅ Patch 1: .btn com background/border (botões MAX/Limpar/Fechar visíveis)
    ✅ Patch 2: classes do share-panel (antes ausentes)
    ✅ Patch 3: estilos do bridge WBTC → BTC
    ✅ Correção: cor do dot de Bitcoin quando online
+   ✅ Patch 4: estilos do envio de BTC (wallet + saldo + botões)
    ============================================================ */
 
 :root {
@@ -836,6 +837,26 @@ select {
 
 #bridge-result strong {
     color: var(--btc);
+}
+
+/* ==================== ENVIO DE BTC ==================== */
+/* ✅ PATCH 4: estilos do envio de BTC nativo */
+#btcWalletStatus {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+    color: var(--btc);
+    font-size: 0.8rem;
+    word-break: break-all;
+}
+
+#btcSaldoDisponivel {
+    font-weight: 600;
+    color: var(--btc);
+}
+
+#btnEnviarBTC:disabled,
+#btnConectarBTC:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 /* ==================== FORMULÁRIOS DE SWAP ==================== */
