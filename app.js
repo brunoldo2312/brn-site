@@ -1,10 +1,12 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 5.2
+// APP.JS — BRN Exchange | Versão 5.4
 // ✅ Seletores ABI calculados após ethers carregar
 // ✅ Ordem correta de criarOrdem: (addr, addr, uint, uint)
 // ✅ Mural em 1 chamada via obterContratosGerados()
 // ✅ Conversão WBTC → BTC via SideShift (bridge serverless)
-// ✅ NOVO: Envio de POL nativo (com reserva de gas)
+// ✅ Envio de POL nativo (com reserva de gas)
+// ✅ Envio de BTC nativo via carteiras Bitcoin (UniSat/OKX/Leather)
+// ✅ Indicadores de status das carteiras (EVM + BTC) na header
 // ✅ init() com try/catch por etapa
 // ============================================================
 
@@ -12,9 +14,13 @@ const ESCROW_FACTORY = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
 const REFRESH_MS = 30000;
 const SIDESHIFT_API_URL = "https://brn-site.vercel.app/api/sideshift";
+const BLOCKSTREAM_API = "https://blockstream.info/api";
 
 // Reserva mínima de POL que fica na carteira (para não travar futuras transações)
 const RESERVA_GAS_POL = "0.05";
+
+// Reserva de sats para taxa ao enviar BTC (padrão ~2000 sats)
+const RESERVA_TAXA_BTC_SATS = 2000;
 
 const TOKENS = [
   { symbol: "BRN",     name: "BRN Token",            address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
@@ -77,6 +83,10 @@ let filtroAtivo = { status: "ativas", oferece: "", pede: "", minhas: false };
 let btcApiSincronizada = false;
 let refreshTimer = null;
 
+// ===== Estado da carteira Bitcoin =====
+let btcWallet = null;      // { type, provider, address, publicKey, label }
+let btcSaldoSats = 0;
+
 const $ = id => document.getElementById(id);
 const isAddr = a => /^0x[a-fA-F0-9]{40}$/.test(a || "");
 const short = a => isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—";
@@ -110,6 +120,16 @@ function toastTx(texto, hash, tipo = "info") {
   el.innerHTML = `${texto} <a href="${link}" target="_blank" rel="noopener">Ver no PolygonScan ↗</a>`;
   container.appendChild(el);
   setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, 8000);
+}
+
+function toastBtcTx(txid) {
+  const container = $("toasts");
+  if (!container) return;
+  const el = document.createElement("div");
+  el.className = "toast ok";
+  el.innerHTML = `📤 BTC enviado! <a href="https://mempool.space/tx/${txid}" target="_blank" rel="noopener">Ver no mempool.space ↗</a>`;
+  container.appendChild(el);
+  setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, 9000);
 }
 
 async function fetchTimeout(url, ms = 8000) {
@@ -204,6 +224,36 @@ function nomeComRede(tok) {
   return tok.desconhecido ? tok.symbol : `${tok.symbol} (Polygon)`;
 }
 
+// ================= STATUS DAS CARTEIRAS (HEADER) =================
+function atualizarStatusCarteiras() {
+  // EVM (MetaMask / OKX EVM / etc.)
+  const ed = $("evmWalletDot");
+  const et = $("evmWalletText");
+  if (ed && et) {
+    if (userAddress) {
+      ed.className = "dot";
+      et.textContent = `MetaMask: ${short(userAddress)}`;
+    } else {
+      ed.className = "dot off";
+      et.textContent = "MetaMask: Desconectada";
+    }
+  }
+
+  // BTC (UniSat / OKX BTC / Leather)
+  const bd = $("btcWalletDot");
+  const bt = $("btcWalletText");
+  if (bd && bt) {
+    if (btcWallet) {
+      bd.className = "dot btc-status";
+      const a = btcWallet.address;
+      bt.textContent = `${btcWallet.label}: ${a.slice(0, 8)}…${a.slice(-4)}`;
+    } else {
+      bd.className = "dot btc-status off";
+      bt.textContent = "BTC Wallet: Desconectada";
+    }
+  }
+}
+
 async function testarRPC(url) {
   try {
     const p = new ethers.providers.JsonRpcProvider({ url, timeout: 8000 });
@@ -244,7 +294,7 @@ async function verificarStatusRedeBitcoin() {
   dot.className = "dot btc-status load";
   txt.textContent = "Bitcoin API: Sincronizando…";
   try {
-    const resposta = await fetchTimeout("https://blockstream.info/api/blocks/tip/height", 8000);
+    const resposta = await fetchTimeout(`${BLOCKSTREAM_API}/blocks/tip/height`, 8000);
     if (!resposta.ok) throw new Error("HTTP " + resposta.status);
     const blocoAtual = (await resposta.text()).trim();
     if (!/^\d+$/.test(blocoAtual)) throw new Error("Resposta inválida");
@@ -266,7 +316,7 @@ async function consultarSaldoBTC() {
   valEl.textContent = "Consultando…";
   if (card) card.classList.add("show");
   try {
-    const r = await fetchTimeout(`https://blockstream.info/api/address/${encodeURIComponent(endereco)}`, 10000);
+    const r = await fetchTimeout(`${BLOCKSTREAM_API}/address/${encodeURIComponent(endereco)}`, 10000);
     if (!r.ok) throw new Error("Endereço inválido ou não encontrado");
     const dados = await r.json();
     const chain = dados.chain_stats || {};
@@ -280,12 +330,6 @@ async function consultarSaldoBTC() {
     valEl.textContent = "— BTC";
     toast("❌ " + e.message, "err");
   }
-}
-
-async function consultarTaxaWBTC() {
-  const elStatus = $("taxaStatus");
-  if (!elStatus) return;
-  // Função mantida para compatibilidade — o bloco não existe mais no HTML novo
 }
 
 function isBtcAddress(addr) {
@@ -420,7 +464,6 @@ async function enviarPOL() {
 
     toast(`⏳ Enviando ${fmt(valor, 18, 6)} POL…`, "info");
 
-    // POL é nativo: value vai no campo da transação, sem data
     const tx = await signer.sendTransaction({
       to: destino,
       value: valor,
@@ -443,6 +486,186 @@ async function enviarPOL() {
   }
 }
 
+// ================= ENVIO DE BTC (NATIVO) =================
+function isBtcAddressStrict(a) {
+  if (!a) return false;
+  const s = a.trim();
+  return /^(bc1[a-z0-9]{25,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/i.test(s);
+}
+
+async function detectarCarteiraBTC() {
+  if (window.unisat)             return { type: "unisat",  provider: window.unisat, label: "UniSat" };
+  if (window.okxwallet?.bitcoin) return { type: "okx",     provider: window.okxwallet.bitcoin, label: "OKX Wallet" };
+  if (window.LeatherProvider)    return { type: "leather", provider: window.LeatherProvider, label: "Leather" };
+  return null;
+}
+
+async function conectarCarteiraBTC() {
+  const det = await detectarCarteiraBTC();
+  if (!det) {
+    toast("❌ Nenhuma carteira Bitcoin detectada. Instale UniSat ou OKX Wallet.", "err", 10000);
+    return;
+  }
+
+  try {
+    let address = null, publicKey = null;
+
+    if (det.type === "unisat") {
+      const contas = await det.provider.requestAccounts();
+      address = contas[0];
+      publicKey = await det.provider.getPublicKey();
+    } else if (det.type === "okx") {
+      const r = await det.provider.connect();
+      address = r.address;
+      publicKey = r.publicKey;
+    } else if (det.type === "leather") {
+      const r = await det.provider.request("getAddresses");
+      const lista = r?.result?.addresses || [];
+      const pref = lista.find(a => a.type === "p2wpkh" || a.type === "p2tr") || lista[0];
+      if (!pref) throw new Error("Nenhum endereço retornado");
+      address = pref.address;
+      publicKey = pref.publicKey;
+    }
+
+    if (!address) throw new Error("Carteira não retornou endereço");
+
+    btcWallet = { ...det, address, publicKey };
+
+    const st = $("btcWalletStatus");
+    if (st) st.textContent = `✅ ${det.label}: ${address.slice(0, 10)}…${address.slice(-6)}`;
+    const bc = $("btnConectarBTC");   if (bc) bc.style.display = "none";
+    const bd = $("btnDesconectarBTC");if (bd) bd.style.display = "";
+
+    toast(`✅ ${det.label} conectada!`, "ok");
+    await atualizarSaldoBTCEnvio();
+    atualizarStatusCarteiras();
+  } catch (e) {
+    console.error("Conectar BTC:", e);
+    toast("❌ " + (e.message || "Falha ao conectar"), "err");
+  }
+}
+
+function desconectarCarteiraBTC() {
+  btcWallet = null;
+  btcSaldoSats = 0;
+  const st = $("btcWalletStatus");
+  const bc = $("btnConectarBTC");
+  const bd = $("btnDesconectarBTC");
+  const bs = $("btcSaldoDisponivel");
+  if (st) st.textContent = "Não conectada";
+  if (bc) bc.style.display = "";
+  if (bd) bd.style.display = "none";
+  if (bs) bs.textContent = "—";
+  toast("Carteira Bitcoin desconectada.", "info");
+  atualizarStatusCarteiraBTC();
+  atualizarStatusCarteiras();
+}
+
+async function atualizarSaldoBTCEnvio() {
+  if (!btcWallet) { btcSaldoSats = 0; const el = $("btcSaldoDisponivel"); if (el) el.textContent = "—"; return; }
+  try {
+    const r = await fetchTimeout(`${BLOCKSTREAM_API}/address/${btcWallet.address}`, 10000);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    const chain = d.chain_stats || {};
+    const mem   = d.mempool_stats || {};
+    btcSaldoSats =
+      (chain.funded_txo_sum || 0) - (chain.spent_txo_sum || 0) +
+      (mem.funded_txo_sum   || 0) - (mem.spent_txo_sum   || 0);
+    const el = $("btcSaldoDisponivel");
+    if (el) el.textContent = `${(btcSaldoSats / 1e8).toFixed(8)} BTC`;
+  } catch (e) {
+    console.warn("Falha ao consultar saldo BTC:", e.message);
+    const el = $("btcSaldoDisponivel");
+    if (el) el.textContent = "—";
+  }
+}
+
+async function enviarBTC() {
+  if (!btcWallet) { toast("Conecte uma carteira Bitcoin primeiro.", "warn"); return; }
+  if (isTxBusy) return;
+  isTxBusy = true;
+
+  try {
+    const destino   = $("btcDestinoEnvio").value.trim();
+    const valorStr  = $("btcValorEnvio").value.trim().replace(",", ".");
+
+    if (!isBtcAddressStrict(destino))
+      throw new Error("Endereço Bitcoin inválido (use bc1…, 1… ou 3…)");
+    if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0)
+      throw new Error("Valor inválido");
+
+    const sats = Math.round(Number(valorStr) * 1e8);
+    if (sats <= 0) throw new Error("Valor muito pequeno");
+
+    if (btcSaldoSats > 0 && sats > btcSaldoSats - RESERVA_TAXA_BTC_SATS) {
+      throw new Error(
+        `Saldo insuficiente. Você tem ${(btcSaldoSats / 1e8).toFixed(8)} BTC ` +
+        `(reservando ~${RESERVA_TAXA_BTC_SATS} sats para taxa).`
+      );
+    }
+
+    const ok = window.confirm(
+      `Enviar ${valorStr} BTC (${sats} sats) para:\n${destino}\n\n` +
+      `⚠️ Transação irreversível. Continuar?`
+    );
+    if (!ok) return;
+
+    toast(`⏳ Solicitando assinatura na ${btcWallet.label}…`, "info");
+
+    let txid = null;
+
+    if (btcWallet.type === "unisat") {
+      txid = await btcWallet.provider.sendBitcoin(destino, sats);
+    } else if (btcWallet.type === "okx") {
+      const r = await btcWallet.provider.sendBitcoin(destino, sats);
+      txid = typeof r === "string" ? r : (r?.txid || r?.txhash);
+    } else if (btcWallet.type === "leather") {
+      const r = await btcWallet.provider.request("sendTransfer", {
+        recipients: [{ address: destino, amount: sats }]
+      });
+      txid = r?.result?.txid || r?.txid;
+    }
+
+    if (!txid) throw new Error("A carteira não retornou o txid");
+
+    toastBtcTx(txid);
+    toast("✅ BTC enviado com sucesso!", "ok", 7000);
+
+    $("btcDestinoEnvio").value = "";
+    $("btcValorEnvio").value = "";
+    setTimeout(atualizarSaldoBTCEnvio, 4000);
+  } catch (e) {
+    console.error("enviarBTC:", e);
+    if (e.code === 4001 || /reject|cancel|denied/i.test(e.message || "")) toast("Envio cancelado.", "warn");
+    else toast("❌ " + (e.message || "Erro desconhecido"), "err", 8000);
+  } finally {
+    isTxBusy = false;
+  }
+}
+
+async function maxBTCEnvio() {
+  if (!btcWallet) { toast("Conecte uma carteira Bitcoin primeiro.", "warn"); return; }
+  await atualizarSaldoBTCEnvio();
+  const disp = Math.max(0, btcSaldoSats - RESERVA_TAXA_BTC_SATS);
+  if (disp <= 0) { toast("Saldo insuficiente (reserva de taxa).", "warn"); return; }
+  $("btcValorEnvio").value = (disp / 1e8).toFixed(8);
+}
+
+function atualizarStatusCarteiraBTC() {
+  const btn = $("btnConectarBTC");
+  if (!btn) return;
+  const det = !!(window.unisat || window.okxwallet?.bitcoin || window.LeatherProvider);
+  if (btcWallet) {
+    btn.textContent = "🔌 Reconectar BTC";
+  } else if (det) {
+    btn.textContent = "🔌 Conectar carteira BTC";
+  } else {
+    btn.textContent = "🔌 Instalar carteira BTC";
+  }
+}
+
+// ================= UI / TOKENS =================
 function preencherSeletores() {
   const opts = TOKENS.map(t => `<option value="${t.address}">${t.symbol} — ${t.name}</option>`).join("");
   ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
@@ -549,6 +772,7 @@ async function conectarCarteira() {
     toast("✅ Carteira conectada!", "ok");
     await carregarSaldos();
     await carregarOrdens();
+    atualizarStatusCarteiras();
   } catch (e) {
     if (e.code === 4001) toast("Conexão recusada.", "warn");
     else toast("Erro: " + e.message, "err");
@@ -567,6 +791,7 @@ function desconectarCarteira() {
   renderizarSaldos();
   aplicarFiltros();
   toast("Desconectado", "info");
+  atualizarStatusCarteiras();
 }
 
 function abrirPainelCompartilhar() {
@@ -1022,6 +1247,8 @@ function configurarAbas() {
 
       if (aba === "bitcoin") {
         setTimeout(atualizarHintWbtc, 100);
+        setTimeout(atualizarStatusCarteiraBTC, 100);
+        if (btcWallet) setTimeout(atualizarSaldoBTCEnvio, 200);
       }
 
       setTimeout(renderizarSaldos, 50);
@@ -1093,7 +1320,6 @@ function configurarMax() {
     if (saldo > 0n) $("valorWbtcBridge").value = ethers.utils.formatUnits(saldo, wbtc.decimals);
   });
 
-  // ✅ NOVO: MAX para envio de POL (com reserva de gas)
   const m6 = $("btnMaxPOLEnvio");
   if (m6) m6.addEventListener("click", () => {
     const disponivel = calcularPOLDisponivel();
@@ -1103,6 +1329,10 @@ function configurarMax() {
       toast("Saldo insuficiente (reserva de gas).", "warn");
     }
   });
+
+  // MAX BTC envio
+  const m7 = $("btnMaxBTCEnvio");
+  if (m7) m7.addEventListener("click", maxBTCEnvio);
 }
 
 function configurarBotoes() {
@@ -1121,8 +1351,12 @@ function configurarBotoes() {
   const bb = $("btnAbrirBridge");    if (bb) bb.addEventListener("click", criarOrdemSideShift);
   const bc = $("btnCopyDeposit");    if (bc) bc.addEventListener("click", copiarDepositAddress);
 
-  // ✅ NOVO: envio de POL
   const ep = $("btnEnviarPOL");      if (ep) ep.addEventListener("click", enviarPOL);
+
+  // ===== BTC =====
+  const cbBTC = $("btnConectarBTC");     if (cbBTC) cbBTC.addEventListener("click", conectarCarteiraBTC);
+  const dbBTC = $("btnDesconectarBTC");  if (dbBTC) dbBTC.addEventListener("click", desconectarCarteiraBTC);
+  const ebBTC = $("btnEnviarBTC");       if (ebBTC) ebBTC.addEventListener("click", enviarBTC);
 
   ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
     const el = $(id);
@@ -1135,9 +1369,14 @@ function configurarBotoes() {
   const btcDest = $("btcDestinoBridge");
   if (btcDest) btcDest.addEventListener("keydown", e => { if (e.key === "Enter") criarOrdemSideShift(); });
 
-  // ✅ NOVO: Enter no endereço de POL para enviar
   const polDest = $("destinoPOL");
   if (polDest) polDest.addEventListener("keydown", e => { if (e.key === "Enter") enviarPOL(); });
+
+  // Enter no envio de BTC
+  const btcDestEnv = $("btcDestinoEnvio");
+  if (btcDestEnv) btcDestEnv.addEventListener("keydown", e => { if (e.key === "Enter") enviarBTC(); });
+  const btcValEnv = $("btcValorEnvio");
+  if (btcValEnv) btcValEnv.addEventListener("keydown", e => { if (e.key === "Enter") enviarBTC(); });
 }
 
 function iniciarAutoRefresh() {
@@ -1159,6 +1398,7 @@ function configurarEventosWallet() {
       const a = $("addr"); if (a) a.textContent = short(userAddress);
       carregarSaldos();
       carregarOrdens();
+      atualizarStatusCarteiras();
     }
   });
 
@@ -1183,6 +1423,8 @@ async function init() {
     configurarMax();
     configurarBotoes();
     configurarEventosWallet();
+    atualizarStatusCarteiraBTC();
+    atualizarStatusCarteiras();
   } catch (e) {
     console.error("❌ Falha ao configurar UI:", e);
     toast("⚠️ Erro na configuração da UI: " + e.message, "warn", 10000);
@@ -1210,8 +1452,21 @@ async function init() {
           } else {
             const bc = $("btnConnect"); if (bc) bc.style.display = "block";
           }
+          atualizarStatusCarteiras();
         }
       } catch (e) { console.warn("Reconexão silenciosa falhou:", e.message); }
+    }
+
+    // Auto-conexão silenciosa da carteira Bitcoin (UniSat suporta)
+    try {
+      atualizarStatusCarteiraBTC();
+      if (window.unisat) {
+        const contas = await window.unisat.getAccounts();
+        if (contas && contas.length) await conectarCarteiraBTC();
+      }
+      atualizarStatusCarteiras();
+    } catch (e) {
+      console.warn("Auto-conexão BTC falhou:", e.message);
     }
 
     if (okPoly) await carregarOrdens();
