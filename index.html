@@ -25,11 +25,42 @@
             </div>
         </header>
 
+        <!-- BARRA DA CARTEIRA -->
         <div class="wallet-bar">
             <button id="btnConnect" class="btn btn-primary">🔌 Conectar Carteira</button>
             <div id="walletInfo" class="wallet-info" style="display: none;">
                 <span>Conectado: <code id="addr">—</code></span>
+                <button id="btnShareAddr" class="btn btn-sm btn-ok">📤 Compartilhar Endereço</button>
                 <button id="btnDisconnect" class="btn btn-sm btn-err">Desconectar</button>
+            </div>
+        </div>
+
+        <!-- PAINEL DE COMPARTILHAMENTO DE ENDEREÇO -->
+        <div id="sharePanel" class="share-panel" style="display: none;">
+            <div class="share-head">
+                <h3>📤 Seu Endereço BRN (Polygon)</h3>
+                <button id="btnCloseShare" class="btn btn-sm">✕ Fechar</button>
+            </div>
+            <p class="dim" style="font-size: 0.85rem; margin-bottom: 12px;">
+                Compartilhe este endereço para receber BRN, USDC, USDT, WPOL ou qualquer token ERC-20 na rede Polygon.
+            </p>
+            <div class="share-addr-box">
+                <code id="shareAddrFull">—</code>
+                <button id="btnCopyAddr" class="btn btn-sm btn-primary" title="Copiar">📋 Copiar</button>
+            </div>
+            <div class="share-actions">
+                <a id="btnShareNative" class="btn btn-sm btn-ok" href="#" target="_blank" rel="noopener">
+                    📱 Compartilhar (nativo)
+                </a>
+                <a id="btnShareWhatsApp" class="btn btn-sm" href="#" target="_blank" rel="noopener">
+                    💬 WhatsApp
+                </a>
+                <a id="btnShareTelegram" class="btn btn-sm" href="#" target="_blank" rel="noopener">
+                    ✈️ Telegram
+                </a>
+                <a id="btnSharePolygonScan" class="btn btn-sm" href="#" target="_blank" rel="noopener">
+                    🔍 Ver no PolygonScan
+                </a>
             </div>
         </div>
 
