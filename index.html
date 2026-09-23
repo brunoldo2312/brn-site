@@ -10,6 +10,7 @@
 </head>
 <body>
     <div class="container">
+        <!-- ==================== HEADER ==================== -->
         <header>
             <div class="header-left">
                 <h1>🔷 BRN Exchange</h1>
@@ -25,7 +26,7 @@
             </div>
         </header>
 
-        <!-- BARRA DA CARTEIRA -->
+        <!-- ==================== BARRA DA CARTEIRA ==================== -->
         <div class="wallet-bar">
             <button id="btnConnect" class="btn btn-primary">🔌 Conectar Carteira</button>
             <div id="walletInfo" class="wallet-info" style="display: none;">
@@ -35,7 +36,7 @@
             </div>
         </div>
 
-        <!-- PAINEL DE COMPARTILHAMENTO DE ENDEREÇO -->
+        <!-- ==================== PAINEL DE COMPARTILHAMENTO ==================== -->
         <div id="sharePanel" class="share-panel" style="display: none;">
             <div class="share-head">
                 <h3>📤 Seu Endereço BRN (Polygon)</h3>
@@ -49,21 +50,14 @@
                 <button id="btnCopyAddr" class="btn btn-sm btn-primary" title="Copiar">📋 Copiar</button>
             </div>
             <div class="share-actions">
-                <a id="btnShareNative" class="btn btn-sm btn-ok" href="#" target="_blank" rel="noopener">
-                    📱 Compartilhar (nativo)
-                </a>
-                <a id="btnShareWhatsApp" class="btn btn-sm" href="#" target="_blank" rel="noopener">
-                    💬 WhatsApp
-                </a>
-                <a id="btnShareTelegram" class="btn btn-sm" href="#" target="_blank" rel="noopener">
-                    ✈️ Telegram
-                </a>
-                <a id="btnSharePolygonScan" class="btn btn-sm" href="#" target="_blank" rel="noopener">
-                    🔍 Ver no PolygonScan
-                </a>
+                <a id="btnShareNative" class="btn btn-sm btn-ok" href="#" target="_blank" rel="noopener">📱 Compartilhar (nativo)</a>
+                <a id="btnShareWhatsApp" class="btn btn-sm" href="#" target="_blank" rel="noopener">💬 WhatsApp</a>
+                <a id="btnShareTelegram" class="btn btn-sm" href="#" target="_blank" rel="noopener">✈️ Telegram</a>
+                <a id="btnSharePolygonScan" class="btn btn-sm" href="#" target="_blank" rel="noopener">🔍 Ver no PolygonScan</a>
             </div>
         </div>
 
+        <!-- ==================== ABAS ==================== -->
         <div class="tabs">
             <button data-tab="mural" class="active">📋 Mural de Ordens</button>
             <button data-tab="criar">💰 Criar Ordem</button>
@@ -72,6 +66,7 @@
             <button data-tab="bitcoin">₿ Consultar BTC</button>
         </div>
 
+        <!-- ==================== PAINEL: MURAL ==================== -->
         <div id="panel-mural" class="panel">
             <div class="card">
                 <h2>📋 Livro de Ofertas Ativas</h2>
@@ -100,6 +95,7 @@
             </div>
         </div>
 
+        <!-- ==================== PAINEL: CRIAR ORDEM ==================== -->
         <div id="panel-criar" class="panel" hidden>
             <div class="card">
                 <h2>➕ Criar Nova Ordem de Troca</h2>
@@ -120,12 +116,16 @@
                         <input type="text" id="valorDeseja" placeholder="0.0">
                         <select id="selDeseja"></select>
                     </div>
+                    <div style="margin-top:4px;">
+                        <small id="hintDeseja" data-hint="saldo:selDeseja" class="dim">Saldo: —</small>
+                    </div>
                 </div>
                 <button id="btnCriarOrdem" class="btn btn-success" style="width:100%; margin-top:12px;">📋 Criar Ordem no Escrow</button>
                 <p class="source-note">⚠ Ao submeter, seus fundos ficam protegidos sob custódia do contrato inteligente.</p>
             </div>
         </div>
 
+        <!-- ==================== PAINEL: ENVIAR TOKENS ==================== -->
         <div id="panel-enviar" class="panel" hidden>
             <div class="card">
                 <h2>📤 Enviar Ativos Direto (Transferência)</h2>
@@ -149,6 +149,7 @@
             </div>
         </div>
 
+        <!-- ==================== PAINEL: POL ↔ WPOL ==================== -->
         <div id="panel-swap" class="panel" hidden>
             <div class="trade-forms">
                 <div class="form-card">
@@ -176,6 +177,7 @@
             </div>
         </div>
 
+        <!-- ==================== PAINEL: BITCOIN ==================== -->
         <div id="panel-bitcoin" class="panel" hidden>
             <div class="card">
                 <h2>🟠 Consultar Saldo em Conta Bitcoin</h2>
@@ -191,6 +193,7 @@
             </div>
         </div>
 
+        <!-- ==================== SALDOS ==================== -->
         <div class="card">
             <h2>💼 Saldos da sua Carteira</h2>
             <div id="balances" class="balances">
@@ -199,7 +202,10 @@
         </div>
     </div>
 
+    <!-- ==================== TOASTS ==================== -->
     <div id="toasts" class="toast-container"></div>
+
+    <!-- ==================== SCRIPTS ==================== -->
     <script src="app.js"></script>
 </body>
 </html>
