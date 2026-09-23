@@ -1,15 +1,20 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 4.1 (Corrigido)
-// ✅ Seletores ABI calculados em runtime
+// APP.JS — BRN Exchange | Versão 5.0
+// ✅ Seletores ABI calculados após ethers carregar (defensivo)
+// ✅ Ordem correta de criarOrdem: (addr, addr, uint, uint)
 // ✅ Mural em 1 chamada via obterContratosGerados()
-// ✅ Extração de endereços multi-offset (imune a padding irregular)
-// ✅ Compartilhar endereço + auto-refresh
-// ✅ 2 erros de sintaxe corrigidos (preencherSeletores + painel)
+// ✅ Consulta de taxa WBTC → BTC via LayerSwap
+// ✅ Conversão WBTC → BTC via SideShift (bridge serverless)
+// ✅ init() com try/catch por etapa
 // ============================================================
 
 const ESCROW_FACTORY = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
 const REFRESH_MS = 30000;
+
+// ⚠️ Troque pelo domínio da sua função serverless na Vercel
+// Ex: se seu projeto Vercel é "brn-site", vira "https://brn-site.vercel.app/api/sideshift"
+const SIDESHIFT_API_URL = "https://SEU-PROJETO.vercel.app/api/sideshift";
 
 const TOKENS = [
   { symbol: "BRN",     name: "BRN Token",            address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
@@ -29,31 +34,37 @@ const RPC_LIST = [
   "https://polygon.drpc.org"
 ];
 
-// ================= SELETORES ABI (calculados em runtime) =================
-const sel = assinatura => ethers.utils.id(assinatura).slice(2, 10);
+// ================= SELETORES ABI (calculados após ethers carregar) =================
+let S = null;
 
-const S = {
-  Factory: {
-    criarOrdem:  sel("criarNovoContratoEscrow(address,address,uint256,uint256)"),
-    totalOrdens: sel("totalContratos()"),
-    todasOrdens: sel("obterContratosGerados()")
-  },
-  Escrow: {
-    obterDados: sel("obterDados()"),
-    executar:   sel("executarTroca()"),
-    cancelar:   sel("cancelar()")
-  },
-  ERC20: {
-    balanceOf: sel("balanceOf(address)"),
-    allowance: sel("allowance(address,address)"),
-    approve:   sel("approve(address,uint256)"),
-    transfer:  sel("transfer(address,uint256)")
-  },
-  WPOL: {
-    deposit:  sel("deposit()"),
-    withdraw: sel("withdraw(uint256)")
+function construirSeletores() {
+  if (typeof ethers === "undefined" || !ethers.utils) {
+    throw new Error("ethers.js não carregou — verifique o <script> do CDN");
   }
-};
+  const sel = a => ethers.utils.id(a).slice(2, 10);
+  S = {
+    Factory: {
+      criarOrdem:  sel("criarNovoContratoEscrow(address,address,uint256,uint256)"),
+      todasOrdens: sel("obterContratosGerados()")
+    },
+    Escrow: {
+      obterDados: sel("obterDados()"),
+      executar:   sel("executarTroca()"),
+      cancelar:   sel("cancelar()")
+    },
+    ERC20: {
+      balanceOf: sel("balanceOf(address)"),
+      allowance: sel("allowance(address,address)"),
+      approve:   sel("approve(address,uint256)"),
+      transfer:  sel("transfer(address,uint256)")
+    },
+    WPOL: {
+      deposit:  sel("deposit()"),
+      withdraw: sel("withdraw(uint256)")
+    }
+  };
+  console.log("✅ Seletores ABI calculados:", S);
+}
 
 // ================= ESTADO =================
 let provider = null;
@@ -131,12 +142,10 @@ function splitResposta(hex) {
   return p;
 }
 
-// ✅ Extração multi-offset: acha endereço conhecido em qualquer posição da word
+// Extração multi-offset: acha endereço conhecido em qualquer posição da word
 function extrairEnderecoToken(word) {
   if (!word || word.length < 40) return "0x0000000000000000000000000000000000000000";
   const conhecidos = new Set(TOKENS.map(t => t.address.toLowerCase()));
-
-  // Tenta todos os offsets de 2 em 2
   for (let off = 0; off <= word.length - 40; off += 2) {
     const cand = word.slice(off, off + 40);
     if (!/^[0-9a-fA-F]{40}$/.test(cand)) continue;
@@ -145,25 +154,21 @@ function extrairEnderecoToken(word) {
       if (conhecidos.has(addr.toLowerCase())) return addr;
     } catch {}
   }
-
-  // Fallback padrão ABI: últimos 40
   try { return ethers.utils.getAddress("0x" + word.slice(-40)); }
   catch { return "0x0000000000000000000000000000000000000000"; }
 }
 
-// ✅ Extração genérica (criador) — padrão ABI (últimos 40)
 function extrairEnderecoGenerico(word) {
   if (!word || word.length < 40) return "0x0000000000000000000000000000000000000000";
   try { return ethers.utils.getAddress("0x" + word.slice(-40)); }
   catch { return "0x0000000000000000000000000000000000000000"; }
 }
 
-// ✅ Ordem do EscrowIndividual.obterDados():
+// Ordem do EscrowIndividual.obterDados():
 // (criador, tokenOferecido, tokenDesejado, valorOferecido, valorDesejado, executado, cancelado)
 function decodificarOrdem(hex) {
   const p = splitResposta(hex);
   if (p.length < 7) throw new Error("Resposta curta: " + p.length + " words");
-
   return {
     criador:        extrairEnderecoGenerico(p[0]),
     tokenOferecido: extrairEnderecoToken(p[1]),
@@ -183,9 +188,7 @@ function decodificarListaEnderecos(hex) {
   const length = Number(decUint(words[offset]));
   const lista = [];
   for (let i = 0; i < length && (offset + 1 + i) < words.length; i++) {
-    try {
-      lista.push(ethers.utils.getAddress("0x" + words[offset + 1 + i].slice(24)));
-    } catch {}
+    try { lista.push(ethers.utils.getAddress("0x" + words[offset + 1 + i].slice(24))); } catch {}
   }
   return lista;
 }
@@ -289,7 +292,149 @@ async function consultarSaldoBTC() {
   }
 }
 
-// ================= PREENCHER SELECTS (CORRIGIDO) =================
+// ================= CONSULTAR TAXA WBTC → BTC (LayerSwap) =================
+async function consultarTaxaWBTC() {
+  const elTotal   = $("taxaTotal");
+  const elServico = $("taxaServico");
+  const elBlock   = $("taxaBlockchain");
+  const elRecebe  = $("taxaRecebe");
+  const elStatus  = $("taxaStatus");
+  if (!elStatus) return;
+
+  elStatus.textContent = "Consultando…";
+  elStatus.style.color = "var(--text-muted)";
+
+  try {
+    const url = `https://api.layerswap.io/api/v2/quote` +
+      `?source_network=POLYGON_MAINNET` +
+      `&source_token=WBTC` +
+      `&destination_network=BITCOIN_MAINNET` +
+      `&destination_token=BTC` +
+      `&amount=1000`;
+
+    const resp = await fetchTimeout(url, 10000);
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+
+    const json = await resp.json();
+    const q = json.quote || (json.data && json.data.quote) || json;
+    if (!q || q.total_fee === undefined) throw new Error("Resposta inesperada");
+
+    const recebe = q.receive_amount ?? q.destination_amount ?? q.receiveAmount ?? "—";
+
+    if (elTotal)   elTotal.textContent   = `${q.total_fee} USD`;
+    if (elServico) elServico.textContent = `${q.service_fee ?? "—"} USD`;
+    if (elBlock)   elBlock.textContent   = `${q.blockchain_fee ?? "—"} USD`;
+    if (elRecebe)  elRecebe.textContent  = `${recebe} BTC`;
+
+    elStatus.textContent = "✅ Taxa atualizada";
+    elStatus.style.color = "var(--accent)";
+  } catch (e) {
+    if (elStatus) {
+      elStatus.textContent = "⚠️ Cotação indisponível no momento";
+      elStatus.style.color = "var(--text-muted)";
+    }
+    console.warn("LayerSwap rate unavailable:", e.message);
+  }
+}
+
+// ================= WBTC → BTC via SideShift =================
+function isBtcAddress(addr) {
+  if (!addr) return false;
+  const a = addr.trim();
+  if (/^bc1[02-9ac-hj-np-z]{25,87}$/i.test(a)) return true;
+  if (/^1[a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(a)) return true;
+  if (/^3[a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(a)) return true;
+  return false;
+}
+
+function atualizarHintWbtc() {
+  const hint = $("hintWbtcBridge");
+  if (!hint) return;
+  const wbtc = TOKENS.find(t => t.symbol === "WBTC");
+  if (!wbtc) { hint.textContent = "Saldo: —"; return; }
+  const saldo = saldos[wbtc.address] || 0n;
+  hint.textContent = `Saldo: ${fmt(saldo, wbtc.decimals)} WBTC`;
+}
+
+async function criarOrdemSideShift() {
+  if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
+
+  const valorStr = $("valorWbtcBridge").value.trim().replace(",", ".");
+  const btcDestino = $("btcDestinoBridge").value.trim();
+  const resultBox = $("bridge-result");
+
+  if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) {
+    toast("Digite uma quantidade válida de WBTC.", "warn");
+    return;
+  }
+  if (!isBtcAddress(btcDestino)) {
+    toast("❌ Endereço Bitcoin inválido. Use bc1..., 1... ou 3...", "err", 8000);
+    return;
+  }
+
+  const wbtc = TOKENS.find(t => t.symbol === "WBTC");
+  if (!wbtc) { toast("WBTC não configurado.", "err"); return; }
+
+  const valorWei = ethers.utils.parseUnits(valorStr, wbtc.decimals);
+  const saldo = saldos[wbtc.address] || 0n;
+  if (saldo < valorWei) {
+    toast(`❌ Saldo insuficiente. Você tem ${fmt(saldo, wbtc.decimals)} WBTC.`, "err", 8000);
+    return;
+  }
+
+  const confirmar = window.confirm(
+    `Converter ${valorStr} WBTC (Polygon)\n` +
+    `→ BTC nativo para:\n${btcDestino}\n\n` +
+    `Confira o endereço com MUITO cuidado.\nContinuar?`
+  );
+  if (!confirmar) return;
+
+  toast("⏳ Criando ordem na SideShift…", "info", 6000);
+  if (resultBox) resultBox.style.display = "none";
+
+  try {
+    const response = await fetch(SIDESHIFT_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        depositAmount: valorStr,
+        settleAddress: btcDestino
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || "Erro ao criar ordem");
+    }
+
+    $("bridge-deposit-address").textContent = data.depositAddress;
+    $("bridge-deposit-amount").textContent = data.depositAmount;
+    $("bridge-settle-amount").textContent = data.settleAmount;
+    $("bridge-expires").textContent = new Date(data.expiresAt).toLocaleTimeString();
+    if (resultBox) {
+      resultBox.style.display = "block";
+      resultBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    toast("✅ Ordem criada! Envie o WBTC para o endereço exibido.", "ok", 12000);
+  } catch (e) {
+    console.error("SideShift:", e);
+    toast("❌ " + e.message, "err", 10000);
+  }
+}
+
+async function copiarDepositAddress() {
+  const el = $("bridge-deposit-address");
+  if (!el) return;
+  try {
+    await navigator.clipboard.writeText(el.textContent);
+    toast("✅ Endereço copiado!", "ok");
+  } catch {
+    toast("❌ Não foi possível copiar.", "err");
+  }
+}
+
+// ================= PREENCHER SELECTS =================
 function preencherSeletores() {
   const opts = TOKENS.map(t => `<option value="${t.address}">${t.symbol} — ${t.name}</option>`).join("");
   ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
@@ -298,17 +443,15 @@ function preencherSeletores() {
   });
 
   const filtroOpts = TOKENS.map(t => `<option value="${t.address}">${t.symbol}</option>`).join("");
-
   const fo = $("filtroOferece");
   if (fo) fo.innerHTML = '<option value="">Oferece: Todos</option>' + filtroOpts;
-
   const fp = $("filtroPede");
   if (fp) fp.innerHTML = '<option value="">Pede: Todos</option>' + filtroOpts;
 }
 
 // ================= SALDOS =================
 async function carregarSaldos() {
-  if (!rpcProvider || !userAddress) return;
+  if (!rpcProvider || !userAddress || !S) return;
   try {
     saldos.POL = BigInt((await rpcProvider.getBalance(userAddress)).toString());
     for (const t of TOKENS) {
@@ -358,6 +501,8 @@ function renderizarSaldos() {
       }
     }
   });
+
+  atualizarHintWbtc();
 }
 
 // ================= CARTEIRA =================
@@ -417,7 +562,7 @@ function desconectarCarteira() {
   toast("Desconectado", "info");
 }
 
-// ================= COMPARTILHAR ENDEREÇO (CORRIGIDO) =================
+// ================= COMPARTILHAR ENDEREÇO =================
 function abrirPainelCompartilhar() {
   if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
 
@@ -490,7 +635,7 @@ async function copiarEndereco() {
 
 // ================= MURAL DE ORDENS =================
 async function carregarOrdens() {
-  if (loading || !rpcProvider) return;
+  if (loading || !rpcProvider || !S) return;
   loading = true;
 
   const container = $("orders");
@@ -629,7 +774,7 @@ function renderizarOrdens(lista) {
 
 // ================= CRIAR ORDEM =================
 async function criarOrdem() {
-  if (!signer || !userAddress || isTxBusy) return;
+  if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
 
   try {
@@ -702,7 +847,7 @@ async function criarOrdem() {
 
 // ================= EXECUTAR / CANCELAR =================
 async function executarOrdem(escrowAddr) {
-  if (!signer || !userAddress || isTxBusy) return;
+  if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
   try {
     const dadosRes = await rpcProvider.call({ to: escrowAddr, data: "0x" + S.Escrow.obterDados });
@@ -746,7 +891,7 @@ async function executarOrdem(escrowAddr) {
 }
 
 async function cancelarOrdem(escrowAddr) {
-  if (!signer || isTxBusy) return;
+  if (!signer || isTxBusy || !S) return;
   isTxBusy = true;
   try {
     toast("⏳ Cancelando…", "info");
@@ -769,7 +914,7 @@ async function cancelarOrdem(escrowAddr) {
 
 // ================= ENVIAR TOKENS =================
 async function enviarToken() {
-  if (!signer || !userAddress || isTxBusy) return;
+  if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
   try {
     const tokenAddr = $("selTokenEnvio").value;
@@ -805,7 +950,7 @@ async function enviarToken() {
 
 // ================= POL ↔ WPOL =================
 async function wrapPOL() {
-  if (!signer || !userAddress || isTxBusy) return;
+  if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
   try {
     const wpol = TOKENS.find(t => t.symbol === "WPOL");
@@ -835,7 +980,7 @@ async function wrapPOL() {
 }
 
 async function unwrapWPOL() {
-  if (!signer || !userAddress || isTxBusy) return;
+  if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
   try {
     const wpol = TOKENS.find(t => t.symbol === "WPOL");
@@ -874,6 +1019,12 @@ function configurarAbas() {
       document.querySelectorAll(".panel").forEach(p => p.hidden = true);
       const alvo = $(`panel-${aba}`);
       if (alvo) alvo.hidden = false;
+
+      if (aba === "bitcoin") {
+        setTimeout(consultarTaxaWBTC, 100);
+        setTimeout(atualizarHintWbtc, 100);
+      }
+
       setTimeout(renderizarSaldos, 50);
     });
   });
@@ -937,6 +1088,13 @@ function configurarMax() {
     const saldo = saldos[wpol.address] || 0n;
     if (saldo > 0n) $("valorPOL").value = ethers.utils.formatUnits(saldo, 18);
   });
+
+  const m5 = $("btnMaxWbtcBridge");
+  if (m5) m5.addEventListener("click", () => {
+    const wbtc = TOKENS.find(t => t.symbol === "WBTC");
+    const saldo = saldos[wbtc.address] || 0n;
+    if (saldo > 0n) $("valorWbtcBridge").value = ethers.utils.formatUnits(saldo, wbtc.decimals);
+  });
 }
 
 // ================= BOTÕES GERAIS =================
@@ -952,6 +1110,11 @@ function configurarBotoes() {
   const cu = $("btnConverterPOL");   if (cu) cu.addEventListener("click", unwrapWPOL);
   const cb = $("btnConsultarBTC");   if (cb) cb.addEventListener("click", consultarSaldoBTC);
   const rf = $("btnRefresh");        if (rf) rf.addEventListener("click", carregarOrdens);
+  const bt = $("btnConsultarTaxa");  if (bt) bt.addEventListener("click", consultarTaxaWBTC);
+
+  // WBTC → BTC (SideShift)
+  const bb = $("btnAbrirBridge");    if (bb) bb.addEventListener("click", criarOrdemSideShift);
+  const bc = $("btnCopyDeposit");    if (bc) bc.addEventListener("click", copiarDepositAddress);
 
   ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
     const el = $(id);
@@ -960,6 +1123,9 @@ function configurarBotoes() {
 
   const btcIn = $("btcAddressInput");
   if (btcIn) btcIn.addEventListener("keydown", e => { if (e.key === "Enter") consultarSaldoBTC(); });
+
+  const btcDest = $("btcDestinoBridge");
+  if (btcDest) btcDest.addEventListener("keydown", e => { if (e.key === "Enter") criarOrdemSideShift(); });
 }
 
 // ================= AUTO-REFRESH + WALLET EVENTS =================
@@ -991,42 +1157,61 @@ function configurarEventosWallet() {
 // ================= INICIALIZAÇÃO =================
 async function init() {
   console.log("🚀 BRN Exchange — inicializando…");
-  preencherSeletores();
-  configurarAbas();
-  configurarFiltros();
-  configurarMax();
-  configurarBotoes();
-  configurarEventosWallet();
 
-  const [okPoly] = await Promise.all([
-    atualizarStatusRede(),
-    verificarStatusRedeBitcoin()
-  ]);
-
-  if (okPoly && window.ethereum) {
-    try {
-      const contas = await window.ethereum.request({ method: "eth_accounts" });
-      if (contas && contas.length) {
-        provider = new ethers.providers.Web3Provider(window.ethereum);
-        userAddress = ethers.utils.getAddress(contas[0]);
-        signer = provider.getSigner();
-        const rede = await provider.getNetwork();
-        if (rede.chainId === POLYGON_CHAIN_ID) {
-          const bc = $("btnConnect"); if (bc) bc.style.display = "none";
-          const wi = $("walletInfo"); if (wi) wi.style.display = "flex";
-          const a  = $("addr");       if (a)  a.textContent = short(userAddress);
-          await carregarSaldos();
-        } else {
-          const bc = $("btnConnect"); if (bc) bc.style.display = "block";
-        }
-      }
-    } catch (e) { console.warn("Reconexão silenciosa falhou:", e.message); }
+  try {
+    construirSeletores();
+  } catch (e) {
+    console.error("❌ Falha ao calcular seletores:", e);
+    toast("❌ Erro crítico: " + e.message, "err", 15000);
+    return;
   }
 
-  if (okPoly) await carregarOrdens();
+  try {
+    preencherSeletores();
+    configurarAbas();
+    configurarFiltros();
+    configurarMax();
+    configurarBotoes();
+    configurarEventosWallet();
+  } catch (e) {
+    console.error("❌ Falha ao configurar UI:", e);
+    toast("⚠️ Erro na configuração da UI: " + e.message, "warn", 10000);
+  }
 
-  iniciarAutoRefresh();
-  console.log("✅ Pronto.");
+  try {
+    const [okPoly] = await Promise.all([
+      atualizarStatusRede(),
+      verificarStatusRedeBitcoin()
+    ]);
+
+    if (okPoly && window.ethereum) {
+      try {
+        const contas = await window.ethereum.request({ method: "eth_accounts" });
+        if (contas && contas.length) {
+          provider = new ethers.providers.Web3Provider(window.ethereum);
+          userAddress = ethers.utils.getAddress(contas[0]);
+          signer = provider.getSigner();
+          const rede = await provider.getNetwork();
+          if (rede.chainId === POLYGON_CHAIN_ID) {
+            const bc = $("btnConnect"); if (bc) bc.style.display = "none";
+            const wi = $("walletInfo"); if (wi) wi.style.display = "flex";
+            const a  = $("addr");       if (a)  a.textContent = short(userAddress);
+            await carregarSaldos();
+          } else {
+            const bc = $("btnConnect"); if (bc) bc.style.display = "block";
+          }
+        }
+      } catch (e) { console.warn("Reconexão silenciosa falhou:", e.message); }
+    }
+
+    if (okPoly) await carregarOrdens();
+
+    iniciarAutoRefresh();
+    console.log("✅ Pronto.");
+  } catch (e) {
+    console.error("❌ Falha na conexão de rede:", e);
+    toast("❌ Erro ao conectar redes: " + e.message, "err", 12000);
+  }
 }
 
 if (document.readyState === "loading") {
