@@ -67,6 +67,7 @@
             <button data-tab="mural" class="active">📋 Mural de Ordens</button>
             <button data-tab="criar">💰 Criar Ordem</button>
             <button data-tab="enviar">📤 Enviar Tokens</button>
+            <button data-tab="enviarpol">💎 Enviar POL</button>
             <button data-tab="swap">🔄 POL ↔ WPOL</button>
             <button data-tab="bitcoin">₿ Consultar BTC</button>
         </div>
@@ -151,6 +152,46 @@
                     <small id="hintEnvio" data-hint="saldo:selTokenEnvio" class="dim" style="display:block; margin-top:4px;">Saldo: —</small>
                 </div>
                 <button id="btnEnviar" class="btn btn-primary" style="width:100%; margin-top:12px;">📤 Enviar Fundos</button>
+            </div>
+        </div>
+
+        <!-- ==================== PAINEL: ENVIAR POL ==================== -->
+        <div id="panel-enviarpol" class="panel" hidden>
+            <div class="card">
+                <h2>💎 Enviar POL (nativo Polygon)</h2>
+                <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">
+                    Envie POL diretamente para qualquer endereço EVM na rede Polygon.
+                    O POL é a moeda nativa usada para pagar gas.
+                </p>
+
+                <div class="input-group">
+                    <label>Endereço de destino:</label>
+                    <input type="text" id="destinoPOL" placeholder="0x...">
+                    <small class="dim" style="display:block; margin-top:4px;">
+                        ⚠️ Confira duas vezes. Transação irreversível.
+                    </small>
+                </div>
+
+                <div class="input-group">
+                    <label>Valor a enviar:</label>
+                    <div class="row">
+                        <input type="text" id="valorPOLEnvio" placeholder="0.0">
+                        <button id="btnMaxPOLEnvio" class="btn btn-sm">MAX</button>
+                    </div>
+                    <small class="dim" style="display:block; margin-top:4px;">
+                        Disponível: <span data-hint="saldoPOLDisponivel">0.00</span> POL
+                        <br>
+                        <span style="opacity:0.7;">(reserva 0.05 POL para gas automaticamente)</span>
+                    </small>
+                </div>
+
+                <button id="btnEnviarPOL" class="btn btn-btc" style="width:100%; margin-top:12px;">
+                    💎 Enviar POL
+                </button>
+
+                <p class="source-note">
+                    ⚠️ Você precisa ter saldo de POL suficiente para pagar a taxa de gas. Uma reserva de 0.05 POL é mantida automaticamente para garantir que futuras transações continuem funcionando.
+                </p>
             </div>
         </div>
 
