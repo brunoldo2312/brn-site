@@ -1,3 +1,7 @@
+Uma tela de parabéns com confetes
+· Um domínio do tipo: https://brn-site.vercel.app
+· Ou se o nome já existe: https://brn-site-abc123.vercel.app
+
 # 🚀 BRN Exchange
 
 > Ecossistema descentralizado de troca de criptoativos na rede Polygon — P2P sem servidor central, com garantia de escrow.
