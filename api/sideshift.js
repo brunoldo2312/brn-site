@@ -1,9 +1,9 @@
 // ============================================================
-// api/sideshift.js — Função serverless Vercel
+// api/sideshift.js — Função serverless Vercel (ES Module)
 // Cria ordem de troca WBTC (Polygon) → BTC (Bitcoin) via SideShift
 //
 // Variáveis de ambiente necessárias (configurar no painel da Vercel):
-//   SIDESHIFT_SECRET        → Private Key da sua conta em sideshift.ai/account
+//   SIDESHIFT_SECRET        → Private Key em sideshift.ai/account
 //   SIDESHIFT_AFFILIATE_ID  → Account ID em sideshift.ai/account
 //
 // ⚠️ A SIDESHIFT_SECRET NUNCA deve ir para o front-end.
@@ -11,17 +11,14 @@
 
 export default async function handler(req, res) {
   // ================= CORS =================
-  // Permite chamadas do site estático (GitHub Pages, domínio próprio, etc.)
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // Preflight
   if (req.method === "OPTIONS") {
     return res.status(204).end();
   }
 
-  // ================= Método =================
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Método não permitido. Use POST." });
   }
@@ -51,7 +48,6 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "depositAmount deve ser um número positivo" });
   }
 
-  // Validação básica de endereço Bitcoin (bc1..., 1..., 3...)
   const addr = String(settleAddress).trim();
   const isBtcAddr =
     /^bc1[02-9ac-hj-np-z]{25,87}$/i.test(addr) ||
@@ -83,9 +79,9 @@ export default async function handler(req, res) {
 
     if (!quoteResp.ok) {
       const errData = await quoteResp.json().catch(() => ({}));
-      const msg = errData.error?.message || `HTTP ${quoteResp.status}`;
+      const msg = (errData.error && errData.error.message) || ("HTTP " + quoteResp.status);
       console.error("Erro ao obter cotação:", msg);
-      return res.status(502).json({ error: `Cotação falhou: ${msg}` });
+      return res.status(502).json({ error: "Cotação falhou: " + msg });
     }
 
     const quote = await quoteResp.json();
@@ -111,9 +107,9 @@ export default async function handler(req, res) {
 
     if (!shiftResp.ok) {
       const errData = await shiftResp.json().catch(() => ({}));
-      const msg = errData.error?.message || `HTTP ${shiftResp.status}`;
+      const msg = (errData.error && errData.error.message) || ("HTTP " + shiftResp.status);
       console.error("Erro ao criar shift:", msg);
-      return res.status(502).json({ error: `Criação da ordem falhou: ${msg}` });
+      return res.status(502).json({ error: "Criação da ordem falhou: " + msg });
     }
 
     const shift = await shiftResp.json();
