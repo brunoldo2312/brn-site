@@ -6,7 +6,7 @@
     </linearGradient>
   </defs>
   <rect width="200" height="200" rx="40" fill="#0d1117"/>
-  <path d="M100 30 L160 90 L100 170 L40 90 Z" fill="url(#grad1)" opacity="0.9"/>
-  <path d="M100 30 L100 170 M40 90 L160 90" stroke="#0d1117" stroke-width="4" opacity="0.3"/>
-  <text x="100" y="120" font-family="Arial, sans-serif" font-size="52" font-weight="bold" fill="white" text-anchor="middle">B</text>
+  <path d="M100 20 L165 85 L100 180 L35 85 Z" fill="url(#grad1)" opacity="0.9"/>
+  <text x="100" y="120" font-family="Arial, sans-serif" font-size="42" font-weight="bold" 
+        fill="white" text-anchor="middle" letter-spacing="1">BRN</text>
 </svg>
