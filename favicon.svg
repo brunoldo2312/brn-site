@@ -1,14 +1,91 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+<svg width="500" height="500" viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">
+  <!-- ====================================================== -->
+  <!-- DEFINIÇÕES DE CORES E EFEITOS -->
+  <!-- ====================================================== -->
   <defs>
-    <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#58a6ff;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#8247e5;stop-opacity:1" />
+    <radialGradient id="coinBorder" cx="30%" cy="30%" r="100%">
+      <stop offset="0%" stop-color="#f0f0f0"/>
+      <stop offset="25%" stop-color="#d8d8d8"/>
+      <stop offset="50%" stop-color="#b8b8b8"/>
+      <stop offset="75%" stop-color="#909090"/>
+      <stop offset="100%" stop-color="#606060"/>
+    </radialGradient>
+    
+    <radialGradient id="innerRim" cx="40%" cy="40%" r="100%">
+      <stop offset="0%" stop-color="#e8e8e8"/>
+      <stop offset="100%" stop-color="#a8a8a8"/>
+    </radialGradient>
+    
+    <linearGradient id="arrowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00a0ff"/>
+      <stop offset="100%" stop-color="#9020ff"/>
     </linearGradient>
+    
+    <linearGradient id="brnGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0099ff"/>
+      <stop offset="100%" stop-color="#8000ff"/>
+    </linearGradient>
+    
+    <radialGradient id="centerBg" cx="50%" cy="50%" r="100%">
+      <stop offset="0%" stop-color="#12121f"/>
+      <stop offset="100%" stop-color="#05050a"/>
+    </radialGradient>
   </defs>
-  <rect width="200" height="200" rx="40" fill="#0d1117"/>
-  <circle cx="100" cy="90" r="55" fill="url(#grad3)" opacity="0.15"/>
-  <path d="M65 75 L130 75 L112 57 M135 105 L70 105 L88 123" 
-        stroke="url(#grad3)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <text x="100" y="165" font-family="Arial, sans-serif" font-size="36" font-weight="bold" 
-        fill="url(#grad3)" text-anchor="middle" letter-spacing="3">BRN</text>
+
+  <!-- SOMBRA EXTERIOR -->
+  <ellipse cx="252" cy="252" rx="235" ry="235" fill="rgba(0,0,0,0.4)"/>
+
+  <!-- BORDA EXTERIOR -->
+  <circle cx="250" cy="250" r="230" fill="url(#coinBorder)" stroke="#444" stroke-width="3"/>
+  <ellipse cx="250" cy="120" rx="180" ry="40" fill="rgba(255,255,255,0.15)" transform="rotate(-15 250 120)"/>
+  <circle cx="250" cy="250" r="205" fill="none" stroke="url(#innerRim)" stroke-width="6"/>
+  <circle cx="250" cy="250" r="200" fill="none" stroke="#444" stroke-width="2"/>
+
+  <!-- TEXTO CIRCULAR -->
+  <path id="outerPath" d="M250,48 A202,202 0 1,1 249.9,48" fill="none"/>
+  <text font-family="'Courier New', monospace" font-size="22" font-weight="bold" fill="#222" letter-spacing="1">
+    <textPath href="#outerPath" startOffset="5%">
+      0X099D61B57112426D662845699BE70A1B115A1BAA63
+    </textPath>
+  </text>
+
+  <!-- ÁREA INTERNA -->
+  <circle cx="250" cy="250" r="185" fill="url(#centerBg)"/>
+  <ellipse cx="250" cy="200" rx="140" ry="80" fill="rgba(40,100,255,0.03)"/>
+
+  <!-- ====================================================== -->
+  <!-- SETAS — MAIS AFASTADAS ENTRE SI -->
+  <!-- ====================================================== -->
+  <g transform="translate(250, 155)">
+    <!-- Seta para a direita → movida para cima -->
+    <path d="M-90,0 L90,0 L55,-35 L65,-45 L115,10 L65,65 L55,55 L90,20 L-90,20 Z" 
+          fill="url(#arrowGrad)" opacity="0.95"/>
+    <!-- Seta para a esquerda ← movida para baixo -->
+    <path d="M90,90 L-90,90 L-55,125 L-65,135 L-115,80 L-65,25 L-55,35 L-90,70 L90,70 Z" 
+          fill="url(#arrowGrad)" opacity="0.95"/>
+  </g>
+
+  <!-- ====================================================== -->
+  <!-- BRN — DESCENDO MAIS UM POUCO -->
+  <!-- ====================================================== -->
+  <text x="250" y="345" 
+        font-family="Arial, Helvetica, sans-serif" 
+        font-size="72" 
+        font-weight="900" 
+        text-anchor="middle" 
+        fill="url(#brnGrad)"
+        style="text-shadow: 0 0 10px rgba(0,150,255,0.5), 0 0 20px rgba(120,0,255,0.3);">
+    BRN
+  </text>
+
+  <!-- BRUNO -->
+  <text x="250" y="410" 
+        font-family="Arial, Helvetica, sans-serif" 
+        font-size="32" 
+        font-weight="bold" 
+        text-anchor="middle" 
+        fill="#d0d0d0"
+        style="text-shadow: 0 1px 2px rgba(0,0,0,0.8);">
+    ✦ BRUNO ✦
+  </text>
 </svg>
