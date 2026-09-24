@@ -1,5 +1,6 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 5.4
+// APP.JS — BRN Exchange | Versão 5.5
+// ✅ CORREÇÃO: BigInt x BigNumber (helper parseUnits)
 // ✅ Seletores ABI calculados após ethers carregar
 // ✅ Ordem correta de criarOrdem: (addr, addr, uint, uint)
 // ✅ Mural em 1 chamada via obterContratosGerados()
@@ -16,10 +17,7 @@ const REFRESH_MS = 30000;
 const SIDESHIFT_API_URL = "https://brn-site.vercel.app/api/sideshift";
 const BLOCKSTREAM_API = "https://blockstream.info/api";
 
-// Reserva mínima de POL que fica na carteira (para não travar futuras transações)
 const RESERVA_GAS_POL = "0.05";
-
-// Reserva de sats para taxa ao enviar BTC (padrão ~2000 sats)
 const RESERVA_TAXA_BTC_SATS = 2000;
 
 const TOKENS = [
@@ -83,14 +81,18 @@ let filtroAtivo = { status: "ativas", oferece: "", pede: "", minhas: false };
 let btcApiSincronizada = false;
 let refreshTimer = null;
 
-// ===== Estado da carteira Bitcoin =====
-let btcWallet = null;      // { type, provider, address, publicKey, label }
+let btcWallet = null;
 let btcSaldoSats = 0;
 
 const $ = id => document.getElementById(id);
 const isAddr = a => /^0x[a-fA-F0-9]{40}$/.test(a || "");
 const short = a => isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—";
 const mesmoAddr = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
+
+// ✅ CORREÇÃO CRÍTICA: converte para BigInt nativo (evita mistura com BigNumber)
+function parseUnits(valor, decimals) {
+  return BigInt(ethers.utils.parseUnits(valor, decimals).toString());
+}
 
 function fmt(bigInt, decimals, maxFrac = 6) {
   try {
@@ -224,9 +226,7 @@ function nomeComRede(tok) {
   return tok.desconhecido ? tok.symbol : `${tok.symbol} (Polygon)`;
 }
 
-// ================= STATUS DAS CARTEIRAS (HEADER) =================
 function atualizarStatusCarteiras() {
-  // EVM (MetaMask / OKX EVM / etc.)
   const ed = $("evmWalletDot");
   const et = $("evmWalletText");
   if (ed && et) {
@@ -239,7 +239,6 @@ function atualizarStatusCarteiras() {
     }
   }
 
-  // BTC (UniSat / OKX BTC / Leather)
   const bd = $("btcWalletDot");
   const bt = $("btcWalletText");
   if (bd && bt) {
@@ -369,7 +368,7 @@ async function criarOrdemSideShift() {
   const wbtc = TOKENS.find(t => t.symbol === "WBTC");
   if (!wbtc) { toast("WBTC não configurado.", "err"); return; }
 
-  const valorWei = ethers.utils.parseUnits(valorStr, wbtc.decimals);
+  const valorWei = parseUnits(valorStr, wbtc.decimals);
   const saldo = saldos[wbtc.address] || 0n;
   if (saldo < valorWei) {
     toast(`❌ Saldo insuficiente. Você tem ${fmt(saldo, wbtc.decimals)} WBTC.`, "err", 8000);
@@ -428,9 +427,8 @@ async function copiarDepositAddress() {
   }
 }
 
-// ================= ENVIO DE POL (NATIVO) =================
 function calcularPOLDisponivel() {
-  const reserva = ethers.utils.parseUnits(RESERVA_GAS_POL, 18);
+  const reserva = parseUnits(RESERVA_GAS_POL, 18);
   return saldos.POL > reserva ? saldos.POL - reserva : 0n;
 }
 
@@ -445,7 +443,7 @@ async function enviarPOL() {
     if (mesmoAddr(destino, userAddress)) throw new Error("Não pode enviar para você mesmo");
     if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
 
-    const valor = ethers.utils.parseUnits(valorStr, 18);
+    const valor = parseUnits(valorStr, 18);
     const disponivel = calcularPOLDisponivel();
 
     if (valor > disponivel) {
@@ -486,7 +484,6 @@ async function enviarPOL() {
   }
 }
 
-// ================= ENVIO DE BTC (NATIVO) =================
 function isBtcAddressStrict(a) {
   if (!a) return false;
   const s = a.trim();
@@ -665,7 +662,6 @@ function atualizarStatusCarteiraBTC() {
   }
 }
 
-// ================= UI / TOKENS =================
 function preencherSeletores() {
   const opts = TOKENS.map(t => `<option value="${t.address}">${t.symbol} — ${t.name}</option>`).join("");
   ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
@@ -910,7 +906,10 @@ async function carregarOrdens() {
           cancelado: d.cancelado
         });
       } catch (e) {
-        console.warn(`Erro na ordem ${i} (${endereco}):`, e.message);
+        // Silencia erros de contratos antigos (interface desatualizada)
+        if (!/missing revert data|call exception|timeout/i.test(e.message || "")) {
+          console.warn(`Erro na ordem ${i} (${endereco}):`, e.message);
+        }
       }
     }));
 
@@ -1020,8 +1019,8 @@ async function criarOrdem() {
     if (!ofStr || isNaN(Number(ofStr)) || Number(ofStr) <= 0) throw new Error("Valor oferecido inválido");
     if (!deStr || isNaN(Number(deStr)) || Number(deStr) <= 0) throw new Error("Valor desejado inválido");
 
-    const ofVal = ethers.utils.parseUnits(ofStr, ofToken.decimals);
-    const deVal = ethers.utils.parseUnits(deStr, deToken.decimals);
+    const ofVal = parseUnits(ofStr, ofToken.decimals);
+    const deVal = parseUnits(deStr, deToken.decimals);
 
     const saldo = decUint((await rpcProvider.call({
       to: ofAddr,
@@ -1154,7 +1153,7 @@ async function enviarToken() {
     if (mesmoAddr(destino, userAddress)) throw new Error("Não pode enviar para você mesmo");
     if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
 
-    const valor = ethers.utils.parseUnits(valorStr, token.decimals);
+    const valor = parseUnits(valorStr, token.decimals);
     toast(`⏳ Enviando ${fmt(valor, token.decimals, 4)} ${token.symbol}…`, "info");
 
     const tx = await signer.sendTransaction({
@@ -1182,7 +1181,7 @@ async function wrapPOL() {
     const wpol = TOKENS.find(t => t.symbol === "WPOL");
     const valorStr = $("valorWPOL").value.trim().replace(",", ".");
     if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
-    const valor = ethers.utils.parseUnits(valorStr, 18);
+    const valor = parseUnits(valorStr, 18);
 
     if (valor > saldos.POL) throw new Error("Saldo insuficiente de POL");
 
@@ -1212,7 +1211,7 @@ async function unwrapWPOL() {
     const wpol = TOKENS.find(t => t.symbol === "WPOL");
     const valorStr = $("valorPOL").value.trim().replace(",", ".");
     if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
-    const valor = ethers.utils.parseUnits(valorStr, 18);
+    const valor = parseUnits(valorStr, 18);
 
     const saldoWPOL = saldos[wpol.address] || 0n;
     if (valor > saldoWPOL) throw new Error("Saldo insuficiente de WPOL");
@@ -1301,7 +1300,7 @@ function configurarMax() {
 
   const m3 = $("btnMaxWrap");
   if (m3) m3.addEventListener("click", () => {
-    const reserva = ethers.utils.parseUnits("0.01", 18);
+    const reserva = parseUnits("0.01", 18);
     const disponivel = saldos.POL > reserva ? saldos.POL - reserva : 0n;
     if (disponivel > 0n) $("valorWPOL").value = ethers.utils.formatUnits(disponivel, 18);
   });
@@ -1330,7 +1329,6 @@ function configurarMax() {
     }
   });
 
-  // MAX BTC envio
   const m7 = $("btnMaxBTCEnvio");
   if (m7) m7.addEventListener("click", maxBTCEnvio);
 }
@@ -1353,7 +1351,6 @@ function configurarBotoes() {
 
   const ep = $("btnEnviarPOL");      if (ep) ep.addEventListener("click", enviarPOL);
 
-  // ===== BTC =====
   const cbBTC = $("btnConectarBTC");     if (cbBTC) cbBTC.addEventListener("click", conectarCarteiraBTC);
   const dbBTC = $("btnDesconectarBTC");  if (dbBTC) dbBTC.addEventListener("click", desconectarCarteiraBTC);
   const ebBTC = $("btnEnviarBTC");       if (ebBTC) ebBTC.addEventListener("click", enviarBTC);
@@ -1372,7 +1369,6 @@ function configurarBotoes() {
   const polDest = $("destinoPOL");
   if (polDest) polDest.addEventListener("keydown", e => { if (e.key === "Enter") enviarPOL(); });
 
-  // Enter no envio de BTC
   const btcDestEnv = $("btcDestinoEnvio");
   if (btcDestEnv) btcDestEnv.addEventListener("keydown", e => { if (e.key === "Enter") enviarBTC(); });
   const btcValEnv = $("btcValorEnvio");
@@ -1457,7 +1453,6 @@ async function init() {
       } catch (e) { console.warn("Reconexão silenciosa falhou:", e.message); }
     }
 
-    // Auto-conexão silenciosa da carteira Bitcoin (UniSat suporta)
     try {
       atualizarStatusCarteiraBTC();
       if (window.unisat) {
