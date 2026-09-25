@@ -1,884 +1,332 @@
-// ============================================================
-// APP.JS — BRN Exchange | Versão 6.2
-// ✅ Multi-carteira via EIP-6963 (MetaMask/Rabby/Trust/OKX...)
-// ✅ SHIB, USDT nativo/bridged, USDT-ETH placeholder
-// ✅ Botão 📋 para copiar contrato de cada token
-// ✅ Bridge WBTC → BTC (SideShift)
-// ✅ Bridge Cross-Chain USDT Polygon → USDT Ethereum (SideShift)
-// ✅ traduzirErro() — mensagens amigáveis em PT-BR
-// ✅ Tratamento de cancelamento (code 4001)
-// ✅ BigInt x BigNumber (parseUnits helper)
-// ✅ Seletores ABI calculados após ethers carregar
-// ✅ criarOrdem: (addr, addr, uint, uint)
-// ✅ Mural em 1 chamada (obterContratosGerados)
-// ✅ Envio POL nativo (reserva de gas)
-// ✅ Envio BTC nativo (UniSat/OKX/Leather)
-// ✅ init() com try/catch por etapa
-// ============================================================
-
-const ESCROW_FACTORY = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
-const POLYGON_CHAIN_ID = 137;
-const REFRESH_MS = 30000;
-const SIDESHIFT_API_URL = "https://brn-site.vercel.app/api/sideshift";
-const BLOCKSTREAM_API = "https://blockstream.info/api";
-
-const RESERVA_GAS_POL = "0.05";
-const RESERVA_TAXA_BTC_SATS = 2000;
-
-const TOKENS = [
-  { symbol: "BRN",        name: "BRN Token",             address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
-  { symbol: "USDC",       name: "USD Coin (nativo)",     address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6  },
-  { symbol: "USDC.e",     name: "USD Coin (bridged)",    address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6  },
-  { symbol: "USDT",       name: "Tether USD (nativo)",   address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6  },
-  { symbol: "USDT.e",     name: "Tether USD (bridged)",  address: "0x9417669fBF23357D2774e9D4234219952D36A1e5", decimals: 6  },
-  { symbol: "USDT-ETH",   name: "Tether USD (Ethereum)", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6, somenteEth: true },
-  { symbol: "SHIB",       name: "Shiba Inu",             address: "0x6f8a06447Ff6FcF75d803135a7de15CE88C1d4ec", decimals: 18 },
-  { symbol: "WPOL",       name: "Wrapped POL",           address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
-  { symbol: "WBTC",       name: "Wrapped BTC",           address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8  },
-  { symbol: "WETH",       name: "Wrapped Ether",         address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18 }
-];
-
-const SIDESHIFT_MAP = {
-  "usdt-polygon":  { coin: "usdt", network: "polygon" },
-  "usdc-polygon":  { coin: "usdc", network: "polygon" },
-  "usdt-ethereum": { coin: "usdt", network: "ethereum" },
-  "usdc-ethereum": { coin: "usdc", network: "ethereum" }
-};
-
-const RPC_LIST = [
-  "https://polygon.publicnode.com",
-  "https://polygon-rpc.com",
-  "https://1rpc.io/matic",
-  "https://polygon.drpc.org"
-];
-
-let S = null;
-
-function construirSeletores() {
-  if (typeof ethers === "undefined" || !ethers.utils) {
-    throw new Error("ethers.js não carregou — verifique o <script> do CDN");
-  }
-  const sel = a => ethers.utils.id(a).slice(2, 10);
-  S = {
-    Factory: {
-      criarOrdem:  sel("criarNovoContratoEscrow(address,address,uint256,uint256)"),
-      todasOrdens: sel("obterContratosGerados()")
-    },
-    Escrow: {
-      obterDados: sel("obterDados()"),
-      executar:   sel("executarTroca()"),
-      cancelar:   sel("cancelar()")
-    },
-    ERC20: {
-      balanceOf: sel("balanceOf(address)"),
-      allowance: sel("allowance(address,address)"),
-      approve:   sel("approve(address,uint256)"),
-      transfer:  sel("transfer(address,uint256)")
-    },
-    WPOL: {
-      deposit:  sel("deposit()"),
-      withdraw: sel("withdraw(uint256)")
-    }
-  };
-  console.log("✅ Seletores ABI calculados:", S);
-}
-
-let provider = null;
-let signer = null;
-let userAddress = null;
-let rpcProvider = null;
-let ordersCache = [];
-let loading = false;
-let isTxBusy = false;
-let saldos = { POL: 0n };
-let filtroAtivo = { status: "ativas", oferece: "", pede: "", minhas: false };
-let btcApiSincronizada = false;
-let refreshTimer = null;
-
-let btcWallet = null;
-let btcSaldoSats = 0;
-let walletEscolhidaRdns = null;
-
-const $ = id => document.getElementById(id);
-const isAddr = a => /^0x[a-fA-F0-9]{40}$/.test(a || "");
-const short = a => isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—";
-const mesmoAddr = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
-
-function parseUnits(valor, decimals) {
-  return BigInt(ethers.utils.parseUnits(valor, decimals).toString());
-}
-
-function fmt(bigInt, decimals, maxFrac = 6) {
-  try {
-    const str = ethers.utils.formatUnits(bigInt.toString(), decimals);
-    const [inteiro, fracao = ""] = str.split(".");
-    const limpo = fracao.slice(0, maxFrac).replace(/0+$/, "");
-    return limpo ? `${inteiro},${limpo}` : inteiro;
-  } catch { return "0"; }
-}
-
-function toast(texto, tipo = "info", duracao = 4000) {
-  const container = $("toasts");
-  if (!container) return;
-  const el = document.createElement("div");
-  el.className = `toast ${tipo}`;
-  el.textContent = texto;
-  container.appendChild(el);
-  setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, duracao);
-}
-
-function toastTx(texto, hash, tipo = "info") {
-  const link = `https://polygonscan.com/tx/${hash}`;
-  const container = $("toasts");
-  if (!container) return;
-  const el = document.createElement("div");
-  el.className = `toast ${tipo}`;
-  el.innerHTML = `${texto} <a href="${link}" target="_blank" rel="noopener">Ver no PolygonScan ↗</a>`;
-  container.appendChild(el);
-  setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, 8000);
-}
-
-function toastBtcTx(txid) {
-  const container = $("toasts");
-  if (!container) return;
-  const el = document.createElement("div");
-  el.className = "toast ok";
-  el.innerHTML = `📤 BTC enviado! <a href="https://mempool.space/tx/${txid}" target="_blank" rel="noopener">Ver no mempool.space ↗</a>`;
-  container.appendChild(el);
-  setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, 9000);
-}
-
-// ============================================================
-// Descoberta multi-carteira via EIP-6963
-// ============================================================
-const announcedProviders = new Map();
-
-function inicializarDescobertaCarteiras() {
-  const onAnnounce = (event) => {
-    try {
-      const { info, provider: prov } = event.detail || {};
-      if (!info || !prov) return;
-      if (!announcedProviders.has(info.uuid)) {
-        announcedProviders.set(info.uuid, { info, provider: prov });
-        console.log(`🔍 Carteira detectada: ${info.name} (${info.rdns})`);
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BRN Exchange — Mural de Ordens P2P</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script>
+      if (typeof ethers === "undefined") {
+        document.write('<script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"><\/script>');
       }
-    } catch (e) { console.warn("Erro ao processar announce:", e); }
-  };
-  window.addEventListener("eip6963:announceProvider", onAnnounce);
-  window.dispatchEvent(new Event("eip6963:requestProvider"));
-
-  setTimeout(() => {
-    if (announcedProviders.size === 0 && window.ethereum) {
-      console.log("⚠️ EIP-6963 não respondeu. Usando fallback window.ethereum.");
-      announcedProviders.set("fallback", {
-        info: { name: "Carteira EVM Detectada", rdns: "fallback", uuid: "fallback" },
-        provider: window.ethereum
-      });
-    }
-    atualizarStatusCarteiras();
-  }, 500);
-}
-
-function listarCarteirasDisponiveis() {
-  return Array.from(announcedProviders.values()).map(e => ({
-    name: e.info.name,
-    rdns: e.info.rdns,
-    uuid: e.info.uuid
-  }));
-}
-
-function obterProviderPorRdns(rdns) {
-  for (const entry of announcedProviders.values()) {
-    if (entry.info.rdns === rdns) return entry.provider;
-  }
-  return null;
-}
-
-// ============================================================
-// Tradutor de erros → PT-BR
-// ============================================================
-function traduzirErro(e) {
-  if (!e) return { msg: "Erro desconhecido.", tipo: "err" };
-  if (e.code === 4001 || e.code === "ACTION_REJECTED") return { msg: "Operação cancelada na carteira.", tipo: "warn" };
-  if (e.code === "INSUFFICIENT_FUNDS" || /insufficient funds/i.test(e.message || "")) return { msg: "Saldo insuficiente para pagar o gas. Adicione POL à sua carteira.", tipo: "err" };
-  if (/nonce too low|nonce has already been used/i.test(e.message || "")) return { msg: "Sincronização pendente. Espere a tx anterior confirmar e tente de novo.", tipo: "warn" };
-  if (/out of gas|gas required exceeds allowance|intrinsic gas too low/i.test(e.message || "")) return { msg: "Gas insuficiente. Aumente o gasLimit ou tente novamente.", tipo: "err" };
-  if (/chainId|network changed|wrong network/i.test(e.message || "")) return { msg: "Rede incorreta. Troque para Polygon Mainnet.", tipo: "err" };
-  if (/could not detect network|timeout|failed to fetch|network error/i.test(e.message || "")) return { msg: "Falha de conexão com a rede. Tente novamente.", tipo: "err" };
-  if (/execution reverted|revert/i.test(e.message || "")) return { msg: "Contrato recusou a operação. Verifique saldo e allowance.", tipo: "err" };
-  const limpa = (e.message || "").replace(/^Error:\s*/i, "").replace(/\(action=.*?\)/i, "").replace(/\(error=.*?\)/i, "").trim();
-  return { msg: limpa || "Erro desconhecido.", tipo: "err" };
-}
-
-async function fetchTimeout(url, ms = 8000) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try { return await fetch(url, { signal: ctrl.signal }); }
-  finally { clearTimeout(t); }
-}
-
-function encAddr(addr) {
-  if (!isAddr(addr)) throw new Error("Endereço inválido: " + addr);
-  return addr.toLowerCase().slice(2).padStart(64, "0");
-}
-function encUint(valor) { return BigInt(valor).toString(16).padStart(64, "0"); }
-function decUint(palavra) {
-  if (!palavra) return 0n;
-  try { return BigInt("0x" + palavra); } catch { return 0n; }
-}
-function decBool(palavra) {
-  try { return decUint(palavra) === 1n; } catch { return false; }
-}
-function splitResposta(hex) {
-  const s = hex.startsWith("0x") ? hex.slice(2) : hex;
-  const p = [];
-  for (let i = 0; i < s.length; i += 64) p.push(s.slice(i, i + 64));
-  return p;
-}
-
-function extrairEnderecoToken(word) {
-  if (!word || word.length < 40) return "0x0000000000000000000000000000000000000000";
-  const conhecidos = new Set(TOKENS.map(t => t.address.toLowerCase()));
-  for (let off = 0; off <= word.length - 40; off += 2) {
-    const cand = word.slice(off, off + 40);
-    if (!/^[0-9a-fA-F]{40}$/.test(cand)) continue;
-    try {
-      const addr = ethers.utils.getAddress("0x" + cand);
-      if (conhecidos.has(addr.toLowerCase())) return addr;
-    } catch {}
-  }
-  try { return ethers.utils.getAddress("0x" + word.slice(-40)); }
-  catch { return "0x0000000000000000000000000000000000000000"; }
-}
-
-function extrairEnderecoGenerico(word) {
-  if (!word || word.length < 40) return "0x0000000000000000000000000000000000000000";
-  try { return ethers.utils.getAddress("0x" + word.slice(-40)); }
-  catch { return "0x0000000000000000000000000000000000000000"; }
-}
-
-function decodificarOrdem(hex) {
-  const p = splitResposta(hex);
-  if (p.length < 7) throw new Error("Resposta curta: " + p.length + " words");
-  return {
-    criador:        extrairEnderecoGenerico(p[0]),
-    tokenOferecido: extrairEnderecoToken(p[1]),
-    tokenDesejado:  extrairEnderecoToken(p[2]),
-    valorOferecido: decUint(p[3]),
-    valorDesejado:  decUint(p[4]),
-    executado:      p[5] ? decBool(p[5]) : false,
-    cancelado:      p[6] ? decBool(p[6]) : false
-  };
-}
-
-function decodificarListaEnderecos(hex) {
-  const words = splitResposta(hex);
-  if (!words.length) return [];
-  const offset = Number(decUint(words[0])) / 32;
-  if (offset >= words.length) return [];
-  const length = Number(decUint(words[offset]));
-  const lista = [];
-  for (let i = 0; i < length && (offset + 1 + i) < words.length; i++) {
-    try { lista.push(ethers.utils.getAddress("0x" + words[offset + 1 + i].slice(24))); } catch {}
-  }
-  return lista;
-}
-
-function tokenPorEndereco(endereco) {
-  if (!endereco) return null;
-  const t = TOKENS.find(t => mesmoAddr(t.address, endereco));
-  if (t) return t;
-  return {
-    symbol: endereco.slice(0, 6) + "…",
-    name: "Token não cadastrado",
-    address: endereco,
-    decimals: 18,
-    desconhecido: true
-  };
-}
-
-function nomeComRede(tok) {
-  if (!tok) return "???";
-  return tok.desconhecido ? tok.symbol : `${tok.symbol} (Polygon)`;
-}
-
-function atualizarStatusCarteiras() {
-  const ed = $("evmWalletDot");
-  const et = $("evmWalletText");
-  if (ed && et) {
-    if (userAddress) {
-      ed.className = "dot";
-      const nome = walletEscolhidaRdns
-        ? (Array.from(announcedProviders.values()).find(e => e.info.rdns === walletEscolhidaRdns)?.info.name || "Carteira")
-        : "Carteira";
-      et.textContent = `${nome}: ${short(userAddress)}`;
-    } else {
-      ed.className = "dot off";
-      et.textContent = "Carteira EVM: Desconectada";
-    }
-  }
-  const bd = $("btcWalletDot");
-  const bt = $("btcWalletText");
-  if (bd && bt) {
-    if (btcWallet) {
-      bd.className = "dot btc-status";
-      const a = btcWallet.address;
-      bt.textContent = `${btcWallet.label}: ${a.slice(0, 8)}…${a.slice(-4)}`;
-    } else {
-      bd.className = "dot btc-status off";
-      bt.textContent = "BTC Wallet: Desconectada";
-    }
-  }
-}
-
-async function testarRPC(url) {
-  try {
-    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 8000 });
-    const rede = await p.getNetwork();
-    if (rede.chainId === POLYGON_CHAIN_ID) return p;
-  } catch {}
-  return null;
-}
-
-async function conectarRPC() {
-  for (const url of RPC_LIST) {
-    const p = await testarRPC(url);
-    if (p) { rpcProvider = p; console.log(`✅ RPC Polygon conectado: ${url}`); return true; }
-  }
-  return false;
-}
-
-async function atualizarStatusRede() {
-  const dot = $("netDot"), txt = $("netText");
-  if (!dot || !txt) return false;
-  dot.className = "dot load";
-  txt.textContent = "Polygon: Conectando…";
-  const ok = await conectarRPC();
-  if (ok) { dot.className = "dot"; txt.textContent = "Polygon: Conectado ✅"; }
-  else { dot.className = "dot off"; txt.textContent = "Polygon: Sem conexão ❌"; toast("❌ Não foi possível conectar à rede Polygon.", "err", 10000); }
-  return ok;
-}
-
-async function verificarStatusRedeBitcoin() {
-  const dot = $("btcDot"), txt = $("btcText");
-  if (!dot || !txt) return;
-  dot.className = "dot btc-status load";
-  txt.textContent = "Bitcoin API: Sincronizando…";
-  try {
-    const resposta = await fetchTimeout(`${BLOCKSTREAM_API}/blocks/tip/height`, 8000);
-    if (!resposta.ok) throw new Error("HTTP " + resposta.status);
-    const blocoAtual = (await resposta.text()).trim();
-    if (!/^\d+$/.test(blocoAtual)) throw new Error("Resposta inválida");
-    btcApiSincronizada = true;
-    dot.className = "dot btc-status";
-    txt.textContent = `Bitcoin API: Online (Bloco ${blocoAtual}) 🟠`;
-  } catch {
-    btcApiSincronizada = false;
-    dot.className = "dot btc-status off";
-    txt.textContent = "Bitcoin API: Fora do Ar ❌";
-  }
-}
-
-async function consultarSaldoBTC() {
-  const input = $("btcAddressInput"), card = $("btcResult"), valEl = $("btcBalanceValue");
-  if (!input || !valEl) return;
-  const endereco = input.value.trim();
-  if (!endereco) { toast("Digite um endereço Bitcoin.", "warn"); return; }
-  valEl.textContent = "Consultando…";
-  if (card) card.classList.add("show");
-  try {
-    const r = await fetchTimeout(`${BLOCKSTREAM_API}/address/${encodeURIComponent(endereco)}`, 10000);
-    if (!r.ok) throw new Error("Endereço inválido ou não encontrado");
-    const dados = await r.json();
-    const chain = dados.chain_stats || {};
-    const mem = dados.mempool_stats || {};
-    const satsConf = (chain.funded_txo_sum || 0) - (chain.spent_txo_sum || 0);
-    const satsPend = (mem.funded_txo_sum || 0) - (mem.spent_txo_sum || 0);
-    const totalSats = satsConf + satsPend;
-    valEl.textContent = `${(totalSats / 1e8).toFixed(8)} BTC`;
-    if (satsPend !== 0) valEl.textContent += ` (${(satsPend / 1e8).toFixed(8)} pendente)`;
-  } catch (e) {
-    valEl.textContent = "— BTC";
-    toast("❌ " + e.message, "err");
-  }
-}
-
-function isBtcAddress(addr) {
-  if (!addr) return false;
-  const a = addr.trim();
-  if (/^bc1[02-9ac-hj-np-z]{25,87}$/i.test(a)) return true;
-  if (/^1[a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(a)) return true;
-  if (/^3[a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(a)) return true;
-  return false;
-}
-
-function atualizarHintWbtc() {
-  const hint = $("hintWbtcBridge");
-  if (!hint) return;
-  const wbtc = TOKENS.find(t => t.symbol === "WBTC");
-  if (!wbtc) { hint.textContent = "Saldo: —"; return; }
-  const saldo = saldos[wbtc.address] || 0n;
-  hint.textContent = `Saldo: ${fmt(saldo, wbtc.decimals)} WBTC`;
-}
-
-// ============================================================
-// BRIDGE WBTC → BTC (SideShift)
-// ============================================================
-async function criarOrdemSideShift() {
-  if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
-
-  const valorStr   = $("valorWbtcBridge").value.trim().replace(",", ".");
-  const btcDestino = $("btcDestinoBridge").value.trim();
-  const resultBox  = $("bridge-result");
-
-  if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) { toast("Digite uma quantidade válida de WBTC.", "warn"); return; }
-  if (Number(valorStr) < 0.0001) { toast("⚠️ Valor abaixo do mínimo da SideShift (~0.0001 WBTC).", "warn", 8000); return; }
-  if (!isBtcAddress(btcDestino)) { toast("❌ Endereço Bitcoin inválido. Use bc1..., 1... ou 3...", "err", 8000); return; }
-
-  const wbtc = TOKENS.find(t => t.symbol === "WBTC");
-  if (!wbtc) { toast("WBTC não configurado.", "err"); return; }
-
-  const valorWei = parseUnits(valorStr, wbtc.decimals);
-  const saldo = saldos[wbtc.address] || 0n;
-  if (saldo < valorWei) { toast(`❌ Saldo insuficiente. Você tem ${fmt(saldo, wbtc.decimals)} WBTC.`, "err", 8000); return; }
-
-  const confirmar = window.confirm(
-    `Converter ${valorStr} WBTC (Polygon)\n→ BTC nativo para:\n${btcDestino}\n\nConfira o endereço com MUITO cuidado.\nContinuar?`
-  );
-  if (!confirmar) return;
-
-  toast("⏳ Criando ordem na SideShift…", "info", 6000);
-  if (resultBox) resultBox.style.display = "none";
-
-  try {
-    const response = await fetch(SIDESHIFT_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        depositCoin:    "wbtc",
-        depositNetwork: "polygon",
-        settleCoin:     "btc",
-        settleNetwork:  "bitcoin",
-        depositAmount:  valorStr,
-        settleAddress:  btcDestino
-      })
-    });
-
-    const rawText = await response.text();
-    let data;
-    try { data = JSON.parse(rawText); }
-    catch { throw new Error(`Servidor não retornou JSON (HTTP ${response.status}).`); }
-
-    if (!response.ok || !data.success) throw new Error(data.error || `Erro HTTP ${response.status}`);
-    if (!data.depositAddress || !data.depositAmount || !data.settleAmount) throw new Error("Resposta incompleta do servidor.");
-
-    $("bridge-deposit-address").textContent = data.depositAddress;
-    $("bridge-deposit-amount").textContent  = data.depositAmount;
-    $("bridge-settle-amount").textContent   = data.settleAmount;
-    $("bridge-expires").textContent = data.expiresAt ? new Date(data.expiresAt).toLocaleTimeString() : "~15 min";
-
-    if (resultBox) { resultBox.style.display = "block"; resultBox.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
-    toast("✅ Ordem criada! Envie o WBTC para o endereço exibido.", "ok", 12000);
-  } catch (e) {
-    console.error("SideShift:", e);
-    toast("❌ " + e.message, "err", 10000);
-  }
-}
-
-async function copiarDepositAddress() {
-  const el = $("bridge-deposit-address");
-  if (!el) return;
-  try { await navigator.clipboard.writeText(el.textContent); toast("✅ Endereço copiado!", "ok"); }
-  catch { toast("❌ Não foi possível copiar.", "err"); }
-}
-
-// ============================================================
-// BRIDGE CROSS-CHAIN (USDT Polygon → USDT Ethereum)
-// ============================================================
-async function atualizarHintCC() {
-  const sel = $("ccTokenOrigem");
-  const hint = $("ccSaldoHint");
-  if (!sel || !hint) return;
-  const origem = SIDESHIFT_MAP[sel.value];
-  if (!origem) { hint.textContent = "Saldo: —"; return; }
-  const symbolLookup = origem.coin.toUpperCase();
-  const token = TOKENS.find(t => t.symbol === symbolLookup);
-  if (!token) { hint.textContent = "Saldo: —"; return; }
-  const saldo = saldos[token.address] || 0n;
-  hint.textContent = `Saldo: ${fmt(saldo, token.decimals)} ${token.symbol}`;
-}
-
-async function criarOrdemCrossChain() {
-  if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
-
-  const origemKey = $("ccTokenOrigem").value;
-  const destinoKey = $("ccTokenDestino").value;
-  const valorStr = $("ccValor").value.trim().replace(",", ".");
-  const destinoAddr = $("ccDestino").value.trim();
-  const resultBox = $("cc-result");
-
-  if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) { toast("Digite uma quantidade válida.", "warn"); return; }
-  if (!isAddr(destinoAddr)) { toast("❌ Endereço de destino inválido. Use um endereço 0x...", "err", 8000); return; }
-
-  const origem = SIDESHIFT_MAP[origemKey];
-  const destino = SIDESHIFT_MAP[destinoKey];
-  if (!origem || !destino) { toast("❌ Par de tokens não suportado.", "err"); return; }
-
-  const symbolLookup = origem.coin.toUpperCase();
-  const tokenOrigem = TOKENS.find(t => t.symbol === symbolLookup);
-  if (!tokenOrigem) { toast("❌ Token de origem não encontrado na Polygon.", "err"); return; }
-  const saldoOrigem = saldos[tokenOrigem.address] || 0n;
-  const valorWei = parseUnits(valorStr, tokenOrigem.decimals);
-  if (saldoOrigem < valorWei) {
-    toast(`❌ Saldo insuficiente. Você tem ${fmt(saldoOrigem, tokenOrigem.decimals)} ${tokenOrigem.symbol}.`, "err", 8000);
-    return;
-  }
-
-  const confirmar = window.confirm(
-    `Bridge ${valorStr} ${origem.coin.toUpperCase()} (${origem.network})\n→ ${destino.coin.toUpperCase()} (${destino.network}) para:\n${destinoAddr}\n\nConfira o endereço com MUITO cuidado.\nContinuar?`
-  );
-  if (!confirmar) return;
-
-  toast("⏳ Criando ordem na SideShift…", "info", 6000);
-  if (resultBox) resultBox.style.display = "none";
-
-  try {
-    const response = await fetch(SIDESHIFT_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        depositCoin:    origem.coin,
-        depositNetwork: origem.network,
-        settleCoin:     destino.coin,
-        settleNetwork:  destino.network,
-        depositAmount:  valorStr,
-        settleAddress:  destinoAddr
-      })
-    });
-
-    const rawText = await response.text();
-    let data;
-    try { data = JSON.parse(rawText); }
-    catch { throw new Error(`Servidor não retornou JSON (HTTP ${response.status}).`); }
-
-    if (!response.ok || !data.success) throw new Error(data.error || `Erro HTTP ${response.status}`);
-    if (!data.depositAddress || !data.depositAmount || !data.settleAmount) throw new Error("Resposta incompleta do servidor.");
-
-    $("cc-deposit-address").textContent = data.depositAddress;
-    $("cc-deposit-amount").textContent = data.depositAmount;
-    $("cc-deposit-token").textContent = `${origem.coin.toUpperCase()} (${origem.network})`;
-    $("cc-settle-amount").textContent = data.settleAmount;
-    $("cc-settle-token").textContent = `${destino.coin.toUpperCase()} (${destino.network})`;
-    $("cc-expires").textContent = data.expiresAt ? new Date(data.expiresAt).toLocaleTimeString() : "~15 min";
-
-    if (resultBox) { resultBox.style.display = "block"; resultBox.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
-    toast("✅ Ordem criada! Envie o token para o endereço de depósito.", "ok", 12000);
-  } catch (e) {
-    console.error("CrossChain SideShift:", e);
-    toast("❌ " + e.message, "err", 10000);
-  }
-}
-
-async function copiarCCDepositAddress() {
-  const el = $("cc-deposit-address");
-  if (!el) return;
-  try { await navigator.clipboard.writeText(el.textContent); toast("✅ Endereço copiado!", "ok"); }
-  catch { toast("❌ Não foi possível copiar.", "err"); }
-}
-
-function calcularPOLDisponivel() {
-  const reserva = parseUnits(RESERVA_GAS_POL, 18);
-  return saldos.POL > reserva ? saldos.POL - reserva : 0n;
-}
-
-async function enviarPOL() {
-  if (!signer || !userAddress || isTxBusy) return;
-  isTxBusy = true;
-  try {
-    const destino = $("destinoPOL").value.trim();
-    const valorStr = $("valorPOLEnvio").value.trim().replace(",", ".");
-
-    if (!isAddr(destino)) throw new Error("Endereço de destino inválido");
-    if (mesmoAddr(destino, userAddress)) throw new Error("Não pode enviar para você mesmo");
-    if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
-
-    const valor = parseUnits(valorStr, 18);
-    const disponivel = calcularPOLDisponivel();
-
-    if (valor > disponivel) {
-      throw new Error(
-        `Saldo insuficiente. Você tem ${fmt(saldos.POL, 18)} POL ` +
-        `(reservando ${RESERVA_GAS_POL} POL para gas). ` +
-        `Disponível: ${fmt(disponivel, 18)} POL.`
-      );
-    }
-
-    const confirmar = window.confirm(
-      `Enviar ${valorStr} POL para:\n${destino}\n\n⚠️ Transação irreversível. Confira o endereço.\nContinuar?`
-    );
-    if (!confirmar) { isTxBusy = false; return; }
-
-    toast(`⏳ Enviando ${fmt(valor, 18, 6)} POL…`, "info");
-
-    const tx = await signer.sendTransaction({
-      to: destino,
-      value: valor,
-      gasLimit: 21000
-    });
-
-    toastTx("📤 POL enviado:", tx.hash, "ok");
-    await tx.wait();
-    toast(`✅ POL enviado com sucesso!`, "ok", 6000);
-
-    $("destinoPOL").value = "";
-    $("valorPOLEnvio").value = "";
-    await carregarSaldos();
-  } catch (e) {
-    console.error("enviarPOL:", e);
-    const { msg, tipo } = traduzirErro(e);
-    toast(msg, tipo, 8000);
-  } finally {
-    isTxBusy = false;
-  }
-}
-
-function isBtcAddressStrict(a) {
-  if (!a) return false;
-  const s = a.trim();
-  return /^(bc1[a-z0-9]{25,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/i.test(s);
-}
-
-async function detectarCarteiraBTC() {
-  if (window.unisat)             return { type: "unisat",  provider: window.unisat, label: "UniSat" };
-  if (window.okxwallet?.bitcoin) return { type: "okx",     provider: window.okxwallet.bitcoin, label: "OKX Wallet" };
-  if (window.LeatherProvider)    return { type: "leather", provider: window.LeatherProvider, label: "Leather" };
-  return null;
-}
-
-async function conectarCarteiraBTC() {
-  const det = await detectarCarteiraBTC();
-  if (!det) {
-    toast("❌ Nenhuma carteira Bitcoin detectada. Instale UniSat ou OKX Wallet.", "err", 10000);
-    return;
-  }
-
-  try {
-    let address = null, publicKey = null;
-
-    if (det.type === "unisat") {
-      const contas = await det.provider.requestAccounts();
-      address = contas[0];
-      publicKey = await det.provider.getPublicKey();
-    } else if (det.type === "okx") {
-      const r = await det.provider.connect();
-      address = r.address;
-      publicKey = r.publicKey;
-    } else if (det.type === "leather") {
-      const r = await det.provider.request("getAddresses");
-      const lista = r?.result?.addresses || [];
-      const pref = lista.find(a => a.type === "p2wpkh" || a.type === "p2tr") || lista[0];
-      if (!pref) throw new Error("Nenhum endereço retornado");
-      address = pref.address;
-      publicKey = pref.publicKey;
-    }
-
-    if (!address) throw new Error("Carteira não retornou endereço");
-
-    btcWallet = { ...det, address, publicKey };
-
-    const st = $("btcWalletStatus");
-    if (st) st.textContent = `✅ ${det.label}: ${address.slice(0, 10)}…${address.slice(-6)}`;
-    const bc = $("btnConectarBTC");   if (bc) bc.style.display = "none";
-    const bd = $("btnDesconectarBTC");if (bd) bd.style.display = "";
-
-    toast(`✅ ${det.label} conectada!`, "ok");
-    await atualizarSaldoBTCEnvio();
-    atualizarStatusCarteiras();
-  } catch (e) {
-    console.error("Conectar BTC:", e);
-    toast("❌ " + (e.message || "Falha ao conectar"), "err");
-  }
-}
-
-function desconectarCarteiraBTC() {
-  btcWallet = null;
-  btcSaldoSats = 0;
-  const st = $("btcWalletStatus");
-  const bc = $("btnConectarBTC");
-  const bd = $("btnDesconectarBTC");
-  const bs = $("btcSaldoDisponivel");
-  if (st) st.textContent = "Não conectada";
-  if (bc) bc.style.display = "";
-  if (bd) bd.style.display = "none";
-  if (bs) bs.textContent = "—";
-  toast("Carteira Bitcoin desconectada.", "info");
-  atualizarStatusCarteiraBTC();
-  atualizarStatusCarteiras();
-}
-
-async function atualizarSaldoBTCEnvio() {
-  if (!btcWallet) { btcSaldoSats = 0; const el = $("btcSaldoDisponivel"); if (el) el.textContent = "—"; return; }
-  try {
-    const r = await fetchTimeout(`${BLOCKSTREAM_API}/address/${btcWallet.address}`, 10000);
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const d = await r.json();
-    const chain = d.chain_stats || {};
-    const mem   = d.mempool_stats || {};
-    btcSaldoSats =
-      (chain.funded_txo_sum || 0) - (chain.spent_txo_sum || 0) +
-      (mem.funded_txo_sum   || 0) - (mem.spent_txo_sum   || 0);
-    const el = $("btcSaldoDisponivel");
-    if (el) el.textContent = `${(btcSaldoSats / 1e8).toFixed(8)} BTC`;
-  } catch (e) {
-    console.warn("Falha ao consultar saldo BTC:", e.message);
-    const el = $("btcSaldoDisponivel");
-    if (el) el.textContent = "—";
-  }
-}
-
-async function enviarBTC() {
-  if (!btcWallet) { toast("Conecte uma carteira Bitcoin primeiro.", "warn"); return; }
-  if (isTxBusy) return;
-  isTxBusy = true;
-
-  try {
-    const destino   = $("btcDestinoEnvio").value.trim();
-    const valorStr  = $("btcValorEnvio").value.trim().replace(",", ".");
-
-    if (!isBtcAddressStrict(destino))
-      throw new Error("Endereço Bitcoin inválido (use bc1…, 1… ou 3…)");
-    if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0)
-      throw new Error("Valor inválido");
-
-    const sats = Math.round(Number(valorStr) * 1e8);
-    if (sats <= 0) throw new Error("Valor muito pequeno");
-
-    if (btcSaldoSats > 0 && sats > btcSaldoSats - RESERVA_TAXA_BTC_SATS) {
-      throw new Error(
-        `Saldo insuficiente. Você tem ${(btcSaldoSats / 1e8).toFixed(8)} BTC ` +
-        `(reservando ~${RESERVA_TAXA_BTC_SATS} sats para taxa).`
-      );
-    }
-
-    const ok = window.confirm(
-      `Enviar ${valorStr} BTC (${sats} sats) para:\n${destino}\n\n⚠️ Transação irreversível. Continuar?`
-    );
-    if (!ok) { isTxBusy = false; return; }
-
-    toast(`⏳ Solicitando assinatura na ${btcWallet.label}…`, "info");
-
-    let txid = null;
-
-    if (btcWallet.type === "unisat") {
-      txid = await btcWallet.provider.sendBitcoin(destino, sats);
-    } else if (btcWallet.type === "okx") {
-      const r = await btcWallet.provider.sendBitcoin(destino, sats);
-      txid = typeof r === "string" ? r : (r?.txid || r?.txhash);
-    } else if (btcWallet.type === "leather") {
-      const r = await btcWallet.provider.request("sendTransfer", {
-        recipients: [{ address: destino, amount: sats }]
-      });
-      txid = r?.result?.txid || r?.txid;
-    }
-
-    if (!txid) throw new Error("A carteira não retornou o txid");
-
-    toastBtcTx(txid);
-    toast("✅ BTC enviado com sucesso!", "ok", 7000);
-
-    $("btcDestinoEnvio").value = "";
-    $("btcValorEnvio").value = "";
-    setTimeout(atualizarSaldoBTCEnvio, 4000);
-  } catch (e) {
-    console.error("enviarBTC:", e);
-    if (e.code === 4001 || /reject|cancel|denied/i.test(e.message || "")) toast("Envio cancelado.", "warn");
-    else toast("❌ " + (e.message || "Erro desconhecido"), "err", 8000);
-  } finally {
-    isTxBusy = false;
-  }
-}
-
-async function maxBTCEnvio() {
-  if (!btcWallet) { toast("Conecte uma carteira Bitcoin primeiro.", "warn"); return; }
-  await atualizarSaldoBTCEnvio();
-  const disp = Math.max(0, btcSaldoSats - RESERVA_TAXA_BTC_SATS);
-  if (disp <= 0) { toast("Saldo insuficiente (reserva de taxa).", "warn"); return; }
-  $("btcValorEnvio").value = (disp / 1e8).toFixed(8);
-}
-
-function atualizarStatusCarteiraBTC() {
-  const btn = $("btnConectarBTC");
-  if (!btn) return;
-  const det = !!(window.unisat || window.okxwallet?.bitcoin || window.LeatherProvider);
-  if (btcWallet) {
-    btn.textContent = "🔌 Reconectar BTC";
-  } else if (det) {
-    btn.textContent = "🔌 Conectar carteira BTC";
-  } else {
-    btn.textContent = "🔌 Instalar carteira BTC";
-  }
-}
-
-function preencherSeletores() {
-  const opts = TOKENS.map(t => `<option value="${t.address}">${t.symbol} — ${t.name}</option>`).join("");
-  ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
-    const el = $(id);
-    if (el) el.innerHTML = opts;
-  });
-
-  const filtroOpts = TOKENS.map(t => `<option value="${t.address}">${t.symbol}</option>`).join("");
-  const fo = $("filtroOferece");
-  if (fo) fo.innerHTML = '<option value="">Oferece: Todos</option>' + filtroOpts;
-  const fp = $("filtroPede");
-  if (fp) fp.innerHTML = '<option value="">Pede: Todos</option>' + filtroOpts;
-}
-
-async function carregarSaldos() {
-  if (!rpcProvider || !userAddress || !S) return;
-  try {
-    saldos.POL = BigInt((await rpcProvider.getBalance(userAddress)).toString());
-    for (const t of TOKENS) {
-      if (t.somenteEth) { saldos[t.address] = 0n; continue; }
-      try {
-        const res = await rpcProvider.call({ to: t.address, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress) });
-        saldos[t.address] = decUint(res.slice(2));
-      } catch { saldos[t.address] = 0n; }
-    }
-    renderizarSaldos();
-    atualizarHintCC();
-  } catch (e) { console.error("Erro ao carregar saldos:", e); }
-}
-
-function renderizarSaldos() {
-  const container = $("balances");
-  if (!container) return;
-  container.innerHTML = "";
-
-  const add = (simbolo, valor, decimais, opts = {}) => {
-    const { aviso = null, tokenAddr = null } = opts;
-    const div = document.createElement("div");
-    div.className = "bal";
-    const classe = valor === 0n ? "v dim" : "v";
-
-    const copyBtn = tokenAddr
-      ? `<button class="btn-copy-token" data-copy="${tokenAddr}" data-symbol="${simbolo}" title="Copiar endereço do contrato">📋</button>`
-      : "";
-
-    div.innerHTML = `
-      <span class="t">${simbolo}${aviso ? " ⚠️" : ""}${copyBtn}</span>
-      <span class="${classe}">${fmt(valor, decimais)}</span>
-      ${aviso ? `<span class="bal-sub">${aviso}</span>` : ""}
-    `;
-    container.appendChild(div);
-  };
-
-  add("POL (Polygon)", saldos.POL, 18);
-  TOKENS.forEach(t => {
-    const valor = saldos[t.address] || 0n;
-    const aviso = t.somenteEth ? "Só na Ethereum (não suportado)" : null;
-    add(`${t.symbol} (Polygon)`, valor, t.decimals, { aviso, tokenAddr: t.address });
-  });
-
-  document.querySelectorAll("[data-hint]").forEach(el => {
-    const attr = el.getAttribute("data-hint") || "";
-    const partes = attr.split("
+    </script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-left">
+                <h1>🔷 BRN</h1>
+                <p>Ecossistema Descentralizado de Troca de Ativos P2P</p>
+            </div>
+            <div class="net-status">
+                <div id="netDot" class="dot off"></div>
+                <span id="netText">Polygon: Desconectado ❌</span>
+            </div>
+            <div class="net-status">
+                <div id="btcDot" class="dot btc-status off"></div>
+                <span id="btcText">Bitcoin API: Desconectado ❌</span>
+            </div>
+            <div class="net-status">
+                <div id="evmWalletDot" class="dot off"></div>
+                <span id="evmWalletText">Carteira EVM: Desconectada</span>
+            </div>
+            <div class="net-status">
+                <div id="btcWalletDot" class="dot btc-status off"></div>
+                <span id="btcWalletText">BTC Wallet: Desconectada</span>
+            </div>
+        </header>
+
+        <div class="wallet-bar">
+            <button id="btnConnect" class="btn btn-primary">🔌 Conectar Carteira</button>
+            <div id="walletInfo" class="wallet-info" style="display: none;">
+                <span>Conectado: <code id="addr">—</code></span>
+                <button id="btnShareAddr" class="btn btn-sm btn-ok">📤 Compartilhar Endereço</button>
+                <button id="btnDisconnect" class="btn btn-sm btn-err">Desconectar</button>
+            </div>
+        </div>
+
+        <div id="sharePanel" class="share-panel" style="display: none;">
+            <div class="share-head">
+                <h3>📤 Seu Endereço BRN (Polygon)</h3>
+                <button id="btnCloseShare" class="btn btn-sm">✕ Fechar</button>
+            </div>
+            <p class="dim" style="font-size: 0.85rem; margin-bottom: 12px;">
+                Compartilhe este endereço para receber BRN, USDC, USDT, SHIB, WPOL ou qualquer token ERC-20 na rede Polygon.
+            </p>
+            <div class="share-addr-box">
+                <code id="shareAddrFull">—</code>
+                <button id="btnCopyAddr" class="btn btn-sm btn-primary" title="Copiar">📋 Copiar</button>
+            </div>
+            <div class="share-actions">
+                <a id="btnShareNative" class="btn btn-sm btn-ok" href="#" target="_blank" rel="noopener">📱 Compartilhar (nativo)</a>
+                <a id="btnShareWhatsApp" class="btn btn-sm" href="#" target="_blank" rel="noopener">💬 WhatsApp</a>
+                <a id="btnShareTelegram" class="btn btn-sm" href="#" target="_blank" rel="noopener">✈️ Telegram</a>
+                <a id="btnSharePolygonScan" class="btn btn-sm" href="#" target="_blank" rel="noopener">🔍 Ver no PolygonScan</a>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button data-tab="mural" class="active">📋 Mural de Ordens</button>
+            <button data-tab="criar">💰 Criar Ordem</button>
+            <button data-tab="enviar">📤 Enviar Tokens</button>
+            <button data-tab="enviarpol">💎 Enviar POL</button>
+            <button data-tab="swap">🔄 POL ↔ WPOL</button>
+            <button data-tab="bitcoin">₿ Consultar BTC</button>
+            <button data-tab="crosschain">🌉 Bridge Cross-Chain</button>
+        </div>
+
+        <div id="panel-mural" class="panel">
+            <div class="card">
+                <h2>📋 Livro de Ofertas Ativas</h2>
+                <div class="filters">
+                    <select id="filtroStatus">
+                        <option value="ativas">🔵 Ativas</option>
+                        <option value="executaveis">⚡ Posso Executar</option>
+                        <option value="executadas">✅ Executadas</option>
+                        <option value="canceladas">❌ Canceladas</option>
+                    </select>
+                    <select id="filtroOferece"><option value="">Oferece: Todos</option></select>
+                    <select id="filtroPede"><option value="">Pede: Todos</option></select>
+                    <label style="display:flex; align-items:center; gap:8px; min-width:140px;">
+                        <input type="checkbox" id="filtroMinhas"> Minhas ordens
+                    </label>
+                    <button id="btnLimparFiltros" class="btn btn-sm">✕ Limpar</button>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:0.85rem; gap:8px; flex-wrap:wrap;">
+                    <span id="counter" class="dim">0 ordens</span>
+                    <span id="muralInfo" class="dim">Exibindo 0 ordens</span>
+                    <button id="btnRefresh" class="btn btn-sm btn-primary">🔄 Atualizar</button>
+                </div>
+                <div id="orders" class="orders">
+                    <div class="state"><p>Conecte sua carteira para carregar as ordens…</p></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="panel-criar" class="panel" hidden>
+            <div class="card">
+                <h2>➕ Criar Nova Ordem de Troca</h2>
+                <div class="input-group">
+                    <label>Você OFERECE:</label>
+                    <div class="row">
+                        <input type="text" id="valorOferece" placeholder="0.0">
+                        <select id="selOferece"></select>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+                        <small id="hintOferece" data-hint="saldo:selOferece" class="dim">Saldo: —</small>
+                        <button id="btnMaxOf" class="btn btn-sm">MAX</button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Você DESEJA receber em troca:</label>
+                    <div class="row">
+                        <input type="text" id="valorDeseja" placeholder="0.0">
+                        <select id="selDeseja"></select>
+                    </div>
+                    <div style="margin-top:4px;">
+                        <small id="hintDeseja" data-hint="saldo:selDeseja" class="dim">Saldo: —</small>
+                    </div>
+                </div>
+                <button id="btnCriarOrdem" class="btn btn-success" style="width:100%; margin-top:12px;">📋 Criar Ordem no Escrow</button>
+                <p class="source-note">⚠ Ao submeter, seus fundos ficam protegidos sob custódia do contrato inteligente.</p>
+            </div>
+        </div>
+
+        <div id="panel-enviar" class="panel" hidden>
+            <div class="card">
+                <h2>📤 Enviar Ativos Direto (Transferência)</h2>
+                <div class="input-group">
+                    <label>Token:</label>
+                    <select id="selTokenEnvio"></select>
+                </div>
+                <div class="input-group">
+                    <label>Endereço de Destino EVM:</label>
+                    <input type="text" id="destinoEnvio" placeholder="0x...">
+                </div>
+                <div class="input-group">
+                    <label>Valor:</label>
+                    <div class="row">
+                        <input type="text" id="valorEnvio" placeholder="0.0">
+                        <button id="btnMaxSend" class="btn btn-sm">MAX</button>
+                    </div>
+                    <small id="hintEnvio" data-hint="saldo:selTokenEnvio" class="dim" style="display:block; margin-top:4px;">Saldo: —</small>
+                </div>
+                <button id="btnEnviar" class="btn btn-primary" style="width:100%; margin-top:12px;">📤 Enviar Fundos</button>
+            </div>
+        </div>
+
+        <div id="panel-enviarpol" class="panel" hidden>
+            <div class="card">
+                <h2>💎 Enviar POL (nativo Polygon)</h2>
+                <div class="input-group">
+                    <label>Endereço de destino:</label>
+                    <input type="text" id="destinoPOL" placeholder="0x...">
+                </div>
+                <div class="input-group">
+                    <label>Valor a enviar:</label>
+                    <div class="row">
+                        <input type="text" id="valorPOLEnvio" placeholder="0.0">
+                        <button id="btnMaxPOLEnvio" class="btn btn-sm">MAX</button>
+                    </div>
+                    <small class="dim" style="display:block; margin-top:4px;">
+                        Disponível: <span data-hint="saldoPOLDisponivel">0.00</span> POL
+                    </small>
+                </div>
+                <button id="btnEnviarPOL" class="btn btn-btc" style="width:100%; margin-top:12px;">💎 Enviar POL</button>
+            </div>
+        </div>
+
+        <div id="panel-swap" class="panel" hidden>
+            <div class="trade-forms">
+                <div class="form-card">
+                    <h3>🔁 Embrulhar (POL → WPOL)</h3>
+                    <div class="form-group">
+                        <small class="dim">Saldo: <span data-hint="saldoPOL">0.00</span> POL</small>
+                        <div class="row" style="margin-top:6px;">
+                            <input type="text" id="valorWPOL" placeholder="0.0">
+                            <button id="btnMaxWrap" class="btn btn-sm">MAX</button>
+                        </div>
+                    </div>
+                    <button id="btnConverterWPOL" class="btn btn-success">Converter para WPOL</button>
+                </div>
+                <div class="form-card">
+                    <h3>🔁 Desembrulhar (WPOL → POL)</h3>
+                    <div class="form-group">
+                        <small class="dim">Saldo: <span data-hint="saldoWPOL">0.00</span> WPOL</small>
+                        <div class="row" style="margin-top:6px;">
+                            <input type="text" id="valorPOL" placeholder="0.0">
+                            <button id="btnMaxUnwrap" class="btn btn-sm">MAX</button>
+                        </div>
+                    </div>
+                    <button id="btnConverterPOL" class="btn btn-danger">Converter para POL</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="panel-bitcoin" class="panel" hidden>
+            <div class="card">
+                <h2>🟠 Consultar Saldo em Conta Bitcoin</h2>
+                <div class="row">
+                    <input type="text" id="btcAddressInput" placeholder="Digite o endereço Bitcoin...">
+                    <button id="btnConsultarBTC" class="btn btn-btc">₿ Buscar Dados</button>
+                </div>
+                <div id="btcResult" class="btc-balance-result">
+                    <div class="t">Saldo Líquido Confirmado</div>
+                    <div id="btcBalanceValue" class="v">— BTC</div>
+                </div>
+                <hr style="margin: 24px 0; border-color: var(--border);">
+                <h3>🔄 Converter WBTC (Polygon) → BTC nativo</h3>
+                <div class="input-group">
+                    <label>Quantidade de WBTC:</label>
+                    <div class="row">
+                        <input type="text" id="valorWbtcBridge" placeholder="0.0">
+                        <button id="btnMaxWbtcBridge" class="btn btn-sm">MAX</button>
+                    </div>
+                    <small id="hintWbtcBridge" class="dim" style="display:block; margin-top:4px;">Saldo: —</small>
+                </div>
+                <div class="input-group">
+                    <label>Seu endereço Bitcoin (destino):</label>
+                    <input type="text" id="btcDestinoBridge" placeholder="bc1... / 1... / 3...">
+                </div>
+                <button id="btnAbrirBridge" class="btn btn-btc" style="width:100%; margin-top:12px;">🟠 Criar ordem de troca</button>
+                <div id="bridge-result" style="display:none; margin-top:16px; padding:14px; background:rgba(247,147,26,0.08); border:1px solid var(--btc); border-radius:8px;">
+                    <p style="margin-bottom:8px;">Envie <strong id="bridge-deposit-amount">—</strong> WBTC para:</p>
+                    <code id="bridge-deposit-address" style="display:block; word-break:break-all; background:var(--bg); padding:10px; border-radius:5px; font-size:0.85rem;">—</code>
+                    <p class="dim" style="font-size:0.8rem; margin-top:8px;">
+                        Você receberá <strong id="bridge-settle-amount">—</strong> BTC em ~10-30 min.
+                        Ordem expira em <span id="bridge-expires">—</span>.
+                    </p>
+                    <button id="btnCopyDeposit" class="btn btn-sm" style="margin-top:8px;">📋 Copiar endereço</button>
+                </div>
+
+                <hr style="margin: 24px 0; border-color: var(--border);">
+
+                <h3>📤 Enviar BTC (rede nativa)</h3>
+                <div class="input-group">
+                    <label>Carteira Bitcoin:</label>
+                    <div class="row">
+                        <button id="btnConectarBTC" class="btn btn-btc">🔌 Conectar carteira BTC</button>
+                        <button id="btnDesconectarBTC" class="btn btn-sm" style="display:none;">Desconectar</button>
+                    </div>
+                    <small id="btcWalletStatus" class="dim" style="display:block; margin-top:6px;">Não conectada</small>
+                </div>
+                <div class="input-group">
+                    <label>Endereço Bitcoin de destino:</label>
+                    <input type="text" id="btcDestinoEnvio" placeholder="bc1... / 1... / 3...">
+                </div>
+                <div class="input-group">
+                    <label>Valor em BTC:</label>
+                    <div class="row">
+                        <input type="text" id="btcValorEnvio" placeholder="0.00000000">
+                        <button id="btnMaxBTCEnvio" class="btn btn-sm">MAX</button>
+                    </div>
+                    <small class="dim" style="display:block; margin-top:4px;">
+                        Disponível: <span id="btcSaldoDisponivel">—</span>
+                    </small>
+                </div>
+                <button id="btnEnviarBTC" class="btn btn-btc" style="width:100%; margin-top:12px;">🟠 Enviar BTC</button>
+            </div>
+        </div>
+
+        <div id="panel-crosschain" class="panel" hidden>
+            <div class="card">
+                <h2>🌉 Bridge Cross-Chain (SideShift)</h2>
+                <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">
+                    Converta stablecoins entre redes. Exemplo: <strong>USDT Polygon → USDT Ethereum</strong>.
+                </p>
+                <div class="input-group">
+                    <label>Token de origem (Polygon):</label>
+                    <select id="ccTokenOrigem">
+                        <option value="usdt-polygon">USDT (Polygon)</option>
+                        <option value="usdc-polygon">USDC (Polygon)</option>
+                    </select>
+                    <small id="ccSaldoHint" class="dim" style="display:block; margin-top:4px;">Saldo: —</small>
+                </div>
+                <div class="input-group">
+                    <label>Token de destino:</label>
+                    <select id="ccTokenDestino">
+                        <option value="usdt-ethereum">USDT (Ethereum)</option>
+                        <option value="usdc-ethereum">USDC (Ethereum)</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Quantidade:</label>
+                    <div class="row">
+                        <input type="text" id="ccValor" placeholder="0.0">
+                        <button id="btnMaxCC" class="btn btn-sm">MAX</button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Endereço de destino (na rede de destino):</label>
+                    <input type="text" id="ccDestino" placeholder="0x... (endereço Ethereum)">
+                </div>
+                <button id="btnCriarCC" class="btn btn-btc" style="width:100%; margin-top:12px;">🌉 Criar ordem de bridge</button>
+
+                <div id="cc-result" style="display:none; margin-top:16px; padding:14px; background:rgba(247,147,26,0.08); border:1px solid var(--btc); border-radius:8px;">
+                    <p style="margin-bottom:8px;">
+                        Envie <strong id="cc-deposit-amount">—</strong> <span id="cc-deposit-token">—</span> para:
+                    </p>
+                    <code id="cc-deposit-address" style="display:block; word-break:break-all; background:var(--bg); padding:10px; border-radius:5px; font-size:0.85rem;">—</code>
+                    <p class="dim" style="font-size:0.8rem; margin-top:8px;">
+                        Você receberá <strong id="cc-settle-amount">—</strong> <span id="cc-settle-token">—</span> em ~5-30 min.
+                        Ordem expira em <span id="cc-expires">—</span>.
+                    </p>
+                    <button id="btnCopyCCDeposit" class="btn btn-sm" style="margin-top:8px;">📋 Copiar endereço</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>💼 Saldos da sua Carteira</h2>
+            <div id="balances" class="balances">
+                <p class="dim" style="font-size:0.9rem;">Conecte sua carteira para ver os saldos.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="toasts" class="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
