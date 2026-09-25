@@ -1,6 +1,7 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.6
-// ✅ NOVO: Leitura de saldos na rede Ethereum (USDT-ETH, ETH nativo)
+// APP.JS — BRN Exchange | Versão 6.7
+// ✅ NOVO: Rodapé "ENDEREÇO BRN" no card de cada token (marrom)
+// ✅ Leitura de saldos na rede Ethereum (USDT-ETH, ETH nativo)
 // ✅ Modal "Carteiras Aceitas" com detecção dinâmica (EIP-6963)
 // ✅ Brave Wallet incluso no catálogo
 // ✅ Sem toast duplicado em conectarCarteira()
@@ -8,7 +9,7 @@
 // ✅ Flag eventosWalletConfigurados (evita listeners duplicados)
 // ✅ try/catch no setTimeout de inicializarDescobertaCarteiras
 // ✅ Multi-carteira via EIP-6963 (MetaMask/Rabby/Trust/OKX/Brave...)
-// ✅ SHIB, USDT nativo/bridged, USDT-ETH placeholder
+// ✅ SHIB, USDT nativo/bridged, USDT-ETH
 // ✅ Botão 📋 para copiar contrato de cada token
 // ✅ Bridge WBTC → BTC (SideShift)
 // ✅ Bridge Cross-Chain USDT Polygon → USDT Ethereum (SideShift)
@@ -59,7 +60,6 @@ const RPC_LIST = [
   "https://polygon.drpc.org"
 ];
 
-// ✅ NOVO v6.6: RPCs da rede Ethereum
 const ETH_RPC_LIST = [
   "https://ethereum.publicnode.com",
   "https://eth.llamarpc.com",
@@ -126,7 +126,7 @@ let provider = null;
 let signer = null;
 let userAddress = null;
 let rpcProvider = null;
-let ethProvider = null;              // ✅ NOVO v6.6
+let ethProvider = null;
 let ordersCache = [];
 let loading = false;
 let isTxBusy = false;
@@ -414,7 +414,6 @@ async function conectarRPC() {
   return false;
 }
 
-// ✅ NOVO v6.6: RPC Ethereum
 async function testarRPCEth(url) {
   try {
     const p = new ethers.providers.JsonRpcProvider({ url, timeout: 8000 });
@@ -928,11 +927,9 @@ function preencherSeletores() {
   if (fp) fp.innerHTML = '<option value="">Pede: Todos</option>' + filtroOpts;
 }
 
-// ✅ v6.6: lê Polygon + Ethereum
 async function carregarSaldos() {
   if (!rpcProvider || !userAddress || !S) return;
   try {
-    // ---------- POLYGON ----------
     saldos.POL = BigInt((await rpcProvider.getBalance(userAddress)).toString());
     for (const t of TOKENS) {
       if (t.somenteEth) { saldos[t.address] = 0n; continue; }
@@ -942,7 +939,6 @@ async function carregarSaldos() {
       } catch { saldos[t.address] = 0n; }
     }
 
-    // ---------- ETHEREUM ----------
     await carregarSaldosEthereum();
 
     renderizarSaldos();
@@ -950,7 +946,6 @@ async function carregarSaldos() {
   } catch (e) { console.error("Erro ao carregar saldos:", e); }
 }
 
-// ✅ NOVO v6.6: lê tokens marcados como somenteEth + ETH nativo
 async function carregarSaldosEthereum() {
   const tokensEth = TOKENS.filter(t => t.somenteEth);
   if (tokensEth.length === 0) return;
@@ -963,7 +958,6 @@ async function carregarSaldosEthereum() {
     }
   }
 
-  // ETH nativo
   try {
     saldos["ETH_NATIVO"] = BigInt((await ethProvider.getBalance(userAddress)).toString());
   } catch (e) {
@@ -971,7 +965,6 @@ async function carregarSaldosEthereum() {
     saldos["ETH_NATIVO"] = 0n;
   }
 
-  // Tokens ERC-20 na Ethereum
   for (const t of tokensEth) {
     try {
       const res = await ethProvider.call({
@@ -986,7 +979,9 @@ async function carregarSaldosEthereum() {
   }
 }
 
-// ✅ v6.6: seção Ethereum separada visualmente
+// ============================================================
+// ✅ v6.7: CARD DE SALDO COM RODAPÉ "ENDEREÇO BRN" (MARROM)
+// ============================================================
 function renderizarSaldos() {
   const container = $("balances");
   if (!container) return;
@@ -1002,10 +997,20 @@ function renderizarSaldos() {
       ? `<button class="btn-copy-token" data-copy="${tokenAddr}" data-symbol="${simbolo}" title="Copiar endereço do contrato">📋</button>`
       : "";
 
+    // ✅ Rodapé com o ENDEREÇO BRN (o endereço da carteira conectada)
+    const enderecoBrn = userAddress || "— Não conectada —";
+    const rodape = `
+      <div class="bal-endereco" title="${enderecoBrn}">
+        <span class="bal-endereco-label">ENDEREÇO BRN:</span>
+        <span class="bal-endereco-valor">${enderecoBrn}</span>
+      </div>
+    `;
+
     div.innerHTML = `
       <span class="t">${simbolo}${aviso ? " ⚠️" : ""}${copyBtn}</span>
       <span class="${classe}">${fmt(valor, decimais)}</span>
       ${aviso ? `<span class="bal-sub">${aviso}</span>` : ""}
+      ${rodape}
     `;
     container.appendChild(div);
   };
@@ -1022,30 +1027,26 @@ function renderizarSaldos() {
   // ---------- ETHEREUM ----------
   const tokensEth = TOKENS.filter(t => t.somenteEth);
   if (tokensEth.length > 0) {
-    // Separador visual
     const sep = document.createElement("div");
     sep.style.cssText = "grid-column: 1 / -1; height: 1px; background: var(--border); margin: 10px 0 6px 0;";
     container.appendChild(sep);
 
-    // Cabeçalho da seção Ethereum
     const header = document.createElement("div");
     header.style.cssText = "grid-column: 1 / -1; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 600;";
     header.textContent = "⛓️ Saldos na rede Ethereum (somente leitura)";
     container.appendChild(header);
 
-    // ETH nativo
     if (saldos.ETH_NATIVO !== undefined) {
       add("ETH (Ethereum)", saldos.ETH_NATIVO, 18);
     }
 
-    // Tokens ERC-20 Ethereum
     tokensEth.forEach(t => {
       const valor = saldos[t.address] || 0n;
       add(`${t.symbol} (Ethereum)`, valor, t.decimals, { tokenAddr: t.address });
     });
   }
 
-  // Hints
+  // ---------- Hints ----------
   document.querySelectorAll("[data-hint]").forEach(el => {
     const attr = el.getAttribute("data-hint") || "";
     const partes = attr.split(":");
@@ -2043,7 +2044,6 @@ async function init() {
       verificarStatusRedeBitcoin()
     ]);
 
-    // ✅ v6.6: tenta conectar Ethereum em paralelo (não bloqueia se falhar)
     conectarRPCEth().catch(() => {});
 
     await new Promise(r => setTimeout(r, 600));
