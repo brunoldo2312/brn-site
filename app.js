@@ -1,5 +1,8 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.2
+// APP.JS — BRN Exchange | Versão 6.3
+// ✅ CORREÇÃO: flag eventosWalletConfigurados (evita listeners duplicados)
+// ✅ CORREÇÃO: reset da flag em desconectarCarteira()
+// ✅ CORREÇÃO: try/catch no setTimeout de inicializarDescobertaCarteiras
 // ✅ Multi-carteira via EIP-6963 (MetaMask/Rabby/Trust/OKX...)
 // ✅ SHIB, USDT nativo/bridged, USDT-ETH placeholder
 // ✅ Botão 📋 para copiar contrato de cada token
@@ -99,6 +102,9 @@ let btcWallet = null;
 let btcSaldoSats = 0;
 let walletEscolhidaRdns = null;
 
+// ✅ CORREÇÃO v6.3: flag para evitar listeners duplicados
+let eventosWalletConfigurados = false;
+
 const $ = id => document.getElementById(id);
 const isAddr = a => /^0x[a-fA-F0-9]{40}$/.test(a || "");
 const short = a => isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—";
@@ -167,15 +173,20 @@ function inicializarDescobertaCarteiras() {
   window.addEventListener("eip6963:announceProvider", onAnnounce);
   window.dispatchEvent(new Event("eip6963:requestProvider"));
 
+  // ✅ CORREÇÃO v6.3: try/catch dentro do setTimeout
   setTimeout(() => {
-    if (announcedProviders.size === 0 && window.ethereum) {
-      console.log("⚠️ EIP-6963 não respondeu. Usando fallback window.ethereum.");
-      announcedProviders.set("fallback", {
-        info: { name: "Carteira EVM Detectada", rdns: "fallback", uuid: "fallback" },
-        provider: window.ethereum
-      });
+    try {
+      if (announcedProviders.size === 0 && window.ethereum) {
+        console.log("⚠️ EIP-6963 não respondeu. Usando fallback window.ethereum.");
+        announcedProviders.set("fallback", {
+          info: { name: "Carteira EVM Detectada", rdns: "fallback", uuid: "fallback" },
+          provider: window.ethereum
+        });
+      }
+      atualizarStatusCarteiras();
+    } catch (e) {
+      console.warn("Falha na descoberta tardia:", e);
     }
-    atualizarStatusCarteiras();
   }, 500);
 }
 
@@ -1016,6 +1027,8 @@ async function conectarCarteira() {
     toast(`✅ ${escolhida.name} conectada!`, "ok");
     await carregarSaldos();
     await carregarOrdens();
+
+    // ✅ CORREÇÃO v6.3: só configura eventos uma vez
     configurarEventosWallet();
     atualizarStatusCarteiras();
   } catch (e) {
@@ -1031,6 +1044,10 @@ function desconectarCarteira() {
   userAddress = null;
   walletEscolhidaRdns = null;
   saldos = { POL: 0n };
+
+  // ✅ CORREÇÃO v6.3: reseta a flag para permitir reconexão limpa
+  eventosWalletConfigurados = false;
+
   if ($("btnConnect")) $("btnConnect").style.display = "block";
   if ($("walletInfo")) $("walletInfo").style.display = "none";
   fecharPainelCompartilhar();
@@ -1692,12 +1709,17 @@ function iniciarAutoRefresh() {
   }, REFRESH_MS);
 }
 
+// ✅ CORREÇÃO v6.3: só registra listeners uma vez por sessão
 function configurarEventosWallet() {
+  if (eventosWalletConfigurados) return;
+
   const prov = walletEscolhidaRdns
     ? obterProviderPorRdns(walletEscolhidaRdns)
     : window.ethereum;
 
   if (!prov || !prov.on) return;
+
+  eventosWalletConfigurados = true;
 
   prov.on("accountsChanged", (contas) => {
     if (!contas || !contas.length) {
