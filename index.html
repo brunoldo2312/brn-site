@@ -14,6 +14,7 @@
 </head>
 <body>
     <div class="container">
+        <!-- ==================== HEADER ==================== -->
         <header>
             <div class="header-left">
                 <h1>🔷 BRN</h1>
@@ -37,8 +38,12 @@
             </div>
         </header>
 
+        <!-- ==================== BARRA DA CARTEIRA ==================== -->
         <div class="wallet-bar">
-            <button id="btnConnect" class="btn btn-primary">🔌 Conectar Carteira</button>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button id="btnConnect" class="btn btn-primary">🔌 Conectar Carteira</button>
+                <button id="btnCarteirasAceitas" class="btn btn-sm">ℹ️ Carteiras Aceitas</button>
+            </div>
             <div id="walletInfo" class="wallet-info" style="display: none;">
                 <span>Conectado: <code id="addr">—</code></span>
                 <button id="btnShareAddr" class="btn btn-sm btn-ok">📤 Compartilhar Endereço</button>
@@ -46,6 +51,7 @@
             </div>
         </div>
 
+        <!-- ==================== PAINEL DE COMPARTILHAMENTO ==================== -->
         <div id="sharePanel" class="share-panel" style="display: none;">
             <div class="share-head">
                 <h3>📤 Seu Endereço BRN (Polygon)</h3>
@@ -66,6 +72,15 @@
             </div>
         </div>
 
+        <!-- ==================== SALDOS (TOPO) ==================== -->
+        <div class="card">
+            <h2>💼 Saldos da sua Carteira</h2>
+            <div id="balances" class="balances">
+                <p class="dim" style="font-size:0.9rem;">Conecte sua carteira para ver os saldos.</p>
+            </div>
+        </div>
+
+        <!-- ==================== ABAS ==================== -->
         <div class="tabs">
             <button data-tab="mural" class="active">📋 Mural de Ordens</button>
             <button data-tab="criar">💰 Criar Ordem</button>
@@ -76,6 +91,7 @@
             <button data-tab="crosschain">🌉 Bridge Cross-Chain</button>
         </div>
 
+        <!-- ==================== PAINEL: MURAL ==================== -->
         <div id="panel-mural" class="panel">
             <div class="card">
                 <h2>📋 Livro de Ofertas Ativas</h2>
@@ -104,6 +120,7 @@
             </div>
         </div>
 
+        <!-- ==================== PAINEL: CRIAR ORDEM ==================== -->
         <div id="panel-criar" class="panel" hidden>
             <div class="card">
                 <h2>➕ Criar Nova Ordem de Troca</h2>
@@ -133,6 +150,7 @@
             </div>
         </div>
 
+        <!-- ==================== PAINEL: ENVIAR TOKENS ==================== -->
         <div id="panel-enviar" class="panel" hidden>
             <div class="card">
                 <h2>📤 Enviar Ativos Direto (Transferência)</h2>
@@ -156,12 +174,20 @@
             </div>
         </div>
 
+        <!-- ==================== PAINEL: ENVIAR POL ==================== -->
         <div id="panel-enviarpol" class="panel" hidden>
             <div class="card">
                 <h2>💎 Enviar POL (nativo Polygon)</h2>
+                <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">
+                    Envie POL diretamente para qualquer endereço EVM na rede Polygon.
+                    O POL é a moeda nativa usada para pagar gas.
+                </p>
                 <div class="input-group">
                     <label>Endereço de destino:</label>
                     <input type="text" id="destinoPOL" placeholder="0x...">
+                    <small class="dim" style="display:block; margin-top:4px;">
+                        ⚠️ Confira duas vezes. Transação irreversível.
+                    </small>
                 </div>
                 <div class="input-group">
                     <label>Valor a enviar:</label>
@@ -171,12 +197,18 @@
                     </div>
                     <small class="dim" style="display:block; margin-top:4px;">
                         Disponível: <span data-hint="saldoPOLDisponivel">0.00</span> POL
+                        <br>
+                        <span style="opacity:0.7;">(reserva 0.05 POL para gas automaticamente)</span>
                     </small>
                 </div>
                 <button id="btnEnviarPOL" class="btn btn-btc" style="width:100%; margin-top:12px;">💎 Enviar POL</button>
+                <p class="source-note">
+                    ⚠️ Você precisa ter saldo de POL suficiente para pagar a taxa de gas.
+                </p>
             </div>
         </div>
 
+        <!-- ==================== PAINEL: POL ↔ WPOL ==================== -->
         <div id="panel-swap" class="panel" hidden>
             <div class="trade-forms">
                 <div class="form-card">
@@ -204,9 +236,11 @@
             </div>
         </div>
 
+        <!-- ==================== PAINEL: BITCOIN ==================== -->
         <div id="panel-bitcoin" class="panel" hidden>
             <div class="card">
                 <h2>🟠 Consultar Saldo em Conta Bitcoin</h2>
+                <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">Consulte saldos reais e atualizados de carteiras na rede nativa do Bitcoin.</p>
                 <div class="row">
                     <input type="text" id="btcAddressInput" placeholder="Digite o endereço Bitcoin...">
                     <button id="btnConsultarBTC" class="btn btn-btc">₿ Buscar Dados</button>
@@ -217,6 +251,9 @@
                 </div>
                 <hr style="margin: 24px 0; border-color: var(--border);">
                 <h3>🔄 Converter WBTC (Polygon) → BTC nativo</h3>
+                <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">
+                    Cotação e custódia feitas pela <a href="https://sideshift.ai" target="_blank" rel="noopener">SideShift.ai</a>.
+                </p>
                 <div class="input-group">
                     <label>Quantidade de WBTC:</label>
                     <div class="row">
@@ -269,6 +306,7 @@
             </div>
         </div>
 
+        <!-- ==================== PAINEL: CROSS-CHAIN ==================== -->
         <div id="panel-crosschain" class="panel" hidden>
             <div class="card">
                 <h2>🌉 Bridge Cross-Chain (SideShift)</h2>
@@ -316,17 +354,147 @@
                 </div>
             </div>
         </div>
+    </div>
 
-        <div class="card">
-            <h2>💼 Saldos da sua Carteira</h2>
-            <div id="balances" class="balances">
-                <p class="dim" style="font-size:0.9rem;">Conecte sua carteira para ver os saldos.</p>
+    <!-- ==================== MODAL: CARTEIRAS E EXCHANGES ACEITAS ==================== -->
+    <div id="modalCarteiras" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-head">
+                <h2>🌐 Carteiras e Exchanges Aceitas</h2>
+                <button id="btnFecharModalCarteiras" class="btn btn-sm">✕ Fechar</button>
+            </div>
+
+            <p class="dim" style="font-size: 0.85rem; margin-bottom: 16px;">
+                O BRN Exchange opera na <strong>rede Polygon (chainId 137)</strong>. Você pode se conectar com qualquer uma das carteiras abaixo
+                ou receber fundos das exchanges listadas diretamente no seu endereço Polygon.
+            </p>
+
+            <h3 style="margin-top: 20px; color: var(--accent);">🔐 Carteiras EVM (auto-detectadas)</h3>
+            <div class="carteiras-grid">
+                <div class="carteira-card">
+                    <span class="carteira-icon">🦊</span>
+                    <span class="carteira-nome">MetaMask</span>
+                    <span class="carteira-status">✅ Recomendada</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">🐰</span>
+                    <span class="carteira-nome">Rabby</span>
+                    <span class="carteira-status">✅ Suportada</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">🛡️</span>
+                    <span class="carteira-nome">Trust Wallet</span>
+                    <span class="carteira-status">✅ Suportada</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">🔵</span>
+                    <span class="carteira-nome">Coinbase Wallet</span>
+                    <span class="carteira-status">✅ Suportada</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">⬛</span>
+                    <span class="carteira-nome">OKX Wallet</span>
+                    <span class="carteira-status">✅ Suportada</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">🦎</span>
+                    <span class="carteira-nome">Phantom</span>
+                    <span class="carteira-status">✅ (modo EVM)</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">🔒</span>
+                    <span class="carteira-nome">Ledger</span>
+                    <span class="carteira-status">✅ Via MetaMask</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">📱</span>
+                    <span class="carteira-nome">WalletConnect</span>
+                    <span class="carteira-status">✅ Mobile</span>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 24px; color: var(--btc);">🏦 Exchanges (saques para Polygon)</h3>
+            <p class="dim" style="font-size: 0.8rem; margin-bottom: 12px;">
+                Você pode sacar USDT, USDC, MATIC/POL e outros tokens direto para o seu endereço Polygon nessas exchanges.
+                <strong>Atenção:</strong> ao sacar, escolha sempre a rede <strong>Polygon (MATIC/POL)</strong>, nunca Ethereum ou BSC.
+            </p>
+            <div class="carteiras-grid">
+                <div class="carteira-card">
+                    <span class="carteira-icon">🟡</span>
+                    <span class="carteira-nome">Binance</span>
+                    <span class="carteira-status">USDT/USDC/MATIC</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">🔵</span>
+                    <span class="carteira-nome">Coinbase</span>
+                    <span class="carteira-status">USDC/MATIC</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">🟣</span>
+                    <span class="carteira-nome">Kraken</span>
+                    <span class="carteira-status">USDT/USDC/MATIC</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">⬛</span>
+                    <span class="carteira-nome">OKX</span>
+                    <span class="carteira-status">USDT/USDC/MATIC</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">🟠</span>
+                    <span class="carteira-nome">Bybit</span>
+                    <span class="carteira-status">USDT/USDC</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">🟢</span>
+                    <span class="carteira-nome">KuCoin</span>
+                    <span class="carteira-status">USDT/USDC/MATIC</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">🔵</span>
+                    <span class="carteira-nome">Bitget</span>
+                    <span class="carteira-status">USDT/USDC</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">🟣</span>
+                    <span class="carteira-nome">Gate.io</span>
+                    <span class="carteira-status">USDT/USDC</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">🇧🇷</span>
+                    <span class="carteira-nome">Mercado Bitcoin</span>
+                    <span class="carteira-status">USDT/MATIC</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">🇧🇷</span>
+                    <span class="carteira-nome">NovaDAX</span>
+                    <span class="carteira-status">USDT</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">🇧🇷</span>
+                    <span class="carteira-nome">Ripio</span>
+                    <span class="carteira-status">USDT/USDC</span>
+                </div>
+                <div class="carteira-card">
+                    <span class="carteira-icon">🇧🇷</span>
+                    <span class="carteira-nome">Foxbit</span>
+                    <span class="carteira-status">USDT</span>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <p class="dim" style="font-size: 0.8rem;">
+                    ⚠️ <strong>Importante:</strong> Ao sacar de uma exchange, sempre escolha a rede <strong>Polygon</strong>.
+                    Sacar em rede errada pode causar <strong>perda permanente dos fundos</strong>.
+                </p>
+                <button id="btnFecharModalCarteiras2" class="btn btn-primary">Entendi</button>
             </div>
         </div>
     </div>
 
+    <!-- ==================== TOASTS ==================== -->
     <div id="toasts" class="toast-container"></div>
 
-    <script src="app.js"></script>
+    <!-- ==================== SCRIPTS ==================== -->
+    <script src="app.js?v=6.5"></script>
 </body>
 </html>
