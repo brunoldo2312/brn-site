@@ -1,19 +1,18 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 5.7
-// ✅ SHIB adicionado (leitura + criar ordem + envio)
-// ✅ USDT nativo + USDT.e (bridged) na Polygon
-// ✅ BRIDGE SideShift corrigida:
-//    - envia depositCoin/depositNetwork/settleCoin/settleNetwork
-//    - lê response.text() antes de JSON.parse (evita erro HTML)
-//    - valida valor mínimo (~0.0001 WBTC)
-//    - valida campos retornados (depositAddress/settleAmount)
-// ✅ CORREÇÃO: BigInt x BigNumber (helper parseUnits)
+// APP.JS — BRN Exchange | Versão 6.2
+// ✅ Multi-carteira via EIP-6963 (MetaMask/Rabby/Trust/OKX...)
+// ✅ SHIB, USDT nativo/bridged, USDT-ETH placeholder
+// ✅ Botão 📋 para copiar contrato de cada token
+// ✅ Bridge WBTC → BTC (SideShift)
+// ✅ Bridge Cross-Chain USDT Polygon → USDT Ethereum (SideShift)
+// ✅ traduzirErro() — mensagens amigáveis em PT-BR
+// ✅ Tratamento de cancelamento (code 4001)
+// ✅ BigInt x BigNumber (parseUnits helper)
 // ✅ Seletores ABI calculados após ethers carregar
-// ✅ Ordem correta de criarOrdem: (addr, addr, uint, uint)
-// ✅ Mural em 1 chamada via obterContratosGerados()
-// ✅ Envio de POL nativo (com reserva de gas)
-// ✅ Envio de BTC nativo via carteiras Bitcoin (UniSat/OKX/Leather)
-// ✅ Indicadores de status das carteiras (EVM + BTC) na header
+// ✅ criarOrdem: (addr, addr, uint, uint)
+// ✅ Mural em 1 chamada (obterContratosGerados)
+// ✅ Envio POL nativo (reserva de gas)
+// ✅ Envio BTC nativo (UniSat/OKX/Leather)
 // ✅ init() com try/catch por etapa
 // ============================================================
 
@@ -27,16 +26,24 @@ const RESERVA_GAS_POL = "0.05";
 const RESERVA_TAXA_BTC_SATS = 2000;
 
 const TOKENS = [
-  { symbol: "BRN",     name: "BRN Token",             address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
-  { symbol: "USDC",    name: "USD Coin (nativo)",     address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6  },
-  { symbol: "USDC.e",  name: "USD Coin (bridged)",    address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6  },
-  { symbol: "USDT",    name: "Tether USD (nativo)",   address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6  },
-  { symbol: "USDT.e",  name: "Tether USD (bridged)",  address: "0x9417669fBF23357D2774e9D4234219952D36A1e5", decimals: 6  },
-  { symbol: "SHIB",    name: "Shiba Inu",             address: "0x6f8a06447Ff6FcF75d803135a7de15CE88C1d4ec", decimals: 18 },
-  { symbol: "WPOL",    name: "Wrapped POL",           address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
-  { symbol: "WBTC",    name: "Wrapped BTC",           address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8  },
-  { symbol: "WETH",    name: "Wrapped Ether",         address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18 }
+  { symbol: "BRN",        name: "BRN Token",             address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
+  { symbol: "USDC",       name: "USD Coin (nativo)",     address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6  },
+  { symbol: "USDC.e",     name: "USD Coin (bridged)",    address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6  },
+  { symbol: "USDT",       name: "Tether USD (nativo)",   address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6  },
+  { symbol: "USDT.e",     name: "Tether USD (bridged)",  address: "0x9417669fBF23357D2774e9D4234219952D36A1e5", decimals: 6  },
+  { symbol: "USDT-ETH",   name: "Tether USD (Ethereum)", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6, somenteEth: true },
+  { symbol: "SHIB",       name: "Shiba Inu",             address: "0x6f8a06447Ff6FcF75d803135a7de15CE88C1d4ec", decimals: 18 },
+  { symbol: "WPOL",       name: "Wrapped POL",           address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
+  { symbol: "WBTC",       name: "Wrapped BTC",           address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8  },
+  { symbol: "WETH",       name: "Wrapped Ether",         address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18 }
 ];
+
+const SIDESHIFT_MAP = {
+  "usdt-polygon":  { coin: "usdt", network: "polygon" },
+  "usdc-polygon":  { coin: "usdc", network: "polygon" },
+  "usdt-ethereum": { coin: "usdt", network: "ethereum" },
+  "usdc-ethereum": { coin: "usdc", network: "ethereum" }
+};
 
 const RPC_LIST = [
   "https://polygon.publicnode.com",
@@ -90,13 +97,13 @@ let refreshTimer = null;
 
 let btcWallet = null;
 let btcSaldoSats = 0;
+let walletEscolhidaRdns = null;
 
 const $ = id => document.getElementById(id);
 const isAddr = a => /^0x[a-fA-F0-9]{40}$/.test(a || "");
 const short = a => isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—";
 const mesmoAddr = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
-// ✅ CORREÇÃO CRÍTICA: converte para BigInt nativo (evita mistura com BigNumber)
 function parseUnits(valor, decimals) {
   return BigInt(ethers.utils.parseUnits(valor, decimals).toString());
 }
@@ -139,6 +146,68 @@ function toastBtcTx(txid) {
   el.innerHTML = `📤 BTC enviado! <a href="https://mempool.space/tx/${txid}" target="_blank" rel="noopener">Ver no mempool.space ↗</a>`;
   container.appendChild(el);
   setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, 9000);
+}
+
+// ============================================================
+// Descoberta multi-carteira via EIP-6963
+// ============================================================
+const announcedProviders = new Map();
+
+function inicializarDescobertaCarteiras() {
+  const onAnnounce = (event) => {
+    try {
+      const { info, provider: prov } = event.detail || {};
+      if (!info || !prov) return;
+      if (!announcedProviders.has(info.uuid)) {
+        announcedProviders.set(info.uuid, { info, provider: prov });
+        console.log(`🔍 Carteira detectada: ${info.name} (${info.rdns})`);
+      }
+    } catch (e) { console.warn("Erro ao processar announce:", e); }
+  };
+  window.addEventListener("eip6963:announceProvider", onAnnounce);
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+
+  setTimeout(() => {
+    if (announcedProviders.size === 0 && window.ethereum) {
+      console.log("⚠️ EIP-6963 não respondeu. Usando fallback window.ethereum.");
+      announcedProviders.set("fallback", {
+        info: { name: "Carteira EVM Detectada", rdns: "fallback", uuid: "fallback" },
+        provider: window.ethereum
+      });
+    }
+    atualizarStatusCarteiras();
+  }, 500);
+}
+
+function listarCarteirasDisponiveis() {
+  return Array.from(announcedProviders.values()).map(e => ({
+    name: e.info.name,
+    rdns: e.info.rdns,
+    uuid: e.info.uuid
+  }));
+}
+
+function obterProviderPorRdns(rdns) {
+  for (const entry of announcedProviders.values()) {
+    if (entry.info.rdns === rdns) return entry.provider;
+  }
+  return null;
+}
+
+// ============================================================
+// Tradutor de erros → PT-BR
+// ============================================================
+function traduzirErro(e) {
+  if (!e) return { msg: "Erro desconhecido.", tipo: "err" };
+  if (e.code === 4001 || e.code === "ACTION_REJECTED") return { msg: "Operação cancelada na carteira.", tipo: "warn" };
+  if (e.code === "INSUFFICIENT_FUNDS" || /insufficient funds/i.test(e.message || "")) return { msg: "Saldo insuficiente para pagar o gas. Adicione POL à sua carteira.", tipo: "err" };
+  if (/nonce too low|nonce has already been used/i.test(e.message || "")) return { msg: "Sincronização pendente. Espere a tx anterior confirmar e tente de novo.", tipo: "warn" };
+  if (/out of gas|gas required exceeds allowance|intrinsic gas too low/i.test(e.message || "")) return { msg: "Gas insuficiente. Aumente o gasLimit ou tente novamente.", tipo: "err" };
+  if (/chainId|network changed|wrong network/i.test(e.message || "")) return { msg: "Rede incorreta. Troque para Polygon Mainnet.", tipo: "err" };
+  if (/could not detect network|timeout|failed to fetch|network error/i.test(e.message || "")) return { msg: "Falha de conexão com a rede. Tente novamente.", tipo: "err" };
+  if (/execution reverted|revert/i.test(e.message || "")) return { msg: "Contrato recusou a operação. Verifique saldo e allowance.", tipo: "err" };
+  const limpa = (e.message || "").replace(/^Error:\s*/i, "").replace(/\(action=.*?\)/i, "").replace(/\(error=.*?\)/i, "").trim();
+  return { msg: limpa || "Erro desconhecido.", tipo: "err" };
 }
 
 async function fetchTimeout(url, ms = 8000) {
@@ -239,13 +308,15 @@ function atualizarStatusCarteiras() {
   if (ed && et) {
     if (userAddress) {
       ed.className = "dot";
-      et.textContent = `MetaMask: ${short(userAddress)}`;
+      const nome = walletEscolhidaRdns
+        ? (Array.from(announcedProviders.values()).find(e => e.info.rdns === walletEscolhidaRdns)?.info.name || "Carteira")
+        : "Carteira";
+      et.textContent = `${nome}: ${short(userAddress)}`;
     } else {
       ed.className = "dot off";
-      et.textContent = "MetaMask: Desconectada";
+      et.textContent = "Carteira EVM: Desconectada";
     }
   }
-
   const bd = $("btcWalletDot");
   const bt = $("btcWalletText");
   if (bd && bt) {
@@ -283,14 +354,8 @@ async function atualizarStatusRede() {
   dot.className = "dot load";
   txt.textContent = "Polygon: Conectando…";
   const ok = await conectarRPC();
-  if (ok) {
-    dot.className = "dot";
-    txt.textContent = "Polygon: Conectado ✅";
-  } else {
-    dot.className = "dot off";
-    txt.textContent = "Polygon: Sem conexão ❌";
-    toast("❌ Não foi possível conectar à rede Polygon.", "err", 10000);
-  }
+  if (ok) { dot.className = "dot"; txt.textContent = "Polygon: Conectado ✅"; }
+  else { dot.className = "dot off"; txt.textContent = "Polygon: Sem conexão ❌"; toast("❌ Não foi possível conectar à rede Polygon.", "err", 10000); }
   return ok;
 }
 
@@ -357,7 +422,7 @@ function atualizarHintWbtc() {
 }
 
 // ============================================================
-// BRIDGE WBTC → BTC via SideShift (v5.7 — corrigida)
+// BRIDGE WBTC → BTC (SideShift)
 // ============================================================
 async function criarOrdemSideShift() {
   if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
@@ -366,38 +431,19 @@ async function criarOrdemSideShift() {
   const btcDestino = $("btcDestinoBridge").value.trim();
   const resultBox  = $("bridge-result");
 
-  // ✅ Validação 1: valor numérico > 0
-  if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) {
-    toast("Digite uma quantidade válida de WBTC.", "warn");
-    return;
-  }
-
-  // ✅ Validação 2: mínimo da SideShift (~0.0001 WBTC)
-  if (Number(valorStr) < 0.0001) {
-    toast("⚠️ Valor abaixo do mínimo da SideShift (~0.0001 WBTC).", "warn", 8000);
-    return;
-  }
-
-  // ✅ Validação 3: endereço BTC
-  if (!isBtcAddress(btcDestino)) {
-    toast("❌ Endereço Bitcoin inválido. Use bc1..., 1... ou 3...", "err", 8000);
-    return;
-  }
+  if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) { toast("Digite uma quantidade válida de WBTC.", "warn"); return; }
+  if (Number(valorStr) < 0.0001) { toast("⚠️ Valor abaixo do mínimo da SideShift (~0.0001 WBTC).", "warn", 8000); return; }
+  if (!isBtcAddress(btcDestino)) { toast("❌ Endereço Bitcoin inválido. Use bc1..., 1... ou 3...", "err", 8000); return; }
 
   const wbtc = TOKENS.find(t => t.symbol === "WBTC");
   if (!wbtc) { toast("WBTC não configurado.", "err"); return; }
 
   const valorWei = parseUnits(valorStr, wbtc.decimals);
   const saldo = saldos[wbtc.address] || 0n;
-  if (saldo < valorWei) {
-    toast(`❌ Saldo insuficiente. Você tem ${fmt(saldo, wbtc.decimals)} WBTC.`, "err", 8000);
-    return;
-  }
+  if (saldo < valorWei) { toast(`❌ Saldo insuficiente. Você tem ${fmt(saldo, wbtc.decimals)} WBTC.`, "err", 8000); return; }
 
   const confirmar = window.confirm(
-    `Converter ${valorStr} WBTC (Polygon)\n` +
-    `→ BTC nativo para:\n${btcDestino}\n\n` +
-    `Confira o endereço com MUITO cuidado.\nContinuar?`
+    `Converter ${valorStr} WBTC (Polygon)\n→ BTC nativo para:\n${btcDestino}\n\nConfira o endereço com MUITO cuidado.\nContinuar?`
   );
   if (!confirmar) return;
 
@@ -409,7 +455,6 @@ async function criarOrdemSideShift() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        // ✅ Envia os pares de moeda/redes explicitamente
         depositCoin:    "wbtc",
         depositNetwork: "polygon",
         settleCoin:     "btc",
@@ -419,40 +464,20 @@ async function criarOrdemSideShift() {
       })
     });
 
-    // ✅ Lê como TEXTO antes de tentar JSON (evita quebra em HTML)
     const rawText = await response.text();
     let data;
-    try {
-      data = JSON.parse(rawText);
-    } catch {
-      console.error("Resposta não-JSON:", rawText.slice(0, 500));
-      throw new Error(
-        `Servidor não retornou JSON (HTTP ${response.status}). ` +
-        `Verifique se /api/sideshift está deployado no Vercel.`
-      );
-    }
+    try { data = JSON.parse(rawText); }
+    catch { throw new Error(`Servidor não retornou JSON (HTTP ${response.status}).`); }
 
-    if (!response.ok || !data.success) {
-      throw new Error(data.error || `Erro HTTP ${response.status}`);
-    }
-
-    // ✅ Valida campos retornados
-    if (!data.depositAddress || !data.depositAmount || !data.settleAmount) {
-      throw new Error("Resposta incompleta do servidor (faltam campos).");
-    }
+    if (!response.ok || !data.success) throw new Error(data.error || `Erro HTTP ${response.status}`);
+    if (!data.depositAddress || !data.depositAmount || !data.settleAmount) throw new Error("Resposta incompleta do servidor.");
 
     $("bridge-deposit-address").textContent = data.depositAddress;
     $("bridge-deposit-amount").textContent  = data.depositAmount;
     $("bridge-settle-amount").textContent   = data.settleAmount;
-    $("bridge-expires").textContent = data.expiresAt
-      ? new Date(data.expiresAt).toLocaleTimeString()
-      : "~15 min";
+    $("bridge-expires").textContent = data.expiresAt ? new Date(data.expiresAt).toLocaleTimeString() : "~15 min";
 
-    if (resultBox) {
-      resultBox.style.display = "block";
-      resultBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-
+    if (resultBox) { resultBox.style.display = "block"; resultBox.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
     toast("✅ Ordem criada! Envie o WBTC para o endereço exibido.", "ok", 12000);
   } catch (e) {
     console.error("SideShift:", e);
@@ -463,14 +488,107 @@ async function criarOrdemSideShift() {
 async function copiarDepositAddress() {
   const el = $("bridge-deposit-address");
   if (!el) return;
+  try { await navigator.clipboard.writeText(el.textContent); toast("✅ Endereço copiado!", "ok"); }
+  catch { toast("❌ Não foi possível copiar.", "err"); }
+}
+
+// ============================================================
+// BRIDGE CROSS-CHAIN (USDT Polygon → USDT Ethereum)
+// ============================================================
+async function atualizarHintCC() {
+  const sel = $("ccTokenOrigem");
+  const hint = $("ccSaldoHint");
+  if (!sel || !hint) return;
+  const origem = SIDESHIFT_MAP[sel.value];
+  if (!origem) { hint.textContent = "Saldo: —"; return; }
+  const symbolLookup = origem.coin.toUpperCase();
+  const token = TOKENS.find(t => t.symbol === symbolLookup);
+  if (!token) { hint.textContent = "Saldo: —"; return; }
+  const saldo = saldos[token.address] || 0n;
+  hint.textContent = `Saldo: ${fmt(saldo, token.decimals)} ${token.symbol}`;
+}
+
+async function criarOrdemCrossChain() {
+  if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
+
+  const origemKey = $("ccTokenOrigem").value;
+  const destinoKey = $("ccTokenDestino").value;
+  const valorStr = $("ccValor").value.trim().replace(",", ".");
+  const destinoAddr = $("ccDestino").value.trim();
+  const resultBox = $("cc-result");
+
+  if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) { toast("Digite uma quantidade válida.", "warn"); return; }
+  if (!isAddr(destinoAddr)) { toast("❌ Endereço de destino inválido. Use um endereço 0x...", "err", 8000); return; }
+
+  const origem = SIDESHIFT_MAP[origemKey];
+  const destino = SIDESHIFT_MAP[destinoKey];
+  if (!origem || !destino) { toast("❌ Par de tokens não suportado.", "err"); return; }
+
+  const symbolLookup = origem.coin.toUpperCase();
+  const tokenOrigem = TOKENS.find(t => t.symbol === symbolLookup);
+  if (!tokenOrigem) { toast("❌ Token de origem não encontrado na Polygon.", "err"); return; }
+  const saldoOrigem = saldos[tokenOrigem.address] || 0n;
+  const valorWei = parseUnits(valorStr, tokenOrigem.decimals);
+  if (saldoOrigem < valorWei) {
+    toast(`❌ Saldo insuficiente. Você tem ${fmt(saldoOrigem, tokenOrigem.decimals)} ${tokenOrigem.symbol}.`, "err", 8000);
+    return;
+  }
+
+  const confirmar = window.confirm(
+    `Bridge ${valorStr} ${origem.coin.toUpperCase()} (${origem.network})\n→ ${destino.coin.toUpperCase()} (${destino.network}) para:\n${destinoAddr}\n\nConfira o endereço com MUITO cuidado.\nContinuar?`
+  );
+  if (!confirmar) return;
+
+  toast("⏳ Criando ordem na SideShift…", "info", 6000);
+  if (resultBox) resultBox.style.display = "none";
+
   try {
-    await navigator.clipboard.writeText(el.textContent);
-    toast("✅ Endereço copiado!", "ok");
-  } catch {
-    toast("❌ Não foi possível copiar.", "err");
+    const response = await fetch(SIDESHIFT_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        depositCoin:    origem.coin,
+        depositNetwork: origem.network,
+        settleCoin:     destino.coin,
+        settleNetwork:  destino.network,
+        depositAmount:  valorStr,
+        settleAddress:  destinoAddr
+      })
+    });
+
+    const rawText = await response.text();
+    let data;
+    try { data = JSON.parse(rawText); }
+    catch { throw new Error(`Servidor não retornou JSON (HTTP ${response.status}).`); }
+
+    if (!response.ok || !data.success) throw new Error(data.error || `Erro HTTP ${response.status}`);
+    if (!data.depositAddress || !data.depositAmount || !data.settleAmount) throw new Error("Resposta incompleta do servidor.");
+
+    $("cc-deposit-address").textContent = data.depositAddress;
+    $("cc-deposit-amount").textContent = data.depositAmount;
+    $("cc-deposit-token").textContent = `${origem.coin.toUpperCase()} (${origem.network})`;
+    $("cc-settle-amount").textContent = data.settleAmount;
+    $("cc-settle-token").textContent = `${destino.coin.toUpperCase()} (${destino.network})`;
+    $("cc-expires").textContent = data.expiresAt ? new Date(data.expiresAt).toLocaleTimeString() : "~15 min";
+
+    if (resultBox) { resultBox.style.display = "block"; resultBox.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+    toast("✅ Ordem criada! Envie o token para o endereço de depósito.", "ok", 12000);
+  } catch (e) {
+    console.error("CrossChain SideShift:", e);
+    toast("❌ " + e.message, "err", 10000);
   }
 }
 
+async function copiarCCDepositAddress() {
+  const el = $("cc-deposit-address");
+  if (!el) return;
+  try { await navigator.clipboard.writeText(el.textContent); toast("✅ Endereço copiado!", "ok"); }
+  catch { toast("❌ Não foi possível copiar.", "err"); }
+}
+
+// ============================================================
+// POL nativo
+// ============================================================
 function calcularPOLDisponivel() {
   const reserva = parseUnits(RESERVA_GAS_POL, 18);
   return saldos.POL > reserva ? saldos.POL - reserva : 0n;
@@ -499,8 +617,7 @@ async function enviarPOL() {
     }
 
     const confirmar = window.confirm(
-      `Enviar ${valorStr} POL para:\n${destino}\n\n` +
-      `⚠️ Transação irreversível. Confira o endereço.\nContinuar?`
+      `Enviar ${valorStr} POL para:\n${destino}\n\n⚠️ Transação irreversível. Confira o endereço.\nContinuar?`
     );
     if (!confirmar) { isTxBusy = false; return; }
 
@@ -520,14 +637,17 @@ async function enviarPOL() {
     $("valorPOLEnvio").value = "";
     await carregarSaldos();
   } catch (e) {
-    console.error("Erro enviarPOL:", e);
-    if (e.code === 4001) toast("Envio cancelado.", "warn");
-    else toast("❌ " + (e.message || "Erro desconhecido"), "err", 8000);
+    console.error("enviarPOL:", e);
+    const { msg, tipo } = traduzirErro(e);
+    toast(msg, tipo, 8000);
   } finally {
     isTxBusy = false;
   }
 }
 
+// ============================================================
+// BTC nativo
+// ============================================================
 function isBtcAddressStrict(a) {
   if (!a) return false;
   const s = a.trim();
@@ -647,10 +767,9 @@ async function enviarBTC() {
     }
 
     const ok = window.confirm(
-      `Enviar ${valorStr} BTC (${sats} sats) para:\n${destino}\n\n` +
-      `⚠️ Transação irreversível. Continuar?`
+      `Enviar ${valorStr} BTC (${sats} sats) para:\n${destino}\n\n⚠️ Transação irreversível. Continuar?`
     );
-    if (!ok) return;
+    if (!ok) { isTxBusy = false; return; }
 
     toast(`⏳ Solicitando assinatura na ${btcWallet.label}…`, "info");
 
@@ -706,6 +825,9 @@ function atualizarStatusCarteiraBTC() {
   }
 }
 
+// ============================================================
+// Saldos e UI
+// ============================================================
 function preencherSeletores() {
   const opts = TOKENS.map(t => `<option value="${t.address}">${t.symbol} — ${t.name}</option>`).join("");
   ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
@@ -725,12 +847,14 @@ async function carregarSaldos() {
   try {
     saldos.POL = BigInt((await rpcProvider.getBalance(userAddress)).toString());
     for (const t of TOKENS) {
+      if (t.somenteEth) { saldos[t.address] = 0n; continue; }
       try {
         const res = await rpcProvider.call({ to: t.address, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress) });
         saldos[t.address] = decUint(res.slice(2));
       } catch { saldos[t.address] = 0n; }
     }
     renderizarSaldos();
+    atualizarHintCC();
   } catch (e) { console.error("Erro ao carregar saldos:", e); }
 }
 
@@ -739,16 +863,30 @@ function renderizarSaldos() {
   if (!container) return;
   container.innerHTML = "";
 
-  const add = (simbolo, valor, decimais) => {
+  const add = (simbolo, valor, decimais, opts = {}) => {
+    const { aviso = null, tokenAddr = null } = opts;
     const div = document.createElement("div");
     div.className = "bal";
     const classe = valor === 0n ? "v dim" : "v";
-    div.innerHTML = `<span class="t">${simbolo}</span><span class="${classe}">${fmt(valor, decimais)}</span>`;
+
+    const copyBtn = tokenAddr
+      ? `<button class="btn-copy-token" data-copy="${tokenAddr}" data-symbol="${simbolo}" title="Copiar endereço do contrato">📋</button>`
+      : "";
+
+    div.innerHTML = `
+      <span class="t">${simbolo}${aviso ? " ⚠️" : ""}${copyBtn}</span>
+      <span class="${classe}">${fmt(valor, decimais)}</span>
+      ${aviso ? `<span class="bal-sub">${aviso}</span>` : ""}
+    `;
     container.appendChild(div);
   };
 
   add("POL (Polygon)", saldos.POL, 18);
-  TOKENS.forEach(t => add(`${t.symbol} (Polygon)`, saldos[t.address] || 0n, t.decimals));
+  TOKENS.forEach(t => {
+    const valor = saldos[t.address] || 0n;
+    const aviso = t.somenteEth ? "Só na Ethereum (não suportado)" : null;
+    add(`${t.symbol} (Polygon)`, valor, t.decimals, { aviso, tokenAddr: t.address });
+  });
 
   document.querySelectorAll("[data-hint]").forEach(el => {
     const attr = el.getAttribute("data-hint") || "";
@@ -774,19 +912,85 @@ function renderizarSaldos() {
   });
 
   atualizarHintWbtc();
+
+  container.querySelectorAll(".btn-copy-token").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const addr = btn.getAttribute("data-copy");
+      const sym  = btn.getAttribute("data-symbol") || "token";
+
+      const copiar = async (texto) => {
+        try {
+          await navigator.clipboard.writeText(texto);
+          return true;
+        } catch {
+          const ta = document.createElement("textarea");
+          ta.value = texto;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          let ok = false;
+          try { ok = document.execCommand("copy"); } catch {}
+          ta.remove();
+          return ok;
+        }
+      };
+
+      const ok = await copiar(addr);
+      if (ok) {
+        toast(`✅ Contrato do ${sym.replace(" (Polygon)", "")} copiado! Cole na MetaMask → "Importar tokens".`, "ok", 7000);
+      } else {
+        toast("❌ Não foi possível copiar.", "err");
+      }
+    });
+  });
 }
 
+// ============================================================
+// Conexão de carteira (multi-provider EIP-6963)
+// ============================================================
 async function conectarCarteira() {
-  if (!window.ethereum) {
-    toast("❌ MetaMask não detectada! Instale a extensão e recarregue.", "err", 10000);
+  const carteiras = listarCarteirasDisponiveis();
+
+  if (carteiras.length === 0) {
+    toast("❌ Nenhuma carteira EVM detectada. Instale MetaMask, Trust Wallet ou Rabby.", "err", 10000);
     return;
   }
+
+  let escolhida = null;
+
+  if (carteiras.length === 1) {
+    escolhida = carteiras[0];
+    toast(`🔌 Conectando à ${escolhida.name}…`, "info");
+  } else {
+    const nomes = carteiras.map((c, i) => `${i + 1}. ${c.name}`).join("\n");
+    const escolha = window.prompt(
+      `Múltiplas carteiras detectadas:\n\n${nomes}\n\nDigite o número da carteira que deseja usar:`
+    );
+    if (!escolha) return;
+    const idx = parseInt(escolha) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= carteiras.length) {
+      toast("❌ Escolha inválida.", "warn");
+      return;
+    }
+    escolhida = carteiras[idx];
+    toast(`🔌 Conectando à ${escolhida.name}…`, "info");
+  }
+
+  const providerEscolhido = obterProviderPorRdns(escolhida.rdns);
+  if (!providerEscolhido) {
+    toast("❌ Carteira não encontrada.", "err");
+    return;
+  }
+
   try {
-    provider = new ethers.providers.Web3Provider(window.ethereum);
+    provider = new ethers.providers.Web3Provider(providerEscolhido);
     const contas = await provider.send("eth_requestAccounts", []);
     if (!contas.length) throw new Error("Nenhuma conta encontrada");
     userAddress = ethers.utils.getAddress(contas[0]);
     signer = provider.getSigner();
+    walletEscolhidaRdns = escolhida.rdns;
 
     let rede = await provider.getNetwork();
     if (rede.chainId !== POLYGON_CHAIN_ID) {
@@ -796,11 +1000,11 @@ async function conectarCarteira() {
         await new Promise(r => setTimeout(r, 500));
         rede = await provider.getNetwork();
         if (rede.chainId !== POLYGON_CHAIN_ID) {
-          toast("❌ Selecione manualmente a rede Polygon na MetaMask", "err", 8000);
+          toast("❌ Selecione manualmente a rede Polygon na carteira", "err", 8000);
           return;
         }
       } catch {
-        toast("❌ Selecione manualmente a rede Polygon na MetaMask", "err", 8000);
+        toast("❌ Selecione manualmente a rede Polygon na carteira", "err", 8000);
         return;
       }
     }
@@ -809,14 +1013,15 @@ async function conectarCarteira() {
     $("walletInfo").style.display = "flex";
     $("addr").textContent = short(userAddress);
 
-    toast("✅ Carteira conectada!", "ok");
+    toast(`✅ ${escolhida.name} conectada!`, "ok");
     await carregarSaldos();
     await carregarOrdens();
+    configurarEventosWallet();
     atualizarStatusCarteiras();
   } catch (e) {
+    console.error("conectarCarteira:", e);
     if (e.code === 4001) toast("Conexão recusada.", "warn");
-    else toast("Erro: " + e.message, "err");
-    console.error(e);
+    else toast("Erro: " + (e.message || "Erro desconhecido"), "err");
   }
 }
 
@@ -824,6 +1029,7 @@ function desconectarCarteira() {
   provider = null;
   signer = null;
   userAddress = null;
+  walletEscolhidaRdns = null;
   saldos = { POL: 0n };
   if ($("btnConnect")) $("btnConnect").style.display = "block";
   if ($("walletInfo")) $("walletInfo").style.display = "none";
@@ -834,6 +1040,9 @@ function desconectarCarteira() {
   atualizarStatusCarteiras();
 }
 
+// ============================================================
+// Compartilhar endereço
+// ============================================================
 function abrirPainelCompartilhar() {
   if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
 
@@ -904,6 +1113,9 @@ async function copiarEndereco() {
   }
 }
 
+// ============================================================
+// Mural
+// ============================================================
 async function carregarOrdens() {
   if (loading || !rpcProvider || !S) return;
   loading = true;
@@ -950,7 +1162,6 @@ async function carregarOrdens() {
           cancelado: d.cancelado
         });
       } catch (e) {
-        // Silencia erros de contratos antigos (interface desatualizada)
         if (!/missing revert data|call exception|timeout/i.test(e.message || "")) {
           console.warn(`Erro na ordem ${i} (${endereco}):`, e.message);
         }
@@ -1045,6 +1256,9 @@ function renderizarOrdens(lista) {
   });
 }
 
+// ============================================================
+// Criar / executar / cancelar ordem
+// ============================================================
 async function criarOrdem() {
   if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
@@ -1057,6 +1271,10 @@ async function criarOrdem() {
 
     if (!ofToken || !deToken) throw new Error("Selecione os tokens");
     if (mesmoAddr(ofAddr, deAddr)) throw new Error("Tokens devem ser diferentes");
+
+    if (ofToken.somenteEth || deToken.somenteEth) {
+      throw new Error("Token da rede Ethereum não suportado. Este app opera apenas na Polygon.");
+    }
 
     const ofStr = $("valorOferece").value.trim().replace(",", ".");
     const deStr = $("valorDeseja").value.trim().replace(",", ".");
@@ -1084,7 +1302,7 @@ async function criarOrdem() {
         data: "0x" + S.ERC20.approve + encAddr(ESCROW_FACTORY) + encUint(ofVal),
         gasLimit: 100000
       });
-      toastTx("📤 Aprovação:", tx.hash);
+      toastTx("📤 Aprovação:", tx.hash, "ok");
       await tx.wait();
       toast("✅ Aprovado!", "ok");
     }
@@ -1103,15 +1321,16 @@ async function criarOrdem() {
     });
     toastTx("📤 Ordem criada:", tx.hash, "ok");
     await tx.wait();
-    toast("✅ Ordem criada com sucesso!", "ok");
+    toast("✅ Ordem criada com sucesso!", "ok", 6000);
 
     $("valorOferece").value = "";
     $("valorDeseja").value = "";
     await carregarSaldos();
     await carregarOrdens();
   } catch (e) {
-    toast("❌ " + (e.message || "Erro desconhecido"), "err");
-    console.error(e);
+    console.error("criarOrdem:", e);
+    const { msg, tipo } = traduzirErro(e);
+    toast(msg, tipo, 8000);
   } finally {
     isTxBusy = false;
   }
@@ -1137,7 +1356,7 @@ async function executarOrdem(escrowAddr) {
         data: "0x" + S.ERC20.approve + encAddr(escrowAddr) + encUint(d.valorDesejado),
         gasLimit: 100000
       });
-      toastTx("📤 Aprovação:", txA.hash);
+      toastTx("📤 Aprovação:", txA.hash, "ok");
       await txA.wait();
       toast("✅ Aprovado!", "ok");
     }
@@ -1150,12 +1369,13 @@ async function executarOrdem(escrowAddr) {
     });
     toastTx("📤 Transação:", tx.hash, "ok");
     await tx.wait();
-    toast("✅ Ordem executada!", "ok");
+    toast("✅ Ordem executada!", "ok", 6000);
     await carregarSaldos();
     await carregarOrdens();
   } catch (e) {
-    toast("❌ " + (e.message || "Erro"), "err");
-    console.error(e);
+    console.error("executarOrdem:", e);
+    const { msg, tipo } = traduzirErro(e);
+    toast(msg, tipo, 8000);
   } finally {
     isTxBusy = false;
   }
@@ -1173,16 +1393,21 @@ async function cancelarOrdem(escrowAddr) {
     });
     toastTx("📤 Transação:", tx.hash, "ok");
     await tx.wait();
-    toast("✅ Ordem cancelada!", "ok");
+    toast("✅ Ordem cancelada!", "ok", 6000);
     await carregarSaldos();
     await carregarOrdens();
   } catch (e) {
-    toast("❌ " + e.message, "err");
+    console.error("cancelarOrdem:", e);
+    const { msg, tipo } = traduzirErro(e);
+    toast(msg, tipo, 8000);
   } finally {
     isTxBusy = false;
   }
 }
 
+// ============================================================
+// Enviar token ERC-20
+// ============================================================
 async function enviarToken() {
   if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
@@ -1193,11 +1418,15 @@ async function enviarToken() {
     const token = tokenPorEndereco(tokenAddr);
 
     if (!token) throw new Error("Selecione um token");
+    if (token.somenteEth) throw new Error("Token da rede Ethereum não suportado. Este app opera apenas na Polygon.");
     if (!isAddr(destino)) throw new Error("Endereço inválido");
     if (mesmoAddr(destino, userAddress)) throw new Error("Não pode enviar para você mesmo");
     if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
 
     const valor = parseUnits(valorStr, token.decimals);
+    const saldo = saldos[token.address] || 0n;
+    if (saldo < valor) throw new Error(`Saldo insuficiente de ${token.symbol}`);
+
     toast(`⏳ Enviando ${fmt(valor, token.decimals, 4)} ${token.symbol}…`, "info");
 
     const tx = await signer.sendTransaction({
@@ -1207,17 +1436,22 @@ async function enviarToken() {
     });
     toastTx("📤 Transação:", tx.hash, "ok");
     await tx.wait();
-    toast(`✅ ${token.symbol} enviado!`, "ok");
+    toast(`✅ ${token.symbol} enviado!`, "ok", 6000);
     $("destinoEnvio").value = "";
     $("valorEnvio").value = "";
     await carregarSaldos();
   } catch (e) {
-    toast("❌ " + e.message, "err");
+    console.error("enviarToken:", e);
+    const { msg, tipo } = traduzirErro(e);
+    toast(msg, tipo, 8000);
   } finally {
     isTxBusy = false;
   }
 }
 
+// ============================================================
+// Wrap / unwrap POL
+// ============================================================
 async function wrapPOL() {
   if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
@@ -1227,22 +1461,26 @@ async function wrapPOL() {
     if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
     const valor = parseUnits(valorStr, 18);
 
-    if (valor > saldos.POL) throw new Error("Saldo insuficiente de POL");
+    if (valor > saldos.POL) {
+      throw new Error(`Saldo insuficiente. Você tem ${fmt(saldos.POL, 18)} POL.`);
+    }
 
     toast(`⏳ Convertendo ${fmt(valor, 18, 4)} POL → WPOL…`, "info");
     const tx = await signer.sendTransaction({
       to: wpol.address,
       data: "0x" + S.WPOL.deposit,
       value: valor,
-      gasLimit: 80000
+      gasLimit: 100000
     });
-    toastTx("📤 Transação:", tx.hash, "ok");
+    toastTx("📤 Transação enviada:", tx.hash, "ok");
     await tx.wait();
-    toast("✅ POL convertido em WPOL!", "ok");
+    toast("✅ POL convertido em WPOL!", "ok", 6000);
     $("valorWPOL").value = "";
     await carregarSaldos();
   } catch (e) {
-    toast("❌ " + e.message, "err");
+    console.error("wrapPOL:", e);
+    const { msg, tipo } = traduzirErro(e);
+    toast(msg, tipo, 8000);
   } finally {
     isTxBusy = false;
   }
@@ -1258,26 +1496,33 @@ async function unwrapWPOL() {
     const valor = parseUnits(valorStr, 18);
 
     const saldoWPOL = saldos[wpol.address] || 0n;
-    if (valor > saldoWPOL) throw new Error("Saldo insuficiente de WPOL");
+    if (valor > saldoWPOL) {
+      throw new Error(`Saldo insuficiente. Você tem ${fmt(saldoWPOL, 18)} WPOL.`);
+    }
 
     toast(`⏳ Convertendo ${fmt(valor, 18, 4)} WPOL → POL…`, "info");
     const tx = await signer.sendTransaction({
       to: wpol.address,
       data: "0x" + S.WPOL.withdraw + encUint(valor),
-      gasLimit: 80000
+      gasLimit: 100000
     });
-    toastTx("📤 Transação:", tx.hash, "ok");
+    toastTx("📤 Transação enviada:", tx.hash, "ok");
     await tx.wait();
-    toast("✅ WPOL convertido em POL!", "ok");
+    toast("✅ WPOL convertido em POL!", "ok", 6000);
     $("valorPOL").value = "";
     await carregarSaldos();
   } catch (e) {
-    toast("❌ " + e.message, "err");
+    console.error("unwrapWPOL:", e);
+    const { msg, tipo } = traduzirErro(e);
+    toast(msg, tipo, 8000);
   } finally {
     isTxBusy = false;
   }
 }
 
+// ============================================================
+// Configuração de abas / filtros / max / botões
+// ============================================================
 function configurarAbas() {
   document.querySelectorAll(".tabs button").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -1292,6 +1537,10 @@ function configurarAbas() {
         setTimeout(atualizarHintWbtc, 100);
         setTimeout(atualizarStatusCarteiraBTC, 100);
         if (btcWallet) setTimeout(atualizarSaldoBTCEnvio, 200);
+      }
+
+      if (aba === "crosschain") {
+        setTimeout(atualizarHintCC, 100);
       }
 
       setTimeout(renderizarSaldos, 50);
@@ -1375,6 +1624,17 @@ function configurarMax() {
 
   const m7 = $("btnMaxBTCEnvio");
   if (m7) m7.addEventListener("click", maxBTCEnvio);
+
+  const m8 = $("btnMaxCC");
+  if (m8) m8.addEventListener("click", () => {
+    const origemKey = $("ccTokenOrigem").value;
+    const origem = SIDESHIFT_MAP[origemKey];
+    if (!origem) return;
+    const token = TOKENS.find(t => t.symbol === origem.coin.toUpperCase());
+    if (token && saldos[token.address] > 0n) {
+      $("ccValor").value = ethers.utils.formatUnits(saldos[token.address], token.decimals);
+    }
+  });
 }
 
 function configurarBotoes() {
@@ -1398,6 +1658,11 @@ function configurarBotoes() {
   const cbBTC = $("btnConectarBTC");     if (cbBTC) cbBTC.addEventListener("click", conectarCarteiraBTC);
   const dbBTC = $("btnDesconectarBTC");  if (dbBTC) dbBTC.addEventListener("click", desconectarCarteiraBTC);
   const ebBTC = $("btnEnviarBTC");       if (ebBTC) ebBTC.addEventListener("click", enviarBTC);
+
+  // Cross-Chain
+  const ccBtn = $("btnCriarCC");         if (ccBtn) ccBtn.addEventListener("click", criarOrdemCrossChain);
+  const ccCopy = $("btnCopyCCDeposit");  if (ccCopy) ccCopy.addEventListener("click", copiarCCDepositAddress);
+  const ccSel = $("ccTokenOrigem");      if (ccSel) ccSel.addEventListener("change", atualizarHintCC);
 
   ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
     const el = $(id);
@@ -1428,9 +1693,13 @@ function iniciarAutoRefresh() {
 }
 
 function configurarEventosWallet() {
-  if (!window.ethereum) return;
+  const prov = walletEscolhidaRdns
+    ? obterProviderPorRdns(walletEscolhidaRdns)
+    : window.ethereum;
 
-  window.ethereum.on("accountsChanged", (contas) => {
+  if (!prov || !prov.on) return;
+
+  prov.on("accountsChanged", (contas) => {
     if (!contas || !contas.length) {
       desconectarCarteira();
     } else {
@@ -1442,11 +1711,16 @@ function configurarEventosWallet() {
     }
   });
 
-  window.ethereum.on("chainChanged", () => window.location.reload());
+  prov.on("chainChanged", () => window.location.reload());
 }
 
+// ============================================================
+// init
+// ============================================================
 async function init() {
   console.log("🚀 BRN Exchange — inicializando…");
+
+  inicializarDescobertaCarteiras();
 
   try {
     construirSeletores();
@@ -1462,7 +1736,6 @@ async function init() {
     configurarFiltros();
     configurarMax();
     configurarBotoes();
-    configurarEventosWallet();
     atualizarStatusCarteiraBTC();
     atualizarStatusCarteiras();
   } catch (e) {
@@ -1476,25 +1749,35 @@ async function init() {
       verificarStatusRedeBitcoin()
     ]);
 
-    if (okPoly && window.ethereum) {
-      try {
-        const contas = await window.ethereum.request({ method: "eth_accounts" });
-        if (contas && contas.length) {
-          provider = new ethers.providers.Web3Provider(window.ethereum);
-          userAddress = ethers.utils.getAddress(contas[0]);
-          signer = provider.getSigner();
-          const rede = await provider.getNetwork();
-          if (rede.chainId === POLYGON_CHAIN_ID) {
-            const bc = $("btnConnect"); if (bc) bc.style.display = "none";
-            const wi = $("walletInfo"); if (wi) wi.style.display = "flex";
-            const a  = $("addr");       if (a)  a.textContent = short(userAddress);
-            await carregarSaldos();
-          } else {
-            const bc = $("btnConnect"); if (bc) bc.style.display = "block";
+    await new Promise(r => setTimeout(r, 600));
+
+    if (okPoly) {
+      const carteiras = listarCarteirasDisponiveis();
+      for (const c of carteiras) {
+        try {
+          const prov = obterProviderPorRdns(c.rdns);
+          if (!prov) continue;
+          const contas = await prov.request({ method: "eth_accounts" });
+          if (contas && contas.length) {
+            provider = new ethers.providers.Web3Provider(prov);
+            userAddress = ethers.utils.getAddress(contas[0]);
+            signer = provider.getSigner();
+            walletEscolhidaRdns = c.rdns;
+
+            const rede = await provider.getNetwork();
+            if (rede.chainId === POLYGON_CHAIN_ID) {
+              const bc = $("btnConnect"); if (bc) bc.style.display = "none";
+              const wi = $("walletInfo"); if (wi) wi.style.display = "flex";
+              const a  = $("addr");       if (a)  a.textContent = short(userAddress);
+              await carregarSaldos();
+              console.log(`✅ Reconectado via ${c.name}`);
+              break;
+            }
           }
-          atualizarStatusCarteiras();
-        }
-      } catch (e) { console.warn("Reconexão silenciosa falhou:", e.message); }
+        } catch { /* tenta próxima */ }
+      }
+      configurarEventosWallet();
+      atualizarStatusCarteiras();
     }
 
     try {
