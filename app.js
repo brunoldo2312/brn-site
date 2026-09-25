@@ -1,10 +1,12 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.4
-// ✅ CORREÇÃO: USDT-ETH mostra "(Ethereum)" em vez de "(Polygon)"
-// ✅ CORREÇÃO: flag eventosWalletConfigurados (evita listeners duplicados)
-// ✅ CORREÇÃO: reset da flag em desconectarCarteira()
-// ✅ CORREÇÃO: try/catch no setTimeout de inicializarDescobertaCarteiras
-// ✅ Multi-carteira via EIP-6963 (MetaMask/Rabby/Trust/OKX...)
+// APP.JS — BRN Exchange | Versão 6.5
+// ✅ Modal "Carteiras Aceitas" com detecção dinâmica (EIP-6963)
+// ✅ Brave Wallet incluso no catálogo
+// ✅ Sem toast duplicado em conectarCarteira()
+// ✅ USDT-ETH mostra "(Ethereum)" no card de saldos
+// ✅ Flag eventosWalletConfigurados (evita listeners duplicados)
+// ✅ try/catch no setTimeout de inicializarDescobertaCarteiras
+// ✅ Multi-carteira via EIP-6963 (MetaMask/Rabby/Trust/OKX/Brave...)
 // ✅ SHIB, USDT nativo/bridged, USDT-ETH placeholder
 // ✅ Botão 📋 para copiar contrato de cada token
 // ✅ Bridge WBTC → BTC (SideShift)
@@ -16,7 +18,7 @@
 // ✅ criarOrdem: (addr, addr, uint, uint)
 // ✅ Mural em 1 chamada (obterContratosGerados)
 // ✅ Envio POL nativo (reserva de gas)
-// ✅ Envio BTC nativo (UniSat/OKX/Leather)
+// ✅ Envio BTC nativo (UniSat/OKX/Leather/Xverse/Magic Eden)
 // ✅ init() com try/catch por etapa
 // ============================================================
 
@@ -54,6 +56,30 @@ const RPC_LIST = [
   "https://polygon-rpc.com",
   "https://1rpc.io/matic",
   "https://polygon.drpc.org"
+];
+
+// ============================================================
+// Catálogos para o modal "Carteiras Aceitas"
+// ============================================================
+const WALLETS_EVM_CATALOG = [
+  { name: "MetaMask",        icon: "🦊", rdns: "io.metamask",          install: "https://metamask.io/download/" },
+  { name: "Rabby",           icon: "🐰", rdns: "io.rabby",             install: "https://rabby.io/" },
+  { name: "Coinbase Wallet", icon: "🔵", rdns: "com.coinbase.wallet",  install: "https://www.coinbase.com/wallet/downloads" },
+  { name: "Trust Wallet",    icon: "🛡️", rdns: "com.trustwallet.app", install: "https://trustwallet.com/browser-extension" },
+  { name: "OKX Wallet",      icon: "⬛", rdns: "com.okex.wallet",      install: "https://www.okx.com/web3" },
+  { name: "Phantom",         icon: "🦎", rdns: "app.phantom",          install: "https://phantom.app/download" },
+  { name: "Brave Wallet",    icon: "🦁", rdns: "com.brave.wallet",     install: "https://brave.com/wallet/" },
+  { name: "Bitget Wallet",   icon: "🔷", rdns: "com.bitget.wallet",    install: "https://web3.bitget.com/wallet" },
+  { name: "Rainbow",         icon: "🌈", rdns: "me.rainbow",           install: "https://rainbow.me/download" },
+  { name: "Ledger",          icon: "🔒", rdns: "com.ledger",           install: "https://www.ledger.com/ledger-live" }
+];
+
+const WALLETS_BTC_CATALOG = [
+  { name: "UniSat",      icon: "🟠", key: "unisat",    check: () => !!window.unisat,                                 install: "https://unisat.io/download" },
+  { name: "OKX Bitcoin", icon: "⬛", key: "okxbtc",    check: () => !!(window.okxwallet?.bitcoin),                   install: "https://www.okx.com/web3" },
+  { name: "Leather",     icon: "🧳", key: "leather",   check: () => !!window.LeatherProvider,                        install: "https://leather.io/install-extension" },
+  { name: "Xverse",      icon: "✨", key: "xverse",    check: () => !!(window.XverseProviders || window.BitcoinProvider), install: "https://www.xverse.app/download" },
+  { name: "Magic Eden",  icon: "🪄", key: "magiceden", check: () => !!(window.magicEden?.bitcoin),                   install: "https://wallet.magiceden.io/" }
 ];
 
 let S = null;
@@ -205,6 +231,25 @@ function obterProviderPorRdns(rdns) {
   return null;
 }
 
+// Verifica se carteira EVM está detectada (via EIP-6963 ou globals)
+function carteiraEvmDetectada(rdns) {
+  for (const entry of announcedProviders.values()) {
+    if (entry.info.rdns === rdns) return true;
+  }
+  const eth = window.ethereum;
+  if (eth) {
+    if (rdns === "io.metamask" && eth.isMetaMask && !eth.isBraveWallet) return true;
+    if (rdns === "io.rabby" && eth.isRabby) return true;
+    if (rdns === "com.coinbase.wallet" && eth.isCoinbaseWallet) return true;
+    if (rdns === "com.trustwallet.app" && eth.isTrust) return true;
+  }
+  if (rdns === "com.okex.wallet" && (window.okxwallet?.ethereum || window.okxwallet?.isOkxWallet)) return true;
+  if (rdns === "app.phantom" && window.phantom?.ethereum) return true;
+  if (rdns === "com.brave.wallet" && window.ethereum?.isBraveWallet) return true;
+  if (rdns === "com.bitget.wallet" && window.bitkeep?.ethereum) return true;
+  return false;
+}
+
 // ============================================================
 // Tradutor de erros → PT-BR
 // ============================================================
@@ -308,7 +353,7 @@ function tokenPorEndereco(endereco) {
   };
 }
 
-// ✅ CORREÇÃO v6.4: usa tok.rede se existir
+// ✅ Usa tok.rede se existir, senão assume Polygon
 function nomeComRede(tok) {
   if (!tok) return "???";
   if (tok.desconhecido) return tok.symbol;
@@ -872,7 +917,7 @@ async function carregarSaldos() {
   } catch (e) { console.error("Erro ao carregar saldos:", e); }
 }
 
-// ✅ CORREÇÃO v6.4: usa t.rede para o label + limpa nome no toast
+// ✅ Usa t.rede para montar o label
 function renderizarSaldos() {
   const container = $("balances");
   if (!container) return;
@@ -965,9 +1010,119 @@ function renderizarSaldos() {
 }
 
 // ============================================================
+// Modal "Carteiras Aceitas" — renderização dinâmica
+// ============================================================
+function abrirModalCarteiras() {
+  const modal = $("modalCarteiras");
+  if (!modal) return;
+  renderizarModalCarteiras();
+  modal.style.display = "flex";
+  document.body.style.overflow = "hidden";
+}
+
+function fecharModalCarteiras() {
+  const modal = $("modalCarteiras");
+  if (!modal) return;
+  modal.style.display = "none";
+  document.body.style.overflow = "";
+}
+
+function renderizarModalCarteiras() {
+  const evmDetectadasEl = $("modalEvmDetectadas");
+  const evmOutrasEl = $("modalEvmOutras");
+  const btcEl = $("modalBtc");
+
+  // ---------- EVM ----------
+  if (evmDetectadasEl && evmOutrasEl) {
+    const detectadas = WALLETS_EVM_CATALOG.filter(w => carteiraEvmDetectada(w.rdns));
+    const outras = WALLETS_EVM_CATALOG.filter(w => !carteiraEvmDetectada(w.rdns));
+
+    evmDetectadasEl.innerHTML = "";
+    if (detectadas.length === 0) {
+      evmDetectadasEl.innerHTML = `<p class="dim" style="grid-column: 1 / -1; text-align: center; padding: 12px;">Nenhuma carteira EVM detectada. Instale uma das opções abaixo.</p>`;
+    } else {
+      detectadas.forEach(w => {
+        const card = document.createElement("div");
+        card.className = "carteira-card detectada";
+        card.innerHTML = `
+          <span class="carteira-icon">${w.icon}</span>
+          <span class="carteira-nome">${w.name}</span>
+          <span class="carteira-status ok">✅ Instalada</span>
+          <button class="carteira-btn primary" data-rdns="${w.rdns}">Conectar</button>
+        `;
+        card.querySelector("button").addEventListener("click", () => {
+          fecharModalCarteiras();
+          conectarCarteira(w.rdns);
+        });
+        evmDetectadasEl.appendChild(card);
+      });
+    }
+
+    evmOutrasEl.innerHTML = "";
+    if (outras.length === 0) {
+      evmOutrasEl.innerHTML = `<p class="dim" style="grid-column: 1 / -1; text-align: center; padding: 12px;">Você já tem todas as carteiras compatíveis instaladas! 🎉</p>`;
+    } else {
+      outras.forEach(w => {
+        const card = document.createElement("div");
+        card.className = "carteira-card indisponivel";
+        card.innerHTML = `
+          <span class="carteira-icon">${w.icon}</span>
+          <span class="carteira-nome">${w.name}</span>
+          <span class="carteira-status off">❌ Não instalada</span>
+          <a class="carteira-btn" href="${w.install}" target="_blank" rel="noopener">Instalar</a>
+        `;
+        evmOutrasEl.appendChild(card);
+      });
+    }
+  }
+
+  // ---------- BTC ----------
+  if (btcEl) {
+    btcEl.innerHTML = "";
+    const detectadasBtc = [];
+    const outrasBtc = [];
+
+    WALLETS_BTC_CATALOG.forEach(w => {
+      let ok = false;
+      try { ok = w.check(); } catch {}
+      if (ok) detectadasBtc.push(w);
+      else outrasBtc.push(w);
+    });
+
+    detectadasBtc.forEach(w => {
+      const card = document.createElement("div");
+      card.className = "carteira-card detectada";
+      card.innerHTML = `
+        <span class="carteira-icon">${w.icon}</span>
+        <span class="carteira-nome">${w.name}</span>
+        <span class="carteira-status ok">✅ Instalada</span>
+        <button class="carteira-btn btc">Conectar BTC</button>
+      `;
+      card.querySelector("button").addEventListener("click", () => {
+        fecharModalCarteiras();
+        conectarCarteiraBTC();
+      });
+      btcEl.appendChild(card);
+    });
+
+    outrasBtc.forEach(w => {
+      const card = document.createElement("div");
+      card.className = "carteira-card indisponivel";
+      card.innerHTML = `
+        <span class="carteira-icon">${w.icon}</span>
+        <span class="carteira-nome">${w.name}</span>
+        <span class="carteira-status off">❌ Não instalada</span>
+        <a class="carteira-btn" href="${w.install}" target="_blank" rel="noopener">Instalar</a>
+      `;
+      btcEl.appendChild(card);
+    });
+  }
+}
+
+// ============================================================
 // Conexão de carteira (multi-provider EIP-6963)
 // ============================================================
-async function conectarCarteira() {
+async function conectarCarteira(rdnsForcado) {
   const carteiras = listarCarteirasDisponiveis();
 
   if (carteiras.length === 0) {
@@ -977,10 +1132,20 @@ async function conectarCarteira() {
 
   let escolhida = null;
 
-  if (carteiras.length === 1) {
+  // 1. rdns veio do modal
+  if (rdnsForcado) {
+    escolhida = carteiras.find(c => c.rdns === rdnsForcado);
+    if (!escolhida) {
+      toast("❌ Carteira não detectada pelo EIP-6963.", "err");
+      return;
+    }
+  }
+  // 2. Só uma detectada
+  else if (carteiras.length === 1) {
     escolhida = carteiras[0];
-    toast(`🔌 Conectando à ${escolhida.name}…`, "info");
-  } else {
+  }
+  // 3. Múltiplas — prompt
+  else {
     const nomes = carteiras.map((c, i) => `${i + 1}. ${c.name}`).join("\n");
     const escolha = window.prompt(
       `Múltiplas carteiras detectadas:\n\n${nomes}\n\nDigite o número da carteira que deseja usar:`
@@ -992,7 +1157,6 @@ async function conectarCarteira() {
       return;
     }
     escolhida = carteiras[idx];
-    toast(`🔌 Conectando à ${escolhida.name}…`, "info");
   }
 
   const providerEscolhido = obterProviderPorRdns(escolhida.rdns);
@@ -1000,6 +1164,8 @@ async function conectarCarteira() {
     toast("❌ Carteira não encontrada.", "err");
     return;
   }
+
+  toast(`🔌 Conectando à ${escolhida.name}…`, "info");
 
   try {
     provider = new ethers.providers.Web3Provider(providerEscolhido);
@@ -1033,7 +1199,6 @@ async function conectarCarteira() {
     toast(`✅ ${escolhida.name} conectada!`, "ok");
     await carregarSaldos();
     await carregarOrdens();
-
     configurarEventosWallet();
     atualizarStatusCarteiras();
   } catch (e) {
@@ -1659,7 +1824,7 @@ function configurarMax() {
 }
 
 function configurarBotoes() {
-  const c  = $("btnConnect");        if (c)  c.addEventListener("click", conectarCarteira);
+  const c  = $("btnConnect");        if (c)  c.addEventListener("click", () => conectarCarteira());
   const d  = $("btnDisconnect");     if (d)  d.addEventListener("click", desconectarCarteira);
   const sa = $("btnShareAddr");      if (sa) sa.addEventListener("click", abrirPainelCompartilhar);
   const cs = $("btnCloseShare");     if (cs) cs.addEventListener("click", fecharPainelCompartilhar);
@@ -1684,6 +1849,22 @@ function configurarBotoes() {
   const ccBtn = $("btnCriarCC");         if (ccBtn) ccBtn.addEventListener("click", criarOrdemCrossChain);
   const ccCopy = $("btnCopyCCDeposit");  if (ccCopy) ccCopy.addEventListener("click", copiarCCDepositAddress);
   const ccSel = $("ccTokenOrigem");      if (ccSel) ccSel.addEventListener("change", atualizarHintCC);
+
+  // Modal de carteiras/exchanges
+  const bc1 = $("btnCarteirasAceitas");        if (bc1) bc1.addEventListener("click", abrirModalCarteiras);
+  const bc2 = $("btnFecharModalCarteiras");    if (bc2) bc2.addEventListener("click", fecharModalCarteiras);
+  const bc3 = $("btnFecharModalCarteiras2");   if (bc3) bc3.addEventListener("click", fecharModalCarteiras);
+
+  const modalCart = $("modalCarteiras");
+  if (modalCart) {
+    modalCart.addEventListener("click", (e) => {
+      if (e.target === modalCart) fecharModalCarteiras();
+    });
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") fecharModalCarteiras();
+  });
 
   ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
     const el = $(id);
