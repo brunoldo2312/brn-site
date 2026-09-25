@@ -1,10 +1,16 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 5.5
+// APP.JS — BRN Exchange | Versão 5.7
+// ✅ SHIB adicionado (leitura + criar ordem + envio)
+// ✅ USDT nativo + USDT.e (bridged) na Polygon
+// ✅ BRIDGE SideShift corrigida:
+//    - envia depositCoin/depositNetwork/settleCoin/settleNetwork
+//    - lê response.text() antes de JSON.parse (evita erro HTML)
+//    - valida valor mínimo (~0.0001 WBTC)
+//    - valida campos retornados (depositAddress/settleAmount)
 // ✅ CORREÇÃO: BigInt x BigNumber (helper parseUnits)
 // ✅ Seletores ABI calculados após ethers carregar
 // ✅ Ordem correta de criarOrdem: (addr, addr, uint, uint)
 // ✅ Mural em 1 chamada via obterContratosGerados()
-// ✅ Conversão WBTC → BTC via SideShift (bridge serverless)
 // ✅ Envio de POL nativo (com reserva de gas)
 // ✅ Envio de BTC nativo via carteiras Bitcoin (UniSat/OKX/Leather)
 // ✅ Indicadores de status das carteiras (EVM + BTC) na header
@@ -21,14 +27,15 @@ const RESERVA_GAS_POL = "0.05";
 const RESERVA_TAXA_BTC_SATS = 2000;
 
 const TOKENS = [
-  { symbol: "BRN",     name: "BRN Token",            address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
-  { symbol: "USDC",    name: "USD Coin (nativo)",    address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
-  { symbol: "USDC.e",  name: "USD Coin (bridged)",   address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6 },
-  { symbol: "USDT",    name: "Tether USD",           address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6 },
-  { symbol: "USDT.e",  name: "Tether USD (bridged)", address: "0x9417669fBF23357D2774e9D4234219952D36A1e5", decimals: 6 },
-  { symbol: "WPOL",    name: "Wrapped POL",          address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
-  { symbol: "WBTC",    name: "Wrapped BTC",          address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8 },
-  { symbol: "WETH",    name: "Wrapped Ether",        address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18 }
+  { symbol: "BRN",     name: "BRN Token",             address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
+  { symbol: "USDC",    name: "USD Coin (nativo)",     address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6  },
+  { symbol: "USDC.e",  name: "USD Coin (bridged)",    address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6  },
+  { symbol: "USDT",    name: "Tether USD (nativo)",   address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6  },
+  { symbol: "USDT.e",  name: "Tether USD (bridged)",  address: "0x9417669fBF23357D2774e9D4234219952D36A1e5", decimals: 6  },
+  { symbol: "SHIB",    name: "Shiba Inu",             address: "0x6f8a06447Ff6FcF75d803135a7de15CE88C1d4ec", decimals: 18 },
+  { symbol: "WPOL",    name: "Wrapped POL",           address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
+  { symbol: "WBTC",    name: "Wrapped BTC",           address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8  },
+  { symbol: "WETH",    name: "Wrapped Ether",         address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18 }
 ];
 
 const RPC_LIST = [
@@ -349,17 +356,29 @@ function atualizarHintWbtc() {
   hint.textContent = `Saldo: ${fmt(saldo, wbtc.decimals)} WBTC`;
 }
 
+// ============================================================
+// BRIDGE WBTC → BTC via SideShift (v5.7 — corrigida)
+// ============================================================
 async function criarOrdemSideShift() {
   if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
 
-  const valorStr = $("valorWbtcBridge").value.trim().replace(",", ".");
+  const valorStr   = $("valorWbtcBridge").value.trim().replace(",", ".");
   const btcDestino = $("btcDestinoBridge").value.trim();
-  const resultBox = $("bridge-result");
+  const resultBox  = $("bridge-result");
 
+  // ✅ Validação 1: valor numérico > 0
   if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) {
     toast("Digite uma quantidade válida de WBTC.", "warn");
     return;
   }
+
+  // ✅ Validação 2: mínimo da SideShift (~0.0001 WBTC)
+  if (Number(valorStr) < 0.0001) {
+    toast("⚠️ Valor abaixo do mínimo da SideShift (~0.0001 WBTC).", "warn", 8000);
+    return;
+  }
+
+  // ✅ Validação 3: endereço BTC
   if (!isBtcAddress(btcDestino)) {
     toast("❌ Endereço Bitcoin inválido. Use bc1..., 1... ou 3...", "err", 8000);
     return;
@@ -390,20 +409,45 @@ async function criarOrdemSideShift() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        depositAmount: valorStr,
-        settleAddress: btcDestino
+        // ✅ Envia os pares de moeda/redes explicitamente
+        depositCoin:    "wbtc",
+        depositNetwork: "polygon",
+        settleCoin:     "btc",
+        settleNetwork:  "bitcoin",
+        depositAmount:  valorStr,
+        settleAddress:  btcDestino
       })
     });
 
-    const data = await response.json();
+    // ✅ Lê como TEXTO antes de tentar JSON (evita quebra em HTML)
+    const rawText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      console.error("Resposta não-JSON:", rawText.slice(0, 500));
+      throw new Error(
+        `Servidor não retornou JSON (HTTP ${response.status}). ` +
+        `Verifique se /api/sideshift está deployado no Vercel.`
+      );
+    }
+
     if (!response.ok || !data.success) {
-      throw new Error(data.error || "Erro ao criar ordem");
+      throw new Error(data.error || `Erro HTTP ${response.status}`);
+    }
+
+    // ✅ Valida campos retornados
+    if (!data.depositAddress || !data.depositAmount || !data.settleAmount) {
+      throw new Error("Resposta incompleta do servidor (faltam campos).");
     }
 
     $("bridge-deposit-address").textContent = data.depositAddress;
-    $("bridge-deposit-amount").textContent = data.depositAmount;
-    $("bridge-settle-amount").textContent = data.settleAmount;
-    $("bridge-expires").textContent = new Date(data.expiresAt).toLocaleTimeString();
+    $("bridge-deposit-amount").textContent  = data.depositAmount;
+    $("bridge-settle-amount").textContent   = data.settleAmount;
+    $("bridge-expires").textContent = data.expiresAt
+      ? new Date(data.expiresAt).toLocaleTimeString()
+      : "~15 min";
+
     if (resultBox) {
       resultBox.style.display = "block";
       resultBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
