@@ -1,5 +1,6 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.3
+// APP.JS — BRN Exchange | Versão 6.4
+// ✅ CORREÇÃO: USDT-ETH mostra "(Ethereum)" em vez de "(Polygon)"
 // ✅ CORREÇÃO: flag eventosWalletConfigurados (evita listeners duplicados)
 // ✅ CORREÇÃO: reset da flag em desconectarCarteira()
 // ✅ CORREÇÃO: try/catch no setTimeout de inicializarDescobertaCarteiras
@@ -34,7 +35,7 @@ const TOKENS = [
   { symbol: "USDC.e",     name: "USD Coin (bridged)",    address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6  },
   { symbol: "USDT",       name: "Tether USD (nativo)",   address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6  },
   { symbol: "USDT.e",     name: "Tether USD (bridged)",  address: "0x9417669fBF23357D2774e9D4234219952D36A1e5", decimals: 6  },
-  { symbol: "USDT-ETH",   name: "Tether USD (Ethereum)", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6, somenteEth: true },
+  { symbol: "USDT-ETH",   name: "Tether USD (Ethereum)", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6, somenteEth: true, rede: "Ethereum" },
   { symbol: "SHIB",       name: "Shiba Inu",             address: "0x6f8a06447Ff6FcF75d803135a7de15CE88C1d4ec", decimals: 18 },
   { symbol: "WPOL",       name: "Wrapped POL",           address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
   { symbol: "WBTC",       name: "Wrapped BTC",           address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8  },
@@ -102,7 +103,7 @@ let btcWallet = null;
 let btcSaldoSats = 0;
 let walletEscolhidaRdns = null;
 
-// ✅ CORREÇÃO v6.3: flag para evitar listeners duplicados
+// ✅ Flag para evitar listeners duplicados
 let eventosWalletConfigurados = false;
 
 const $ = id => document.getElementById(id);
@@ -173,7 +174,6 @@ function inicializarDescobertaCarteiras() {
   window.addEventListener("eip6963:announceProvider", onAnnounce);
   window.dispatchEvent(new Event("eip6963:requestProvider"));
 
-  // ✅ CORREÇÃO v6.3: try/catch dentro do setTimeout
   setTimeout(() => {
     try {
       if (announcedProviders.size === 0 && window.ethereum) {
@@ -308,9 +308,12 @@ function tokenPorEndereco(endereco) {
   };
 }
 
+// ✅ CORREÇÃO v6.4: usa tok.rede se existir
 function nomeComRede(tok) {
   if (!tok) return "???";
-  return tok.desconhecido ? tok.symbol : `${tok.symbol} (Polygon)`;
+  if (tok.desconhecido) return tok.symbol;
+  const rede = tok.rede || "Polygon";
+  return `${tok.symbol} (${rede})`;
 }
 
 function atualizarStatusCarteiras() {
@@ -869,6 +872,7 @@ async function carregarSaldos() {
   } catch (e) { console.error("Erro ao carregar saldos:", e); }
 }
 
+// ✅ CORREÇÃO v6.4: usa t.rede para o label + limpa nome no toast
 function renderizarSaldos() {
   const container = $("balances");
   if (!container) return;
@@ -896,7 +900,8 @@ function renderizarSaldos() {
   TOKENS.forEach(t => {
     const valor = saldos[t.address] || 0n;
     const aviso = t.somenteEth ? "Só na Ethereum (não suportado)" : null;
-    add(`${t.symbol} (Polygon)`, valor, t.decimals, { aviso, tokenAddr: t.address });
+    const rede = t.rede || "Polygon";
+    add(`${t.symbol} (${rede})`, valor, t.decimals, { aviso, tokenAddr: t.address });
   });
 
   document.querySelectorAll("[data-hint]").forEach(el => {
@@ -950,7 +955,8 @@ function renderizarSaldos() {
 
       const ok = await copiar(addr);
       if (ok) {
-        toast(`✅ Contrato do ${sym.replace(" (Polygon)", "")} copiado! Cole na MetaMask → "Importar tokens".`, "ok", 7000);
+        const nomeLimpo = sym.replace(/\s*\((Polygon|Ethereum)\)$/, "");
+        toast(`✅ Contrato do ${nomeLimpo} copiado! Cole na MetaMask → "Importar tokens".`, "ok", 7000);
       } else {
         toast("❌ Não foi possível copiar.", "err");
       }
@@ -1028,7 +1034,6 @@ async function conectarCarteira() {
     await carregarSaldos();
     await carregarOrdens();
 
-    // ✅ CORREÇÃO v6.3: só configura eventos uma vez
     configurarEventosWallet();
     atualizarStatusCarteiras();
   } catch (e) {
@@ -1045,7 +1050,6 @@ function desconectarCarteira() {
   walletEscolhidaRdns = null;
   saldos = { POL: 0n };
 
-  // ✅ CORREÇÃO v6.3: reseta a flag para permitir reconexão limpa
   eventosWalletConfigurados = false;
 
   if ($("btnConnect")) $("btnConnect").style.display = "block";
@@ -1709,7 +1713,6 @@ function iniciarAutoRefresh() {
   }, REFRESH_MS);
 }
 
-// ✅ CORREÇÃO v6.3: só registra listeners uma vez por sessão
 function configurarEventosWallet() {
   if (eventosWalletConfigurados) return;
 
