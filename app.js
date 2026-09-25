@@ -1,5 +1,6 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.5
+// APP.JS — BRN Exchange | Versão 6.6
+// ✅ NOVO: Leitura de saldos na rede Ethereum (USDT-ETH, ETH nativo)
 // ✅ Modal "Carteiras Aceitas" com detecção dinâmica (EIP-6963)
 // ✅ Brave Wallet incluso no catálogo
 // ✅ Sem toast duplicado em conectarCarteira()
@@ -56,6 +57,14 @@ const RPC_LIST = [
   "https://polygon-rpc.com",
   "https://1rpc.io/matic",
   "https://polygon.drpc.org"
+];
+
+// ✅ NOVO v6.6: RPCs da rede Ethereum
+const ETH_RPC_LIST = [
+  "https://ethereum.publicnode.com",
+  "https://eth.llamarpc.com",
+  "https://rpc.ankr.com/eth",
+  "https://1rpc.io/eth"
 ];
 
 // ============================================================
@@ -117,6 +126,7 @@ let provider = null;
 let signer = null;
 let userAddress = null;
 let rpcProvider = null;
+let ethProvider = null;              // ✅ NOVO v6.6
 let ordersCache = [];
 let loading = false;
 let isTxBusy = false;
@@ -129,7 +139,6 @@ let btcWallet = null;
 let btcSaldoSats = 0;
 let walletEscolhidaRdns = null;
 
-// ✅ Flag para evitar listeners duplicados
 let eventosWalletConfigurados = false;
 
 const $ = id => document.getElementById(id);
@@ -231,7 +240,6 @@ function obterProviderPorRdns(rdns) {
   return null;
 }
 
-// Verifica se carteira EVM está detectada (via EIP-6963 ou globals)
 function carteiraEvmDetectada(rdns) {
   for (const entry of announcedProviders.values()) {
     if (entry.info.rdns === rdns) return true;
@@ -353,7 +361,6 @@ function tokenPorEndereco(endereco) {
   };
 }
 
-// ✅ Usa tok.rede se existir, senão assume Polygon
 function nomeComRede(tok) {
   if (!tok) return "???";
   if (tok.desconhecido) return tok.symbol;
@@ -404,6 +411,26 @@ async function conectarRPC() {
     const p = await testarRPC(url);
     if (p) { rpcProvider = p; console.log(`✅ RPC Polygon conectado: ${url}`); return true; }
   }
+  return false;
+}
+
+// ✅ NOVO v6.6: RPC Ethereum
+async function testarRPCEth(url) {
+  try {
+    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 8000 });
+    const rede = await p.getNetwork();
+    if (rede.chainId === 1) return p;
+  } catch {}
+  return null;
+}
+
+async function conectarRPCEth() {
+  if (ethProvider) return true;
+  for (const url of ETH_RPC_LIST) {
+    const p = await testarRPCEth(url);
+    if (p) { ethProvider = p; console.log(`✅ RPC Ethereum conectado: ${url}`); return true; }
+  }
+  console.warn("⚠️ Não foi possível conectar a nenhum RPC Ethereum");
   return false;
 }
 
@@ -901,9 +928,11 @@ function preencherSeletores() {
   if (fp) fp.innerHTML = '<option value="">Pede: Todos</option>' + filtroOpts;
 }
 
+// ✅ v6.6: lê Polygon + Ethereum
 async function carregarSaldos() {
   if (!rpcProvider || !userAddress || !S) return;
   try {
+    // ---------- POLYGON ----------
     saldos.POL = BigInt((await rpcProvider.getBalance(userAddress)).toString());
     for (const t of TOKENS) {
       if (t.somenteEth) { saldos[t.address] = 0n; continue; }
@@ -912,12 +941,52 @@ async function carregarSaldos() {
         saldos[t.address] = decUint(res.slice(2));
       } catch { saldos[t.address] = 0n; }
     }
+
+    // ---------- ETHEREUM ----------
+    await carregarSaldosEthereum();
+
     renderizarSaldos();
     atualizarHintCC();
   } catch (e) { console.error("Erro ao carregar saldos:", e); }
 }
 
-// ✅ Usa t.rede para montar o label
+// ✅ NOVO v6.6: lê tokens marcados como somenteEth + ETH nativo
+async function carregarSaldosEthereum() {
+  const tokensEth = TOKENS.filter(t => t.somenteEth);
+  if (tokensEth.length === 0) return;
+
+  if (!ethProvider) {
+    const ok = await conectarRPCEth();
+    if (!ok) {
+      console.warn("⚠️ Não foi possível conectar à rede Ethereum — pulando saldos ETH");
+      return;
+    }
+  }
+
+  // ETH nativo
+  try {
+    saldos["ETH_NATIVO"] = BigInt((await ethProvider.getBalance(userAddress)).toString());
+  } catch (e) {
+    console.warn("Falha ao ler ETH nativo:", e.message);
+    saldos["ETH_NATIVO"] = 0n;
+  }
+
+  // Tokens ERC-20 na Ethereum
+  for (const t of tokensEth) {
+    try {
+      const res = await ethProvider.call({
+        to: t.address,
+        data: "0x" + S.ERC20.balanceOf + encAddr(userAddress)
+      });
+      saldos[t.address] = decUint(res.slice(2));
+    } catch (e) {
+      console.warn(`Falha ao ler ${t.symbol} na Ethereum:`, e.message);
+      saldos[t.address] = 0n;
+    }
+  }
+}
+
+// ✅ v6.6: seção Ethereum separada visualmente
 function renderizarSaldos() {
   const container = $("balances");
   if (!container) return;
@@ -941,14 +1010,42 @@ function renderizarSaldos() {
     container.appendChild(div);
   };
 
+  // ---------- POLYGON ----------
   add("POL (Polygon)", saldos.POL, 18);
   TOKENS.forEach(t => {
+    if (t.somenteEth) return;
     const valor = saldos[t.address] || 0n;
-    const aviso = t.somenteEth ? "Só na Ethereum (não suportado)" : null;
     const rede = t.rede || "Polygon";
-    add(`${t.symbol} (${rede})`, valor, t.decimals, { aviso, tokenAddr: t.address });
+    add(`${t.symbol} (${rede})`, valor, t.decimals, { tokenAddr: t.address });
   });
 
+  // ---------- ETHEREUM ----------
+  const tokensEth = TOKENS.filter(t => t.somenteEth);
+  if (tokensEth.length > 0) {
+    // Separador visual
+    const sep = document.createElement("div");
+    sep.style.cssText = "grid-column: 1 / -1; height: 1px; background: var(--border); margin: 10px 0 6px 0;";
+    container.appendChild(sep);
+
+    // Cabeçalho da seção Ethereum
+    const header = document.createElement("div");
+    header.style.cssText = "grid-column: 1 / -1; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 600;";
+    header.textContent = "⛓️ Saldos na rede Ethereum (somente leitura)";
+    container.appendChild(header);
+
+    // ETH nativo
+    if (saldos.ETH_NATIVO !== undefined) {
+      add("ETH (Ethereum)", saldos.ETH_NATIVO, 18);
+    }
+
+    // Tokens ERC-20 Ethereum
+    tokensEth.forEach(t => {
+      const valor = saldos[t.address] || 0n;
+      add(`${t.symbol} (Ethereum)`, valor, t.decimals, { tokenAddr: t.address });
+    });
+  }
+
+  // Hints
   document.querySelectorAll("[data-hint]").forEach(el => {
     const attr = el.getAttribute("data-hint") || "";
     const partes = attr.split(":");
@@ -1032,7 +1129,6 @@ function renderizarModalCarteiras() {
   const evmOutrasEl = $("modalEvmOutras");
   const btcEl = $("modalBtc");
 
-  // ---------- EVM ----------
   if (evmDetectadasEl && evmOutrasEl) {
     const detectadas = WALLETS_EVM_CATALOG.filter(w => carteiraEvmDetectada(w.rdns));
     const outras = WALLETS_EVM_CATALOG.filter(w => !carteiraEvmDetectada(w.rdns));
@@ -1076,7 +1172,6 @@ function renderizarModalCarteiras() {
     }
   }
 
-  // ---------- BTC ----------
   if (btcEl) {
     btcEl.innerHTML = "";
     const detectadasBtc = [];
@@ -1132,20 +1227,15 @@ async function conectarCarteira(rdnsForcado) {
 
   let escolhida = null;
 
-  // 1. rdns veio do modal
   if (rdnsForcado) {
     escolhida = carteiras.find(c => c.rdns === rdnsForcado);
     if (!escolhida) {
       toast("❌ Carteira não detectada pelo EIP-6963.", "err");
       return;
     }
-  }
-  // 2. Só uma detectada
-  else if (carteiras.length === 1) {
+  } else if (carteiras.length === 1) {
     escolhida = carteiras[0];
-  }
-  // 3. Múltiplas — prompt
-  else {
+  } else {
     const nomes = carteiras.map((c, i) => `${i + 1}. ${c.name}`).join("\n");
     const escolha = window.prompt(
       `Múltiplas carteiras detectadas:\n\n${nomes}\n\nDigite o número da carteira que deseja usar:`
@@ -1845,12 +1935,10 @@ function configurarBotoes() {
   const dbBTC = $("btnDesconectarBTC");  if (dbBTC) dbBTC.addEventListener("click", desconectarCarteiraBTC);
   const ebBTC = $("btnEnviarBTC");       if (ebBTC) ebBTC.addEventListener("click", enviarBTC);
 
-  // Cross-Chain
   const ccBtn = $("btnCriarCC");         if (ccBtn) ccBtn.addEventListener("click", criarOrdemCrossChain);
   const ccCopy = $("btnCopyCCDeposit");  if (ccCopy) ccCopy.addEventListener("click", copiarCCDepositAddress);
   const ccSel = $("ccTokenOrigem");      if (ccSel) ccSel.addEventListener("change", atualizarHintCC);
 
-  // Modal de carteiras/exchanges
   const bc1 = $("btnCarteirasAceitas");        if (bc1) bc1.addEventListener("click", abrirModalCarteiras);
   const bc2 = $("btnFecharModalCarteiras");    if (bc2) bc2.addEventListener("click", fecharModalCarteiras);
   const bc3 = $("btnFecharModalCarteiras2");   if (bc3) bc3.addEventListener("click", fecharModalCarteiras);
@@ -1954,6 +2042,9 @@ async function init() {
       atualizarStatusRede(),
       verificarStatusRedeBitcoin()
     ]);
+
+    // ✅ v6.6: tenta conectar Ethereum em paralelo (não bloqueia se falhar)
+    conectarRPCEth().catch(() => {});
 
     await new Promise(r => setTimeout(r, 600));
 
