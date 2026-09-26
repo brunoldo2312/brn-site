@@ -1,15 +1,15 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.16
-// ✅ Symbiosis para SHIB (BSC ↔ Polygon) cross-chain
+// APP.JS — BRN Exchange | Versão 6.17
+// ✅ Symbiosis para SHIB (BSC ↔ Polygon) via proxy Vercel
 // ✅ SideShift para USDT/USDC entre Polygon, Ethereum, BSC
 // ✅ WBTC → BTC (SideShift)
+// ✅ RPCs Polygon + Ethereum + BSC validados (sem 401/CORS/DNS morto)
 // ✅ Confirmação clara mostrando rede de envio + aviso de gas
 // ✅ Hint mostra "Saldo na BSC" / "Saldo na Polygon" / "Saldo na Ethereum"
 // ✅ Bloqueia mesma rede na origem e destino
 // ✅ Leitura de saldos na BSC/BNB Chain (SHIB-BSC, USDT-BSC, USDC-BSC, BNB)
 // ✅ Endereço reduzido no rodapé dos cards + clique copia
 // ✅ Endereços em minúsculo (fix "bad address checksum")
-// ✅ RPCs Polygon + Ethereum + BSC sem 401/CORS (vivos em 2026-09)
 // ✅ Modal "Carteiras Aceitas" com detecção dinâmica (EIP-6963)
 // ✅ Multi-carteira via EIP-6963 + Brave + Pelagus
 // ✅ Botão 📋 para copiar contrato + rodapé "ENDEREÇO BRN" marrom
@@ -20,9 +20,11 @@ const ESCROW_FACTORY = "0x5c305acff5cdfaee90276c2acea4aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
 const BSC_CHAIN_ID = 56;
 const REFRESH_MS = 30000;
+
+// ✅ v6.17: URL completa da Vercel (antes era relativa, não funcionava do GitHub Pages)
 const SIDESHIFT_API_URL = "https://brn-site.vercel.app/api/sideshift";
-const SYMBIOSIS_API_URL = "/api/symbiosis";
-const BLOCKSTREAM_API = "https://blockstream.info/api";
+const SYMBIOSIS_API_URL  = "https://brn-site.vercel.app/api/symbiosis";
+const BLOCKSTREAM_API    = "https://blockstream.info/api";
 
 const RESERVA_GAS_POL = "0.05";
 const RESERVA_TAXA_BTC_SATS = 2000;
@@ -71,13 +73,15 @@ const SYMBIOSIS_MAP = {
   "shib-polygon": { coin: "shib", network: "polygon", tokenSymbol: "SHIB",     chainId: POLYGON_CHAIN_ID }
 };
 
+// ✅ v6.17: RPCs Polygon validados (sem 401/CORS/DNS morto)
 const RPC_LIST = [
-  "https://polygon-rpc.com",
-  "https://polygon.publicnode.com",
   "https://polygon.drpc.org",
-  "https://1rpc.io/matic"
+  "https://polygon.publicnode.com",
+  "https://1rpc.io/matic",
+  "https://polygon-mainnet.public.blastapi.io"
 ];
 
+// ✅ v6.17: RPCs Ethereum validados (removido eth.llamarpc.com com CORS)
 const ETH_RPC_LIST = [
   "https://ethereum.publicnode.com",
   "https://eth.drpc.org",
@@ -85,6 +89,7 @@ const ETH_RPC_LIST = [
   "https://eth-mainnet.public.blastapi.io"
 ];
 
+// ✅ v6.17: RPCs BSC validados
 const BSC_RPC_LIST = [
   "https://bsc-dataseed1.binance.org",
   "https://bsc-dataseed2.binance.org",
@@ -2331,7 +2336,7 @@ function configurarEventosWallet() {
 // init
 // ============================================================
 async function init() {
-  console.log("🚀 BRN Exchange v6.16 — inicializando…");
+  console.log("🚀 BRN Exchange v6.17 — inicializando…");
 
   inicializarDescobertaCarteiras();
 
