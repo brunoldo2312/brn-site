@@ -112,8 +112,7 @@
             <button data-tab="enviarpol">💎 Enviar POL</button>
             <button data-tab="swap">🔄 POL ↔ WPOL</button>
             <button data-tab="bitcoin">₿ Consultar BTC</button>
-            <button data-tab="crosschain">🌉 Bridge Cross-Chain (SideShift)</button>
-            <button data-tab="shibcross">🐕 SHIB Cross-Chain (BSC → Polygon)</button>
+            <button data-tab="crosschain">🌉 Bridge Cross-Chain</button>
         </div>
 
         <!-- ==================== PAINEL: MURAL ==================== -->
@@ -362,15 +361,13 @@
             </div>
         </div>
 
-        <!-- ==================== PAINEL: CROSS-CHAIN (SideShift) ==================== -->
+        <!-- ==================== PAINEL: CROSS-CHAIN ==================== -->
         <div id="panel-crosschain" class="panel" hidden>
             <div class="card">
-                <h2>🌉 Bridge Cross-Chain (SideShift)</h2>
+                <h2>🌉 Bridge Cross-Chain (SideShift + Symbiosis)</h2>
                 <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">
                     Converta <strong>SHIB, USDT e USDC</strong> entre as redes <strong>Polygon ↔ Ethereum ↔ BSC (BNB Chain)</strong>.
-                    Exemplo: <em>SHIB Polygon → SHIB Ethereum</em> ou <em>USDT Polygon → USDT BSC</em>.
-                    A cotação e custódia são feitas pela
-                    <a href="https://sideshift.ai" target="_blank" rel="noopener">SideShift.ai</a> (não-custodial).
+                    Exemplo: <em>SHIB BSC → SHIB Polygon</em> via Symbiosis, ou <em>USDT Polygon → USDT Ethereum</em> via SideShift.
                     Você recebe o token direto na rede de destino.
                 </p>
 
@@ -389,6 +386,7 @@
                         </optgroup>
                         <optgroup label="🟡 BSC / BNB Chain">
                             <option value="usdt-bsc">USDT (BSC / BNB Chain)</option>
+                            <option value="shib-bsc">SHIB (BSC / BNB Chain)</option>
                         </optgroup>
                     </select>
                     <small id="ccSaldoHint" class="dim" style="display:block; margin-top:4px;">Saldo: —</small>
@@ -409,6 +407,7 @@
                         </optgroup>
                         <optgroup label="🟡 BSC / BNB Chain">
                             <option value="usdt-bsc">USDT (BSC / BNB Chain)</option>
+                            <option value="shib-bsc">SHIB (BSC / BNB Chain)</option>
                         </optgroup>
                     </select>
                     <small class="dim" style="display:block; margin-top:4px;">
@@ -434,9 +433,18 @@
                     </small>
                 </div>
 
-                <button id="btnCriarCC" class="btn btn-btc" style="width:100%; margin-top:12px;">
-                    🌉 Criar ordem de bridge
-                </button>
+                <!-- ✅ v6.20: DOIS BOTÕES para SHIB cross-chain -->
+                <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+                    <button id="btnCriarCC" class="btn btn-btc" style="width:100%;">
+                        🚀 Trocar aqui no site (Symbiosis)
+                    </button>
+                    <button id="btnAbrirSymbiosis" class="btn btn-primary" style="width:100%;">
+                        🌐 Abrir Symbiosis em nova aba
+                    </button>
+                    <small class="dim" style="text-align:center; font-size:0.75rem;">
+                        ⚡ Trocar aqui = mais rápido. Nova aba = mais confiável.
+                    </small>
+                </div>
 
                 <div id="cc-result" style="display:none; margin-top:16px; padding:14px; background:rgba(247,147,26,0.08); border:1px solid var(--btc); border-radius:8px;">
                     <p style="margin-bottom:8px;">
@@ -461,65 +469,6 @@
                         ⚠️ Você precisa ter gas nativo da rede de origem
                         (POL na Polygon · ETH na Ethereum · BNB na BSC).
                         A SideShift cobra uma taxa (~0.5% a 2%).
-                    </span>
-                </div>
-            </div>
-        </div>
-
-        <!-- ==================== PAINEL: SHIB CROSS-CHAIN (Symbiosis) ==================== -->
-        <div id="panel-shibcross" class="panel" hidden>
-            <div class="card">
-                <h2>🐕 SHIB Cross-Chain (BSC → Polygon)</h2>
-                <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">
-                    Converta <strong>SHIB da BSC (BNB Chain)</strong> para <strong>SHIB na Polygon</strong>.
-                    A cotação e custódia são feitas pela
-                    <a href="https://symbiosis.finance" target="_blank" rel="noopener">Symbiosis Finance</a> (não-custodial).
-                    Você recebe o token direto na rede de destino.
-                </p>
-
-                <div class="input-group">
-                    <label>Quantidade de SHIB (BSC):</label>
-                    <div class="row">
-                        <input type="text" id="shibCrossAmount" placeholder="0.0">
-                        <button id="btnMaxShibCross" class="btn btn-sm">MAX</button>
-                    </div>
-                    <small id="shibCrossSaldoHint" class="dim" style="display:block; margin-top:4px;">Saldo na BSC: —</small>
-                </div>
-
-                <div class="input-group">
-                    <label>Endereço de destino (Polygon):</label>
-                    <input type="text" id="shibCrossDestino" placeholder="0x... (endereço EVM)">
-                    <small class="dim" style="display:block; margin-top:4px;">
-                        ⚠️ Confira duas vezes. Enviar para endereço errado = fundos perdidos.
-                    </small>
-                </div>
-
-                <button id="btnShibCross" class="btn btn-btc" style="width:100%; margin-top:12px;">
-                    🐕 Criar ordem de bridge
-                </button>
-
-                <div id="shibCross-result" style="display:none; margin-top:16px; padding:14px; background:rgba(247,147,26,0.08); border:1px solid var(--btc); border-radius:8px;">
-                    <p style="margin-bottom:8px;">
-                        Envie <strong id="shibCross-deposit-amount">—</strong> SHIB (BSC) para:
-                    </p>
-                    <code id="shibCross-deposit-address" style="display:block; word-break:break-all; background:var(--bg); padding:10px; border-radius:5px; font-size:0.85rem;">—</code>
-                    <p class="dim" style="font-size:0.8rem; margin-top:8px;">
-                        Você receberá <strong id="shibCross-settle-amount">—</strong> SHIB na Polygon em ~5-30 min após a confirmação.
-                        Ordem expira em <span id="shibCross-expires">—</span>.
-                    </p>
-                    <button id="btnCopyShibCrossDeposit" class="btn btn-sm" style="margin-top:8px;">📋 Copiar endereço</button>
-                </div>
-
-                <div class="steps-box">
-                    <strong>📋 Passo a passo após criar a ordem:</strong>
-                    <ol>
-                        <li>Abra a MetaMask → troque para a rede <strong>BNB Smart Chain</strong>;</li>
-                        <li>Envie o SHIB para o endereço de depósito exibido;</li>
-                        <li>Aguarde 5-30 min → você recebe o SHIB na rede <strong>Polygon</strong>.</li>
-                    </ol>
-                    <span class="gas-warn">
-                        ⚠️ Você precisa ter <strong>BNB</strong> na BSC para pagar o gas.
-                        A Symbiosis cobra uma taxa (~0.5% a 2%).
                     </span>
                 </div>
             </div>
@@ -610,6 +559,6 @@
     <div id="toasts" class="toast-container"></div>
 
     <!-- ==================== SCRIPTS ==================== -->
-    <script src="app.js?v=6.15"></script>
+    <script src="app.js?v=6.20"></script>
 </body>
 </html>
