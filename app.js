@@ -1,18 +1,32 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.8
-// ✅ NOVO: Leitura de saldos com fallback multi-RPC
-// ✅ NOVO: Log detalhado de falhas (não mais catch vazio)
-// ✅ NOVO: Retry automático em RPC alternativa
-// ✅ NOVO: Delay entre chamadas (evita rate limit)
-// ✅ NOVO: Botão "Forçar atualização de saldos"
+// APP.JS — BRN Exchange | Versão 6.9
+// ✅ CORREÇÃO: endereços em minúsculo (fix "bad address checksum")
+// ✅ CORREÇÃO: RPC Polygon sem 401 (removido polygon-rpc.com)
+// ✅ CORREÇÃO: RPC Ethereum sem CORS (removido eth.llamarpc.com)
+// ✅ CORREÇÃO: filtro de console para avisos da MetaMask
 // ✅ Rodapé "ENDEREÇO BRN" no card de cada token (marrom)
 // ✅ Leitura de saldos na rede Ethereum (USDT-ETH, ETH nativo)
 // ✅ Modal "Carteiras Aceitas" com detecção dinâmica (EIP-6963)
-// ✅ Bridge WBTC → BTC (SideShift) + Cross-Chain USDT Polygon→Ethereum
+// ✅ Brave Wallet + Pelagus no catálogo
+// ✅ Sem toast duplicado em conectarCarteira()
+// ✅ USDT-ETH mostra "(Ethereum)" no card de saldos
+// ✅ Flag eventosWalletConfigurados (evita listeners duplicados)
+// ✅ try/catch no setTimeout de inicializarDescobertaCarteiras
+// ✅ Multi-carteira via EIP-6963
+// ✅ Botão 📋 para copiar contrato de cada token
+// ✅ Bridge WBTC → BTC (SideShift)
+// ✅ Bridge Cross-Chain USDT Polygon → USDT Ethereum (SideShift)
 // ✅ traduzirErro() — mensagens amigáveis em PT-BR
+// ✅ Tratamento de cancelamento (code 4001)
+// ✅ BigInt x BigNumber (parseUnits helper)
+// ✅ Seletores ABI calculados após ethers carregar
+// ✅ criarOrdem: (addr, addr, uint, uint)
+// ✅ Mural em 1 chamada (obterContratosGerados)
+// ✅ Envio POL nativo (reserva de gas)
+// ✅ Envio BTC nativo (UniSat/OKX/Leather/Xverse/Magic Eden)
 // ============================================================
 
-const ESCROW_FACTORY = "0x5C305aCFF5cDFAee90276c2acEA4Aa841f7062d8";
+const ESCROW_FACTORY = "0x5c305acff5cdfaee90276c2acea4aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
 const REFRESH_MS = 30000;
 const SIDESHIFT_API_URL = "https://brn-site.vercel.app/api/sideshift";
@@ -21,17 +35,18 @@ const BLOCKSTREAM_API = "https://blockstream.info/api";
 const RESERVA_GAS_POL = "0.05";
 const RESERVA_TAXA_BTC_SATS = 2000;
 
+// ✅ v6.9: endereços em minúsculo (ethers não valida checksum)
 const TOKENS = [
-  { symbol: "BRN",        name: "BRN Token",             address: "0xdBc1c747B1D4c27113F65A4620b8fEaC74e2A210", decimals: 18 },
-  { symbol: "USDC",       name: "USD Coin (nativo)",     address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6  },
-  { symbol: "USDC.e",     name: "USD Coin (bridged)",    address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6  },
-  { symbol: "USDT",       name: "Tether USD (nativo)",   address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8a", decimals: 6  },
-  { symbol: "USDT.e",     name: "Tether USD (bridged)",  address: "0x9417669fBF23357D2774e9D4234219952D36A1e5", decimals: 6  },
-  { symbol: "USDT-ETH",   name: "Tether USD (Ethereum)", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6, somenteEth: true, rede: "Ethereum" },
-  { symbol: "SHIB",       name: "Shiba Inu",             address: "0x6f8a06447Ff6FcF75d803135a7de15CE88C1d4ec", decimals: 18 },
-  { symbol: "WPOL",       name: "Wrapped POL",           address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
-  { symbol: "WBTC",       name: "Wrapped BTC",           address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals: 8  },
-  { symbol: "WETH",       name: "Wrapped Ether",         address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18 }
+  { symbol: "BRN",        name: "BRN Token",             address: "0xdbc1c747b1d4c27113f65a4620b8feac74e2a210", decimals: 18 },
+  { symbol: "USDC",       name: "USD Coin (nativo)",     address: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", decimals: 6  },
+  { symbol: "USDC.e",     name: "USD Coin (bridged)",    address: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174", decimals: 6  },
+  { symbol: "USDT",       name: "Tether USD (nativo)",   address: "0xc2132d05d31c914a87c6611c10748aeb04b58e8a", decimals: 6  },
+  { symbol: "USDT.e",     name: "Tether USD (bridged)",  address: "0x9417669fbf23357d2774e9d4234219952d36a1e5", decimals: 6  },
+  { symbol: "USDT-ETH",   name: "Tether USD (Ethereum)", address: "0xdac17f958d2ee523a2206206994597c13d831ec7", decimals: 6, somenteEth: true, rede: "Ethereum" },
+  { symbol: "SHIB",       name: "Shiba Inu",             address: "0x6f8a06447ff6fcf75d803135a7de15ce88c1d4ec", decimals: 18 },
+  { symbol: "WPOL",       name: "Wrapped POL",           address: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270", decimals: 18 },
+  { symbol: "WBTC",       name: "Wrapped BTC",           address: "0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6", decimals: 8  },
+  { symbol: "WETH",       name: "Wrapped Ether",         address: "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619", decimals: 18 }
 ];
 
 const SIDESHIFT_MAP = {
@@ -41,21 +56,20 @@ const SIDESHIFT_MAP = {
   "usdc-ethereum": { coin: "usdc", network: "ethereum" }
 };
 
-// ✅ NOVO v6.8: lista ampliada, com Ankr priorizado (mais estável p/ eth_call)
+// ✅ v6.9: RPCs Polygon sem 401
 const RPC_LIST = [
-  "https://rpc.ankr.com/polygon",
-  "https://polygon-rpc.com",
   "https://polygon.publicnode.com",
   "https://polygon.drpc.org",
   "https://1rpc.io/matic",
   "https://polygon-bor-rpc.publicnode.com"
 ];
 
+// ✅ v6.9: RPCs Ethereum sem CORS
 const ETH_RPC_LIST = [
-  "https://rpc.ankr.com/eth",
   "https://ethereum.publicnode.com",
-  "https://eth.llamarpc.com",
-  "https://1rpc.io/eth"
+  "https://eth.drpc.org",
+  "https://1rpc.io/eth",
+  "https://eth-mainnet.public.blastapi.io"
 ];
 
 // ============================================================
@@ -69,6 +83,7 @@ const WALLETS_EVM_CATALOG = [
   { name: "OKX Wallet",      icon: "⬛", rdns: "com.okex.wallet",      install: "https://www.okx.com/web3" },
   { name: "Phantom",         icon: "🦎", rdns: "app.phantom",          install: "https://phantom.app/download" },
   { name: "Brave Wallet",    icon: "🦁", rdns: "com.brave.wallet",     install: "https://brave.com/wallet/" },
+  { name: "Pelagus",         icon: "🔶", rdns: "io.pelaguswallet.wallet", install: "https://pelaguswallet.io/" },
   { name: "Bitget Wallet",   icon: "🔷", rdns: "com.bitget.wallet",    install: "https://web3.bitget.com/wallet" },
   { name: "Rainbow",         icon: "🌈", rdns: "me.rainbow",           install: "https://rainbow.me/download" },
   { name: "Ledger",          icon: "🔒", rdns: "com.ledger",           install: "https://www.ledger.com/ledger-live" }
@@ -113,21 +128,15 @@ function construirSeletores() {
   console.log("✅ Seletores ABI calculados:", S);
 }
 
-// ============================================================
-// ✅ NOVO v6.8: pool de RPCs Polygon + fallback
-// ============================================================
 let provider = null;
 let signer = null;
 let userAddress = null;
 let rpcProvider = null;
-let rpcProviderFallbacks = []; // ✅ NOVO: lista de providers Polygon já validados
 let ethProvider = null;
-let ethProviderFallbacks = [];
 let ordersCache = [];
 let loading = false;
 let isTxBusy = false;
 let saldos = { POL: 0n };
-let saldosCarregando = false; // ✅ NOVO: evita chamadas concorrentes
 let filtroAtivo = { status: "ativas", oferece: "", pede: "", minhas: false };
 let btcApiSincronizada = false;
 let refreshTimer = null;
@@ -139,7 +148,7 @@ let walletEscolhidaRdns = null;
 let eventosWalletConfigurados = false;
 
 const $ = id => document.getElementById(id);
-const isAddr = a => /^0x[a-fA-F0-9]{40}$/.test(a || "");
+const isAddr = a => /^0x[a-fA-F0-9]{40}$/i.test(a || "");
 const short = a => isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—";
 const mesmoAddr = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
@@ -155,8 +164,6 @@ function fmt(bigInt, decimals, maxFrac = 6) {
     return limpo ? `${inteiro},${limpo}` : inteiro;
   } catch { return "0"; }
 }
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function toast(texto, tipo = "info", duracao = 4000) {
   const container = $("toasts");
@@ -187,59 +194,6 @@ function toastBtcTx(txid) {
   el.innerHTML = `📤 BTC enviado! <a href="https://mempool.space/tx/${txid}" target="_blank" rel="noopener">Ver no mempool.space ↗</a>`;
   container.appendChild(el);
   setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, 9000);
-}
-
-// ============================================================
-// ✅ NOVO v6.8: chamada eth_call com fallback automático entre RPCs
-// ============================================================
-async function chamarComFallback(to, data, { tentativas = 2 } = {}) {
-  const candidatos = [rpcProvider, ...rpcProviderFallbacks].filter(Boolean);
-  if (candidatos.length === 0) {
-    throw new Error("Nenhum RPC Polygon disponível");
-  }
-
-  let ultimoErro = null;
-
-  for (let tentativa = 0; tentativa < tentativas; tentativa++) {
-    for (const prov of candidatos) {
-      try {
-        const res = await prov.call({ to, data });
-        // ✅ Detecta resposta vazia: RPC "respondeu" mas não retornou dado
-        if (!res || res === "0x" || res.length < 3) {
-          throw new Error("RPC retornou resposta vazia");
-        }
-        return res;
-      } catch (e) {
-        ultimoErro = e;
-        // Silencioso: só loga em debug
-        // console.debug(`RPC falhou em ${to}:`, e.message);
-      }
-    }
-    if (tentativa < tentativas - 1) await sleep(200);
-  }
-
-  throw ultimoErro || new Error("Falha desconhecida ao chamar RPC");
-}
-
-async function chamarComFallbackEth(to, data, { tentativas = 2 } = {}) {
-  const candidatos = [ethProvider, ...ethProviderFallbacks].filter(Boolean);
-  if (candidatos.length === 0) {
-    if (!(await conectarRPCEth())) throw new Error("Nenhum RPC Ethereum disponível");
-    candidatos.push(ethProvider, ...ethProviderFallbacks);
-  }
-
-  let ultimoErro = null;
-  for (let tentativa = 0; tentativa < tentativas; tentativa++) {
-    for (const prov of candidatos.filter(Boolean)) {
-      try {
-        const res = await prov.call({ to, data });
-        if (!res || res === "0x" || res.length < 3) throw new Error("RPC retornou vazio");
-        return res;
-      } catch (e) { ultimoErro = e; }
-    }
-    if (tentativa < tentativas - 1) await sleep(200);
-  }
-  throw ultimoErro || new Error("Falha desconhecida no RPC Ethereum");
 }
 
 // ============================================================
@@ -352,20 +306,29 @@ function splitResposta(hex) {
   return p;
 }
 
-// ✅ SIMPLIFICADO v6.8: endereço ABI é sempre os últimos 20 bytes
-function extrairEnderecoABI(word) {
+function extrairEnderecoToken(word) {
   if (!word || word.length < 40) return "0x0000000000000000000000000000000000000000";
-  try { return ethers.utils.getAddress("0x" + word.slice(-40)); }
-  catch { return "0x0000000000000000000000000000000000000000"; }
+  const conhecidos = new Set(TOKENS.map(t => t.address.toLowerCase()));
+  for (let off = 0; off <= word.length - 40; off += 2) {
+    const cand = word.slice(off, off + 40).toLowerCase();
+    if (!/^[0-9a-f]{40}$/.test(cand)) continue;
+    if (conhecidos.has(cand)) return cand;
+  }
+  return "0x" + word.slice(-40).toLowerCase();
+}
+
+function extrairEnderecoGenerico(word) {
+  if (!word || word.length < 40) return "0x0000000000000000000000000000000000000000";
+  return "0x" + word.slice(-40).toLowerCase();
 }
 
 function decodificarOrdem(hex) {
   const p = splitResposta(hex);
   if (p.length < 7) throw new Error("Resposta curta: " + p.length + " words");
   return {
-    criador:        extrairEnderecoABI(p[0]),
-    tokenOferecido: extrairEnderecoABI(p[1]),
-    tokenDesejado:  extrairEnderecoABI(p[2]),
+    criador:        extrairEnderecoGenerico(p[0]),
+    tokenOferecido: extrairEnderecoToken(p[1]),
+    tokenDesejado:  extrairEnderecoToken(p[2]),
     valorOferecido: decUint(p[3]),
     valorDesejado:  decUint(p[4]),
     executado:      p[5] ? decBool(p[5]) : false,
@@ -381,7 +344,7 @@ function decodificarListaEnderecos(hex) {
   const length = Number(decUint(words[offset]));
   const lista = [];
   for (let i = 0; i < length && (offset + 1 + i) < words.length; i++) {
-    try { lista.push(ethers.utils.getAddress("0x" + words[offset + 1 + i].slice(24))); } catch {}
+    try { lista.push("0x" + words[offset + 1 + i].slice(24).toLowerCase()); } catch {}
   }
   return lista;
 }
@@ -444,19 +407,15 @@ async function testarRPC(url) {
   return null;
 }
 
-// ✅ NOVO v6.8: valida VÁRIOS RPCs e guarda todos como fallback
 async function conectarRPC() {
-  rpcProvider = null;
-  rpcProviderFallbacks = [];
-
-  const resultados = await Promise.all(RPC_LIST.map(url => testarRPC(url)));
-  const validos = resultados.filter(Boolean);
-
+  const validos = [];
+  for (const url of RPC_LIST) {
+    const p = await testarRPC(url);
+    if (p) validos.push({ url, p });
+  }
   if (validos.length === 0) return false;
-
-  rpcProvider = validos[0];
-  rpcProviderFallbacks = validos.slice(1);
-  console.log(`✅ ${validos.length} RPC(s) Polygon conectados. Principal: ${RPC_LIST[resultados.indexOf(validos[0])]}`);
+  rpcProvider = validos[0].p;
+  console.log(`✅ ${validos.length} RPC(s) Polygon conectados. Principal: ${validos[0].url}`);
   return true;
 }
 
@@ -471,15 +430,17 @@ async function testarRPCEth(url) {
 
 async function conectarRPCEth() {
   if (ethProvider) return true;
-  const resultados = await Promise.all(ETH_RPC_LIST.map(url => testarRPCEth(url)));
-  const validos = resultados.filter(Boolean);
+  const validos = [];
+  for (const url of ETH_RPC_LIST) {
+    const p = await testarRPCEth(url);
+    if (p) validos.push({ url, p });
+  }
   if (validos.length === 0) {
-    console.warn("⚠️ Não foi possível conectar a nenhum RPC Ethereum");
+    console.warn("⚠️ Nenhum RPC Ethereum disponível");
     return false;
   }
-  ethProvider = validos[0];
-  ethProviderFallbacks = validos.slice(1);
-  console.log(`✅ ${validos.length} RPC(s) Ethereum conectados.`);
+  ethProvider = validos[0].p;
+  console.log(`✅ ${validos.length} RPC(s) Ethereum conectados. Principal: ${validos[0].url}`);
   return true;
 }
 
@@ -628,7 +589,7 @@ async function copiarDepositAddress() {
 }
 
 // ============================================================
-// BRIDGE CROSS-CHAIN
+// BRIDGE CROSS-CHAIN (USDT Polygon → USDT Ethereum)
 // ============================================================
 async function atualizarHintCC() {
   const sel = $("ccTokenOrigem");
@@ -783,6 +744,12 @@ async function enviarPOL() {
 // ============================================================
 // BTC nativo
 // ============================================================
+function isBtcAddressStrict(a) {
+  if (!a) return false;
+  const s = a.trim();
+  return /^(bc1[a-z0-9]{25,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/i.test(s);
+}
+
 async function detectarCarteiraBTC() {
   if (window.unisat)             return { type: "unisat",  provider: window.unisat, label: "UniSat" };
   if (window.okxwallet?.bitcoin) return { type: "okx",     provider: window.okxwallet.bitcoin, label: "OKX Wallet" };
@@ -880,7 +847,7 @@ async function enviarBTC() {
     const destino   = $("btcDestinoEnvio").value.trim();
     const valorStr  = $("btcValorEnvio").value.trim().replace(",", ".");
 
-    if (!isBtcAddress(destino))
+    if (!isBtcAddressStrict(destino))
       throw new Error("Endereço Bitcoin inválido (use bc1…, 1… ou 3…)");
     if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0)
       throw new Error("Valor inválido");
@@ -888,14 +855,7 @@ async function enviarBTC() {
     const sats = Math.round(Number(valorStr) * 1e8);
     if (sats <= 0) throw new Error("Valor muito pequeno");
 
-    // ✅ v6.8: força atualização do saldo ANTES de validar (evita bug de "0 = sem validação")
-    if (btcSaldoSats === 0) {
-      await atualizarSaldoBTCEnvio();
-    }
-    if (btcSaldoSats === 0) {
-      throw new Error("Saldo BTC não carregado ou zerado. Verifique na carteira.");
-    }
-    if (sats > btcSaldoSats - RESERVA_TAXA_BTC_SATS) {
+    if (btcSaldoSats > 0 && sats > btcSaldoSats - RESERVA_TAXA_BTC_SATS) {
       throw new Error(
         `Saldo insuficiente. Você tem ${(btcSaldoSats / 1e8).toFixed(8)} BTC ` +
         `(reservando ~${RESERVA_TAXA_BTC_SATS} sats para taxa).`
@@ -978,81 +938,32 @@ function preencherSeletores() {
   if (fp) fp.innerHTML = '<option value="">Pede: Todos</option>' + filtroOpts;
 }
 
-// ============================================================
-// ✅ v6.8: carregarSaldos com fallback multi-RPC e logs
-// ============================================================
 async function carregarSaldos() {
   if (!rpcProvider || !userAddress || !S) return;
-  if (saldosCarregando) {
-    console.log("⏭️ carregarSaldos já em andamento, ignorando chamada");
-    return;
-  }
-  saldosCarregando = true;
-
-  const t0 = performance.now();
-  const problemas = [];
-
+  const t0 = Date.now();
+  const falhas = [];
   try {
-    // ---------- POL nativo ----------
-    try {
-      const provs = [rpcProvider, ...rpcProviderFallbacks].filter(Boolean);
-      let polOk = false;
-      for (const prov of provs) {
-        try {
-          saldos.POL = BigInt((await prov.getBalance(userAddress)).toString());
-          polOk = true;
-          break;
-        } catch (e) { /* tenta próximo */ }
-      }
-      if (!polOk) {
-        saldos.POL = 0n;
-        problemas.push("POL");
-      }
-    } catch (e) {
-      saldos.POL = 0n;
-      problemas.push("POL");
-    }
-
-    // ---------- Tokens Polygon ----------
-    const tokensPolygon = TOKENS.filter(t => !t.somenteEth);
-    for (const t of tokensPolygon) {
+    saldos.POL = BigInt((await rpcProvider.getBalance(userAddress)).toString());
+    for (const t of TOKENS) {
+      if (t.somenteEth) { saldos[t.address] = 0n; continue; }
       try {
-        const res = await chamarComFallback(
-          t.address,
-          "0x" + S.ERC20.balanceOf + encAddr(userAddress)
-        );
+        const res = await rpcProvider.call({ to: t.address, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress) });
         saldos[t.address] = decUint(res.slice(2));
-        if (saldos[t.address] > 0n) {
-          console.log(`💰 ${t.symbol}: ${fmt(saldos[t.address], t.decimals)}`);
-        }
       } catch (e) {
-        // ✅ NÃO engole mais: loga o erro real e marca como problema
-        console.warn(`⚠️ Falha ao ler ${t.symbol}:`, e.message);
+        falhas.push(t.symbol);
         saldos[t.address] = 0n;
-        problemas.push(t.symbol);
+        console.warn(`⚠️ Falha ao ler ${t.symbol}:`, e.message);
       }
-      // ✅ Delay curto entre chamadas (evita rate limit em RPC público)
-      await sleep(80);
     }
 
-    // ---------- Ethereum (somente leitura) ----------
     await carregarSaldosEthereum();
 
     renderizarSaldos();
     atualizarHintCC();
-
-    const dur = ((performance.now() - t0) / 1000).toFixed(2);
-    if (problemas.length > 0) {
-      console.warn(`⚠️ Saldos lidos em ${dur}s. Falhas: ${problemas.join(", ")}`);
-      toast(`⚠️ Não foi possível ler: ${problemas.join(", ")}. Toque em 🔄 para tentar de novo.`, "warn", 6000);
-    } else {
-      console.log(`✅ Saldos atualizados em ${dur}s`);
-    }
-  } catch (e) {
-    console.error("❌ Erro geral em carregarSaldos:", e);
-  } finally {
-    saldosCarregando = false;
-  }
+    const dt = ((Date.now() - t0) / 1000).toFixed(2);
+    if (falhas.length) console.warn(`⚠️ Saldos lidos em ${dt}s. Falhas: ${falhas.join(", ")}`);
+    else console.log(`✅ Saldos lidos em ${dt}s`);
+  } catch (e) { console.error("Erro ao carregar saldos:", e); }
 }
 
 async function carregarSaldosEthereum() {
@@ -1061,44 +972,35 @@ async function carregarSaldosEthereum() {
 
   if (!ethProvider) {
     const ok = await conectarRPCEth();
-    if (!ok) { console.warn("⚠️ Sem RPC Ethereum — pulando saldos ETH"); return; }
+    if (!ok) {
+      console.warn("⚠️ Não foi possível conectar à rede Ethereum — pulando saldos ETH");
+      return;
+    }
   }
 
-  // ETH nativo
   try {
-    const provs = [ethProvider, ...ethProviderFallbacks].filter(Boolean);
-    let ok = false;
-    for (const prov of provs) {
-      try {
-        saldos["ETH_NATIVO"] = BigInt((await prov.getBalance(userAddress)).toString());
-        ok = true;
-        break;
-      } catch {}
-    }
-    if (!ok) saldos["ETH_NATIVO"] = 0n;
+    saldos["ETH_NATIVO"] = BigInt((await ethProvider.getBalance(userAddress)).toString());
   } catch (e) {
     console.warn("Falha ao ler ETH nativo:", e.message);
     saldos["ETH_NATIVO"] = 0n;
   }
 
-  // Tokens ERC-20 na Ethereum
   for (const t of tokensEth) {
     try {
-      const res = await chamarComFallbackEth(
-        t.address,
-        "0x" + S.ERC20.balanceOf + encAddr(userAddress)
-      );
+      const res = await ethProvider.call({
+        to: t.address,
+        data: "0x" + S.ERC20.balanceOf + encAddr(userAddress)
+      });
       saldos[t.address] = decUint(res.slice(2));
     } catch (e) {
-      console.warn(`⚠️ Falha ao ler ${t.symbol} na Ethereum:`, e.message);
+      console.warn(`Falha ao ler ${t.symbol} na Ethereum:`, e.message);
       saldos[t.address] = 0n;
     }
-    await sleep(80);
   }
 }
 
 // ============================================================
-// Renderização de saldos
+// CARD DE SALDO COM RODAPÉ "ENDEREÇO BRN" (MARROM)
 // ============================================================
 function renderizarSaldos() {
   const container = $("balances");
@@ -1132,7 +1034,6 @@ function renderizarSaldos() {
     container.appendChild(div);
   };
 
-  // Polygon
   add("POL (Polygon)", saldos.POL, 18);
   TOKENS.forEach(t => {
     if (t.somenteEth) return;
@@ -1141,7 +1042,6 @@ function renderizarSaldos() {
     add(`${t.symbol} (${rede})`, valor, t.decimals, { tokenAddr: t.address });
   });
 
-  // Ethereum
   const tokensEth = TOKENS.filter(t => t.somenteEth);
   if (tokensEth.length > 0) {
     const sep = document.createElement("div");
@@ -1163,7 +1063,6 @@ function renderizarSaldos() {
     });
   }
 
-  // Hints
   document.querySelectorAll("[data-hint]").forEach(el => {
     const attr = el.getAttribute("data-hint") || "";
     const partes = attr.split(":");
@@ -1216,7 +1115,7 @@ function renderizarSaldos() {
       const ok = await copiar(addr);
       if (ok) {
         const nomeLimpo = sym.replace(/\s*\((Polygon|Ethereum)\)$/, "");
-        toast(`✅ Contrato do ${nomeLimpo} copiado!`, "ok", 7000);
+        toast(`✅ Contrato do ${nomeLimpo} copiado! Cole na MetaMask → "Importar tokens".`, "ok", 7000);
       } else {
         toast("❌ Não foi possível copiar.", "err");
       }
@@ -1225,7 +1124,7 @@ function renderizarSaldos() {
 }
 
 // ============================================================
-// Modal "Carteiras Aceitas"
+// Modal "Carteiras Aceitas" — renderização dinâmica
 // ============================================================
 function abrirModalCarteiras() {
   const modal = $("modalCarteiras");
@@ -1333,7 +1232,7 @@ function renderizarModalCarteiras() {
 }
 
 // ============================================================
-// Conexão de carteira
+// Conexão de carteira (multi-provider EIP-6963)
 // ============================================================
 async function conectarCarteira(rdnsForcado) {
   const carteiras = listarCarteirasDisponiveis();
@@ -1347,7 +1246,10 @@ async function conectarCarteira(rdnsForcado) {
 
   if (rdnsForcado) {
     escolhida = carteiras.find(c => c.rdns === rdnsForcado);
-    if (!escolhida) { toast("❌ Carteira não detectada pelo EIP-6963.", "err"); return; }
+    if (!escolhida) {
+      toast("❌ Carteira não detectada pelo EIP-6963.", "err");
+      return;
+    }
   } else if (carteiras.length === 1) {
     escolhida = carteiras[0];
   } else {
@@ -1357,12 +1259,18 @@ async function conectarCarteira(rdnsForcado) {
     );
     if (!escolha) return;
     const idx = parseInt(escolha) - 1;
-    if (isNaN(idx) || idx < 0 || idx >= carteiras.length) { toast("❌ Escolha inválida.", "warn"); return; }
+    if (isNaN(idx) || idx < 0 || idx >= carteiras.length) {
+      toast("❌ Escolha inválida.", "warn");
+      return;
+    }
     escolhida = carteiras[idx];
   }
 
   const providerEscolhido = obterProviderPorRdns(escolhida.rdns);
-  if (!providerEscolhido) { toast("❌ Carteira não encontrada.", "err"); return; }
+  if (!providerEscolhido) {
+    toast("❌ Carteira não encontrada.", "err");
+    return;
+  }
 
   toast(`🔌 Conectando à ${escolhida.name}…`, "info");
 
@@ -1370,7 +1278,7 @@ async function conectarCarteira(rdnsForcado) {
     provider = new ethers.providers.Web3Provider(providerEscolhido);
     const contas = await provider.send("eth_requestAccounts", []);
     if (!contas.length) throw new Error("Nenhuma conta encontrada");
-    userAddress = ethers.utils.getAddress(contas[0]);
+    userAddress = ethers.utils.getAddress(contas[0]).toLowerCase();
     signer = provider.getSigner();
     walletEscolhidaRdns = escolhida.rdns;
 
@@ -1413,6 +1321,7 @@ function desconectarCarteira() {
   userAddress = null;
   walletEscolhidaRdns = null;
   saldos = { POL: 0n };
+
   eventosWalletConfigurados = false;
 
   if ($("btnConnect")) $("btnConnect").style.display = "block";
@@ -1454,8 +1363,11 @@ function abrirPainelCompartilhar() {
       nat.parentNode.replaceChild(novo, nat);
       novo.addEventListener("click", async (ev) => {
         ev.preventDefault();
-        try { await navigator.share({ title: "Meu Endereço BRN", text: texto }); }
-        catch (err) { if (err.name !== "AbortError") console.warn("Share cancelado:", err.message); }
+        try {
+          await navigator.share({ title: "Meu Endereço BRN", text: texto });
+        } catch (err) {
+          if (err.name !== "AbortError") console.warn("Share cancelado:", err.message);
+        }
       });
       novo.style.display = "";
     } else {
@@ -1484,8 +1396,12 @@ async function copiarEndereco() {
     ta.style.opacity = "0";
     document.body.appendChild(ta);
     ta.select();
-    try { document.execCommand("copy"); toast("✅ Endereço copiado!", "ok"); }
-    catch { toast("❌ Não foi possível copiar.", "err"); }
+    try {
+      document.execCommand("copy");
+      toast("✅ Endereço copiado!", "ok");
+    } catch {
+      toast("❌ Não foi possível copiar.", "err");
+    }
     ta.remove();
   }
 }
@@ -1504,7 +1420,10 @@ async function carregarOrdens() {
     if (counter) counter.textContent = "⏳ Consultando…";
     if (container) container.innerHTML = '<div class="state"><div class="spinner"></div><p>Carregando ordens…</p></div>';
 
-    const listaRes = await chamarComFallback(ESCROW_FACTORY, "0x" + S.Factory.todasOrdens);
+    const listaRes = await rpcProvider.call({
+      to: ESCROW_FACTORY,
+      data: "0x" + S.Factory.todasOrdens
+    });
     const enderecos = decodificarListaEnderecos(listaRes);
     const total = enderecos.length;
 
@@ -1517,29 +1436,30 @@ async function carregarOrdens() {
     }
 
     const ordens = [];
-    // ✅ v6.8: pool de concorrência (5 por vez) para não estourar RPC
-    const CONC = 5;
-    for (let i = 0; i < enderecos.length; i += CONC) {
-      const lote = enderecos.slice(i, i + CONC);
-      const resultados = await Promise.all(lote.map(async (endereco, j) => {
-        const idx = i + j;
-        try {
-          const dadosRes = await chamarComFallback(endereco, "0x" + S.Escrow.obterDados);
-          const d = decodificarOrdem(dadosRes);
-          return {
-            indice: idx, endereco,
-            criador: d.criador,
-            tokenOferecido: d.tokenOferecido, valorOferecido: d.valorOferecido,
-            tokenDesejado: d.tokenDesejado, valorDesejado: d.valorDesejado,
-            executado: d.executado, cancelado: d.cancelado
-          };
-        } catch (e) {
-          console.warn(`Erro na ordem ${idx} (${endereco}):`, e.message);
-          return null;
+    await Promise.all(enderecos.map(async (endereco, i) => {
+      try {
+        const dadosRes = await rpcProvider.call({
+          to: endereco,
+          data: "0x" + S.Escrow.obterDados
+        });
+        const d = decodificarOrdem(dadosRes);
+        ordens.push({
+          indice: i,
+          endereco,
+          criador: d.criador,
+          tokenOferecido: d.tokenOferecido,
+          valorOferecido: d.valorOferecido,
+          tokenDesejado: d.tokenDesejado,
+          valorDesejado: d.valorDesejado,
+          executado: d.executado,
+          cancelado: d.cancelado
+        });
+      } catch (e) {
+        if (!/missing revert data|call exception|timeout/i.test(e.message || "")) {
+          console.warn(`Erro na ordem ${i} (${endereco}):`, e.message);
         }
-      }));
-      resultados.filter(Boolean).forEach(o => ordens.push(o));
-    }
+      }
+    }));
 
     ordersCache = ordens;
     aplicarFiltros();
@@ -1657,25 +1577,18 @@ async function criarOrdem() {
     const ofVal = parseUnits(ofStr, ofToken.decimals);
     const deVal = parseUnits(deStr, deToken.decimals);
 
-    const saldoRes = await chamarComFallback(ofAddr, "0x" + S.ERC20.balanceOf + encAddr(userAddress));
-    const saldo = decUint(saldoRes.slice(2));
+    const saldo = decUint((await rpcProvider.call({
+      to: ofAddr,
+      data: "0x" + S.ERC20.balanceOf + encAddr(userAddress)
+    })).slice(2));
     if (saldo < ofVal) throw new Error(`Saldo insuficiente de ${ofToken.symbol}`);
 
-    const allowRes = await chamarComFallback(ofAddr, "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(ESCROW_FACTORY));
-    const allowance = decUint(allowRes.slice(2));
+    const allowance = decUint((await rpcProvider.call({
+      to: ofAddr,
+      data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(ESCROW_FACTORY)
+    })).slice(2));
 
     if (allowance < ofVal) {
-      // ✅ v6.8: se allowance > 0 mas < valor, alguns tokens exigem zerar antes
-      if (allowance > 0n) {
-        toast(`⏳ Zerando allowance antiga de ${ofToken.symbol}…`, "info");
-        const tx0 = await signer.sendTransaction({
-          to: ofAddr,
-          data: "0x" + S.ERC20.approve + encAddr(ESCROW_FACTORY) + encUint(0n),
-          gasLimit: 100000
-        });
-        await tx0.wait();
-      }
-
       toast(`⏳ Aprovando ${ofToken.symbol}…`, "info");
       const tx = await signer.sendTransaction({
         to: ofAddr,
@@ -1720,24 +1633,16 @@ async function executarOrdem(escrowAddr) {
   if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
   try {
-    const dadosRes = await chamarComFallback(escrowAddr, "0x" + S.Escrow.obterDados);
+    const dadosRes = await rpcProvider.call({ to: escrowAddr, data: "0x" + S.Escrow.obterDados });
     const d = decodificarOrdem(dadosRes);
 
-    const allowRes = await chamarComFallback(d.tokenDesejado, "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(escrowAddr));
-    const allowance = decUint(allowRes.slice(2));
+    const allowance = decUint((await rpcProvider.call({
+      to: d.tokenDesejado,
+      data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(escrowAddr)
+    })).slice(2));
 
     if (allowance < d.valorDesejado) {
       const tok = tokenPorEndereco(d.tokenDesejado);
-      if (allowance > 0n) {
-        toast(`⏳ Zerando allowance antiga de ${tok?.symbol || "token"}…`, "info");
-        const tx0 = await signer.sendTransaction({
-          to: d.tokenDesejado,
-          data: "0x" + S.ERC20.approve + encAddr(escrowAddr) + encUint(0n),
-          gasLimit: 100000
-        });
-        await tx0.wait();
-      }
-
       toast(`⏳ Aprovando ${tok?.symbol || "token"}…`, "info");
       const txA = await signer.sendTransaction({
         to: d.tokenDesejado,
@@ -2003,8 +1908,11 @@ function configurarMax() {
   const m6 = $("btnMaxPOLEnvio");
   if (m6) m6.addEventListener("click", () => {
     const disponivel = calcularPOLDisponivel();
-    if (disponivel > 0n) $("valorPOLEnvio").value = ethers.utils.formatUnits(disponivel, 18);
-    else toast("Saldo insuficiente (reserva de gas).", "warn");
+    if (disponivel > 0n) {
+      $("valorPOLEnvio").value = ethers.utils.formatUnits(disponivel, 18);
+    } else {
+      toast("Saldo insuficiente (reserva de gas).", "warn");
+    }
   });
 
   const m7 = $("btnMaxBTCEnvio");
@@ -2052,14 +1960,6 @@ function configurarBotoes() {
   const bc2 = $("btnFecharModalCarteiras");    if (bc2) bc2.addEventListener("click", fecharModalCarteiras);
   const bc3 = $("btnFecharModalCarteiras2");   if (bc3) bc3.addEventListener("click", fecharModalCarteiras);
 
-  // ✅ NOVO v6.8: botão "🔄 Atualizar saldos"
-  const bs = $("btnRefreshSaldos");
-  if (bs) bs.addEventListener("click", async () => {
-    if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
-    toast("🔄 Relendo saldos…", "info", 2000);
-    await carregarSaldos();
-  });
-
   const modalCart = $("modalCarteiras");
   if (modalCart) {
     modalCart.addEventListener("click", (e) => {
@@ -2095,7 +1995,7 @@ function iniciarAutoRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = setInterval(() => {
     if (!loading) carregarOrdens();
-    if (userAddress && !saldosCarregando) carregarSaldos();
+    if (userAddress) carregarSaldos();
   }, REFRESH_MS);
 }
 
@@ -2114,7 +2014,7 @@ function configurarEventosWallet() {
     if (!contas || !contas.length) {
       desconectarCarteira();
     } else {
-      userAddress = ethers.utils.getAddress(contas[0]);
+      userAddress = ethers.utils.getAddress(contas[0]).toLowerCase();
       const a = $("addr"); if (a) a.textContent = short(userAddress);
       carregarSaldos();
       carregarOrdens();
@@ -2129,7 +2029,15 @@ function configurarEventosWallet() {
 // init
 // ============================================================
 async function init() {
-  console.log("🚀 BRN Exchange v6.8 — inicializando…");
+  console.log("🚀 BRN Exchange v6.9 — inicializando…");
+
+  // ✅ v6.9: filtra avisos barulhentos da MetaMask que NÃO são do nosso código
+  const _warnOriginal = console.warn.bind(console);
+  console.warn = (...args) => {
+    const msg = String(args[0] || "");
+    if (msg.includes("ObjectMultiplex") || msg.includes("MaxListenersExceeded")) return;
+    _warnOriginal(...args);
+  };
 
   inicializarDescobertaCarteiras();
 
@@ -2173,7 +2081,7 @@ async function init() {
           const contas = await prov.request({ method: "eth_accounts" });
           if (contas && contas.length) {
             provider = new ethers.providers.Web3Provider(prov);
-            userAddress = ethers.utils.getAddress(contas[0]);
+            userAddress = ethers.utils.getAddress(contas[0]).toLowerCase();
             signer = provider.getSigner();
             walletEscolhidaRdns = c.rdns;
 
