@@ -75,6 +75,17 @@
             </div>
         </div>
 
+        <!-- ==================== ✅ v6.23: PAINEL MERCADO CEXSWAP ==================== -->
+        <div class="card" id="painel-cexswap" style="display: none;">
+            <h2>📊 Mercado CEXSwap (24h)</h2>
+            <p class="dim" style="font-size: 0.85rem; margin-bottom: 12px;">
+                Preços em USD dos principais ativos. Fonte: <a href="https://cexswap.cc" target="_blank" rel="noopener">cexswap.cc</a>
+            </p>
+            <div id="cexswapMercado" class="cexswap-mercado">
+                <div class="state"><div class="spinner"></div><p>Carregando preços…</p></div>
+            </div>
+        </div>
+
         <!-- ==================== PAINEL DE COMPARTILHAMENTO ==================== -->
         <div id="sharePanel" class="share-panel" style="display: none;">
             <div class="share-head">
@@ -433,7 +444,6 @@
                     </small>
                 </div>
 
-                <!-- ✅ v6.20: DOIS BOTÕES para SHIB cross-chain -->
                 <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
                     <button id="btnCriarCC" class="btn btn-btc" style="width:100%;">
                         🚀 Trocar aqui no site (Symbiosis)
@@ -555,10 +565,24 @@
         </div>
     </div>
 
+    <!-- ==================== ✅ v6.23: MODAL DE CONFIRMAÇÃO GENÉRICO ==================== -->
+    <div id="modalConfirmacao" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="max-width: 450px;">
+            <div class="modal-head">
+                <h2 id="modalConfirmTitulo">Atenção</h2>
+            </div>
+            <p id="modalConfirmMensagem" style="margin: 20px 0; font-size: 1rem; line-height: 1.5; white-space: pre-wrap;"></p>
+            <div class="modal-footer" style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button id="btnConfirmNao" class="btn btn-err">Cancelar</button>
+                <button id="btnConfirmSim" class="btn btn-primary">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ==================== TOASTS ==================== -->
     <div id="toasts" class="toast-container"></div>
 
     <!-- ==================== SCRIPTS ==================== -->
-    <script src="app.js?v=6.20"></script>
+    <script src="app.js?v=6.23"></script>
 </body>
 </html>
