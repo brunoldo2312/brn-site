@@ -1,5 +1,10 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.23
+// APP.JS — BRN Exchange | Versão 6.24
+// ✅ v6.24: FIX — CEXSwap URLs separadas (prices vs markets)
+// ✅ v6.24: FIX — carregarSaldos não aborta se POL falhar
+// ✅ v6.24: FIX — precoUsd trata USDC.e / USDT.e e aliases
+// ✅ v6.24: NEW — variação 24h (mercadoCexSwap) nos cards de saldo
+// ✅ v6.24: FIX — isBtcAddress consolidada (removida duplicata)
 // ✅ v6.23: Integração CEXSwap (prices + markets summary)
 // ✅ v6.22: FIX — trocarRede() usa provider da carteira conectada
 // ✅ v6.22: FIX — recriação de provider pós-troca usa walletEscolhidaRdns
@@ -19,9 +24,15 @@ const REFRESH_MS = 60000;
 
 const SIDESHIFT_API_URL = "https://brn-site.vercel.app/api/sideshift";
 const SYMBIOSIS_API_URL = "https://brn-site.vercel.app/api/symbiosis";
-const CEXSWAP_API_URL   = "https://brn-site.vercel.app/api/cexswap"; // ✅ v6.23
 const SYMBIOSIS_APP_URL = "https://app.symbiosis.finance/swap";
 const BLOCKSTREAM_API   = "https://blockstream.info/api";
+
+// ✅ v6.24: CEXSwap com endpoints separados
+// ⚠️ Ajuste os paths abaixo conforme o backend proxy real.
+// Se o backend usa /api/cexswap?type=prices, troque para querystring.
+const CEXSWAP_API_BASE    = "https://brn-site.vercel.app/api/cexswap";
+const CEXSWAP_PRICES_URL  = `${CEXSWAP_API_BASE}/prices`;
+const CEXSWAP_MARKETS_URL = `${CEXSWAP_API_BASE}/markets`;
 
 const RESERVA_GAS_POL = "0.05";
 const RESERVA_TAXA_BTC_SATS = 2000;
@@ -162,7 +173,7 @@ let rpcFallbacks = [];
 
 // ✅ v6.23: Caches de dados da CEXSwap
 let precosCexSwap = {};     // { "BRN": 0.05, "USDT": 1.0, ... }
-let mercadoCexSwap = [];    // [ { pair: "WRKZ-DOGE", last: 0.1, ... }, ... ]
+let mercadoCexSwap = [];    // [ { pair: "WRKZ-DOGE", last: 0.1, priceChangePercent: 2.3, ... }, ... ]
 
 const $ = id => document.getElementById(id);
 const isAddr = a => /^0x[a-fA-F0-9]{40}$/i.test(a || "");
@@ -297,23 +308,20 @@ function recriarProviderAposTroca() {
 }
 
 // ============================================================
-// ✅ v6.23: INTEGRAÇÃO CEXSWAP
+// ✅ v6.24: INTEGRAÇÃO CEXSWAP (URLs separadas + aliases)
 // ============================================================
 
 /**
  * Busca preços em USD da CEXSwap.
- * Endpoint público: /api/public/coins/prices-usd
  * Resultado armazenado em `precosCexSwap` (objeto { SYMBOL: preco }).
  */
 async function buscarPrecosCexSwap() {
   try {
-    const r = await fetchTimeout(CEXSWAP_API_URL, 8000);
+    const r = await fetchTimeout(CEXSWAP_PRICES_URL, 8000);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
 
-    // Aceita múltiplos formatos possíveis de resposta
     if (data?.success && data?.data) {
-      // Formato do backend proxy: { success: true, data: {...} }
       if (Array.isArray(data.data)) {
         data.data.forEach(item => {
           const sym = (item.symbol || item.code || "").toUpperCase();
@@ -344,18 +352,20 @@ async function buscarPrecosCexSwap() {
 
 /**
  * Busca resumo do mercado 24h da CEXSwap.
- * Endpoint público: /api/public/markets/summary
  * Resultado armazenado em `mercadoCexSwap` (array).
  */
 async function buscarResumoMercado() {
   try {
-    const r = await fetchTimeout(CEXSWAP_API_URL, 8000);
+    const r = await fetchTimeout(CEXSWAP_MARKETS_URL, 8000);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
 
     let lista = [];
     if (data?.success && Array.isArray(data?.data)) lista = data.data;
     else if (Array.isArray(data)) lista = data;
+    else if (data?.success && typeof data?.data === "object") {
+      lista = Object.entries(data.data).map(([pair, info]) => ({ pair, ...info }));
+    }
 
     mercadoCexSwap = lista;
     console.log(`✅ CEXSwap: ${lista.length} pares carregados.`);
@@ -367,13 +377,37 @@ async function buscarResumoMercado() {
 }
 
 /**
- * Helper: retorna o preço em USD de um símbolo (ex: "BRN", "USDT").
- * Procura em `precosCexSwap`. Case-insensitive.
+ * ✅ v6.24: retorna o preço em USD de um símbolo.
+ * Remove sufixos de rede (-BSC, -ETH) e ".e" (USDC.e/USDT.e),
+ * e aplica aliases (WPOL→POL, WETH→ETH, WBTC→BTC).
  */
 function precoUsd(symbol) {
   if (!symbol) return null;
-  const s = symbol.toUpperCase().replace(/-(BSC|ETH|E)$/, ""); // remove sufixos de rede
-  return precosCexSwap[s] ?? precosCexSwap[symbol.toUpperCase()] ?? null;
+  const base = symbol.toUpperCase()
+    .replace(/-(BSC|ETH)$/, "")
+    .replace(/\.E$/, "");
+  const aliases = { "WPOL": "POL", "WETH": "ETH", "WBTC": "BTC" };
+  const sym = aliases[base] || base;
+  return precosCexSwap[sym] ?? precosCexSwap[symbol.toUpperCase()] ?? null;
+}
+
+/**
+ * ✅ v6.24: retorna a variação % 24h de um símbolo (mercadoCexSwap).
+ */
+function variacao24h(symbol) {
+  if (!symbol || !mercadoCexSwap.length) return null;
+  const base = symbol.toUpperCase()
+    .replace(/-(BSC|ETH)$/, "")
+    .replace(/\.E$/, "");
+  const aliases = { "WPOL": "POL", "WETH": "ETH", "WBTC": "BTC" };
+  const sym = (aliases[base] || base).toUpperCase();
+  const m = mercadoCexSwap.find(x => {
+    const pair = (x.pair || x.symbol || "").toUpperCase();
+    return pair === sym || pair.startsWith(sym + "-") || pair.startsWith(sym + "/");
+  });
+  if (!m) return null;
+  const v = Number(m.priceChangePercent ?? m.change24h ?? m.change ?? NaN);
+  return isNaN(v) ? null : v;
 }
 
 /**
@@ -728,13 +762,11 @@ async function consultarSaldoBTC() {
   }
 }
 
-function isBtcAddress(addr) {
-  if (!addr) return false;
-  const a = addr.trim();
-  if (/^bc1[02-9ac-hj-np-z]{25,87}$/i.test(a)) return true;
-  if (/^1[a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(a)) return true;
-  if (/^3[a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(a)) return true;
-  return false;
+// ✅ v6.24: função única (antes havia isBtcAddress + isBtcAddressStrict)
+function isBtcAddress(a) {
+  if (!a) return false;
+  const s = a.trim();
+  return /^(bc1[a-z0-9]{25,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/i.test(s);
 }
 
 function atualizarHintWbtc() {
@@ -1216,12 +1248,6 @@ async function enviarPOL() {
   } finally { isTxBusy = false; }
 }
 
-function isBtcAddressStrict(a) {
-  if (!a) return false;
-  const s = a.trim();
-  return /^(bc1[a-z0-9]{25,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/i.test(s);
-}
-
 async function detectarCarteiraBTC() {
   if (window.unisat)             return { type: "unisat",  provider: window.unisat, label: "UniSat" };
   if (window.okxwallet?.bitcoin) return { type: "okx",     provider: window.okxwallet.bitcoin, label: "OKX Wallet" };
@@ -1319,7 +1345,7 @@ async function enviarBTC() {
     const destino   = $("btcDestinoEnvio").value.trim();
     const valorStr  = $("btcValorEnvio").value.trim().replace(",", ".");
 
-    if (!isBtcAddressStrict(destino)) throw new Error("Endereço Bitcoin inválido (use bc1…, 1… ou 3…)");
+    if (!isBtcAddress(destino)) throw new Error("Endereço Bitcoin inválido (use bc1…, 1… ou 3…)");
     if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
 
     const sats = Math.round(Number(valorStr) * 1e8);
@@ -1396,32 +1422,40 @@ function preencherSeletores() {
   if (fp) fp.innerHTML = '<option value="">Pede: Todos</option>' + filtroOpts;
 }
 
+// ✅ v6.24: carregarSaldos não aborta mais se POL falhar
 async function carregarSaldos() {
   if (!rpcProvider || !userAddress || !S) return;
   const t0 = Date.now();
-  const falhas = [];
+
   try {
     saldos.POL = BigInt((await chamarRPCComFailover(p => p.getBalance(userAddress))).toString());
-    for (const t of TOKENS) {
-      if (t.somenteEth || t.somenteBsc) { saldos[t.address] = 0n; continue; }
-      try {
-        const res = await chamarRPCComFailover(p => p.call({ to: t.address, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress) }));
-        saldos[t.address] = decUint(res.slice(2));
-      } catch (e) {
-        falhas.push(t.symbol);
-        saldos[t.address] = 0n;
-        console.warn(`⚠️ Falha ao ler ${t.symbol}:`, e.message);
-      }
+  } catch (e) {
+    console.warn("⚠️ Falha ao ler POL:", e.message);
+    saldos.POL = 0n;
+  }
+
+  const falhas = [];
+  for (const t of TOKENS) {
+    if (t.somenteEth || t.somenteBsc) { saldos[t.address] = 0n; continue; }
+    try {
+      const res = await chamarRPCComFailover(p => p.call({
+        to: t.address, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress)
+      }));
+      saldos[t.address] = decUint(res.slice(2));
+    } catch (e) {
+      falhas.push(t.symbol);
+      saldos[t.address] = 0n;
+      console.warn(`⚠️ Falha ao ler ${t.symbol}:`, e.message);
     }
+  }
 
-    await Promise.all([carregarSaldosEthereum(), carregarSaldosBSC()]);
+  await Promise.allSettled([carregarSaldosEthereum(), carregarSaldosBSC()]);
 
-    renderizarSaldos();
-    atualizarHintCC();
-    const dt = ((Date.now() - t0) / 1000).toFixed(2);
-    if (falhas.length) console.warn(`⚠️ Saldos lidos em ${dt}s. Falhas: ${falhas.join(", ")}`);
-    else console.log(`✅ Saldos lidos em ${dt}s`);
-  } catch (e) { console.error("Erro ao carregar saldos:", e); }
+  renderizarSaldos();
+  atualizarHintCC();
+  const dt = ((Date.now() - t0) / 1000).toFixed(2);
+  if (falhas.length) console.warn(`⚠️ Saldos lidos em ${dt}s. Falhas: ${falhas.join(", ")}`);
+  else console.log(`✅ Saldos lidos em ${dt}s`);
 }
 
 async function carregarSaldosEthereum() {
@@ -1464,6 +1498,7 @@ async function carregarSaldosBSC() {
   }
 }
 
+// ✅ v6.24: preço + variação 24h nos cards
 function renderizarSaldos() {
   const container = $("balances");
   if (!container) return;
@@ -1482,12 +1517,18 @@ function renderizarSaldos() {
     const enderecoCompleto = userAddress || "— Não conectada —";
     const enderecoCurto = userAddress ? short(userAddress) : "— Não conectada —";
 
-    // ✅ v6.23: preço em USD da CEXSwap (se disponível)
+    // ✅ v6.24: preço em USD + variação 24h
     let precoHtml = "";
     if (mostrarPreco) {
       const symBase = simbolo.split(" ")[0].replace(/-(BSC|ETH)$/, "");
       const p = precoUsd(symBase);
-      if (p) precoHtml = `<span class="bal-preco">${fmtUsd(p)}</span>`;
+      if (p) {
+        const chg = variacao24h(symBase);
+        const chgHtml = (chg != null)
+          ? ` <span class="bal-change ${chg >= 0 ? "up" : "down"}">${chg >= 0 ? "▲" : "▼"} ${Math.abs(chg).toFixed(2)}%</span>`
+          : "";
+        precoHtml = `<span class="bal-preco">${fmtUsd(p)}${chgHtml}</span>`;
+      }
     }
 
     const rodape = `
@@ -2396,8 +2437,9 @@ function iniciarAutoRefresh() {
     if (document.visibilityState === 'visible') {
       if (!loading) carregarOrdens();
       if (userAddress) carregarSaldos();
-      // ✅ v6.23: atualiza preços da CEXSwap a cada 60s
-      if (Object.keys(precosCexSwap).length > 0) buscarPrecosCexSwap().then(() => renderizarSaldos());
+      // ✅ v6.23/v6.24: atualiza preços + markets da CEXSwap a cada 60s
+      buscarPrecosCexSwap().then(() => renderizarSaldos()).catch(() => {});
+      buscarResumoMercado().catch(() => {});
     }
   }, REFRESH_MS);
 }
@@ -2424,7 +2466,7 @@ function configurarEventosWallet() {
 }
 
 async function init() {
-  console.log("🚀 BRN Exchange v6.23 — inicializando…");
+  console.log("🚀 BRN Exchange v6.24 — inicializando…");
 
   inicializarDescobertaCarteiras();
 
@@ -2449,7 +2491,7 @@ async function init() {
     toast("⚠️ Erro na configuração da UI: " + e.message, "warn", 10000);
   }
 
-  // ✅ v6.23: busca preços da CEXSwap em paralelo (não bloqueante)
+  // ✅ v6.23/v6.24: busca preços e markets da CEXSwap em paralelo (não bloqueante)
   buscarPrecosCexSwap().then(() => renderizarSaldos()).catch(() => {});
   buscarResumoMercado().catch(() => {});
 
