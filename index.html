@@ -367,7 +367,7 @@
                 <h2>🌉 Bridge Cross-Chain (SideShift)</h2>
                 <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">
                     Converta <strong>SHIB, USDT e USDC</strong> entre as redes <strong>Polygon ↔ Ethereum ↔ BSC (BNB Chain)</strong>.
-                    Exemplo: <em>SHIB Polygon → SHIB Ethereum</em>, <em>SHIB BSC → SHIB Polygon</em> ou <em>USDT Polygon → USDT BSC</em>.
+                    Exemplo: <em>SHIB Polygon → SHIB Ethereum</em> ou <em>USDT Polygon → USDT BSC</em>.
                     A cotação e custódia são feitas pela
                     <a href="https://sideshift.ai" target="_blank" rel="noopener">SideShift.ai</a> (não-custodial).
                     Você recebe o token direto na rede de destino.
@@ -381,8 +381,12 @@
                             <option value="usdc-polygon">USDC (Polygon)</option>
                             <option value="shib-polygon">SHIB (Polygon)</option>
                         </optgroup>
+                        <optgroup label="🔷 Ethereum">
+                            <option value="usdt-ethereum">USDT (Ethereum)</option>
+                            <option value="usdc-ethereum">USDC (Ethereum)</option>
+                            <option value="shib-ethereum">SHIB (Ethereum)</option>
+                        </optgroup>
                         <optgroup label="🟡 BSC / BNB Chain">
-                            <option value="shib-bsc">SHIB (BSC / BNB Chain)</option>
                             <option value="usdt-bsc">USDT (BSC / BNB Chain)</option>
                         </optgroup>
                     </select>
@@ -392,6 +396,11 @@
                 <div class="input-group">
                     <label>Token de destino:</label>
                     <select id="ccTokenDestino">
+                        <optgroup label="⛓️ Polygon">
+                            <option value="usdt-polygon">USDT (Polygon)</option>
+                            <option value="usdc-polygon">USDC (Polygon)</option>
+                            <option value="shib-polygon">SHIB (Polygon)</option>
+                        </optgroup>
                         <optgroup label="🔷 Ethereum">
                             <option value="usdt-ethereum">USDT (Ethereum)</option>
                             <option value="usdc-ethereum">USDC (Ethereum)</option>
@@ -399,12 +408,6 @@
                         </optgroup>
                         <optgroup label="🟡 BSC / BNB Chain">
                             <option value="usdt-bsc">USDT (BSC / BNB Chain)</option>
-                            <option value="shib-bsc">SHIB (BSC / BNB Chain)</option>
-                        </optgroup>
-                        <optgroup label="⛓️ Polygon">
-                            <option value="usdt-polygon">USDT (Polygon)</option>
-                            <option value="usdc-polygon">USDC (Polygon)</option>
-                            <option value="shib-polygon">SHIB (Polygon)</option>
                         </optgroup>
                     </select>
                     <small class="dim" style="display:block; margin-top:4px;">
@@ -547,6 +550,6 @@
     <div id="toasts" class="toast-container"></div>
 
     <!-- ==================== SCRIPTS ==================== -->
-    <script src="app.js?v=6.13"></script>
+    <script src="app.js?v=6.14"></script>
 </body>
 </html>
