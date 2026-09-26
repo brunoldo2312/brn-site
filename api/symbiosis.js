@@ -1,10 +1,10 @@
 // ============================================================
 // api/symbiosis.js — Proxy Vercel para Symbiosis Finance
 // Cross-chain SHIB BSC ↔ SHIB Polygon
-// Versão: v4 — Corrigido para API v1 oficial (/v1/swap)
 //
-// Variável de ambiente:
+// Variável de ambiente obrigatória:
 //   SYMBIOSIS_PARTNER_ADDRESS → Endereço EVM que recebe as taxas
+//   (ex: "0xd661b57112426d662845699be70a1b115a1baa63")
 // ============================================================
 
 const SYMBIOSIS_API = "https://api.symbiosis.finance/crosschain";
@@ -71,7 +71,8 @@ export default async function handler(req, res) {
       },
       from:     recipient,               // remetente (usuário)
       to:       recipient,               // destinatário
-      slippage: Number(slippage) || 300  // em basis points (300 = 3%)
+      slippage: Number(slippage) || 300, // em basis points (300 = 3%)
+      partnerAddress: partnerAddress     // ✅ endereço para taxas de parceiro
     };
 
     console.log("[symbiosis] POST /v1/swap body:", JSON.stringify(swapBody));
