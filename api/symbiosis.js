@@ -1,14 +1,16 @@
 // ============================================================
 // api/symbiosis.js — Proxy Vercel para Symbiosis Finance
 // Cross-chain SHIB BSC ↔ SHIB Polygon
+// Versão: v4 — Corrigido para API v1 oficial (/v1/swap)
 //
-// Variáveis de ambiente (OPCIONAL):
-//   SYMBIOSIS_PARTNER_ID → Identificador do seu site (ex: "brn-exchange")
+// Variável de ambiente:
+//   SYMBIOSIS_PARTNER_ADDRESS → Endereço EVM que recebe as taxas
 // ============================================================
 
 const SYMBIOSIS_API = "https://api.symbiosis.finance/crosschain";
 
 export default async function handler(req, res) {
+  // ---- CORS ----
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -18,55 +20,117 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: "Método não permitido. Use POST." });
   }
 
-  const { fromChainId, fromToken, toChainId, toToken, amount, recipient, slippage } = req.body || {};
+  // ---- Variável de ambiente (nome correto) ----
+  const partnerAddress = process.env.SYMBIOSIS_PARTNER_ADDRESS || "";
 
-  if (!fromChainId || !fromToken || !toChainId || !toToken || !amount || !recipient) {
-    return res.status(400).json({ success: false, error: "Campos obrigatórios ausentes." });
+  console.log("[symbiosis] Env carregada:", {
+    partnerAddressExiste: !!partnerAddress,
+    preview: partnerAddress ? partnerAddress.slice(0, 10) + "..." : "VAZIA"
+  });
+
+  if (!partnerAddress) {
+    return res.status(500).json({
+      success: false,
+      error: "SYMBIOSIS_PARTNER_ADDRESS não configurada no Vercel."
+    });
   }
 
-  const partnerId = process.env.SYMBIOSIS_PARTNER_ID || "brn-exchange";
+  // ---- Parâmetros de entrada ----
+  const {
+    fromChainId,
+    fromToken,
+    fromDecimals,
+    toChainId,
+    toToken,
+    toDecimals,
+    amount,
+    recipient,
+    slippage
+  } = req.body || {};
+
+  if (!fromChainId || !fromToken || !toChainId || !toToken || !amount || !recipient) {
+    return res.status(400).json({
+      success: false,
+      error: "Campos obrigatórios: fromChainId, fromToken, toChainId, toToken, amount, recipient"
+    });
+  }
 
   try {
-    // 1. Obter cotação (quote) — retorna o calldata para executar o swap
-    const quoteResp = await fetch(`${SYMBIOSIS_API}/v2/quote`, {
+    // ---- Formato oficial da API Symbiosis v1 (/v1/swap) ----
+    const swapBody = {
+      tokenAmountIn: {
+        chainId:  Number(fromChainId),
+        address:  fromToken,
+        amount:   String(amount),
+        decimals: Number(fromDecimals) || 18
+      },
+      tokenOut: {
+        chainId:  Number(toChainId),
+        address:  toToken,
+        decimals: Number(toDecimals) || 18
+      },
+      from:     recipient,               // remetente (usuário)
+      to:       recipient,               // destinatário
+      slippage: Number(slippage) || 300  // em basis points (300 = 3%)
+    };
+
+    console.log("[symbiosis] POST /v1/swap body:", JSON.stringify(swapBody));
+
+    const swapResp = await fetch(`${SYMBIOSIS_API}/v1/swap`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Partner-Id": partnerId
+        "X-Partner-Id": partnerAddress   // header obrigatório
       },
-      body: JSON.stringify({
-        from: { chainId: fromChainId, tokenAddress: fromToken },
-        to:   { chainId: toChainId,   tokenAddress: toToken, receiver: recipient },
-        amount: String(amount),
-        slippage: slippage || 100 // 1%
-      })
+      body: JSON.stringify(swapBody)
     });
 
-    if (!quoteResp.ok) {
-      const errData = await quoteResp.json().catch(() => ({}));
-      const msg = (errData.error && errData.error.message) || ("HTTP " + quoteResp.status);
-      console.error("[symbiosis] Erro na cotação:", msg);
-      return res.status(502).json({ success: false, error: "Cotação falhou: " + msg });
+    const rawText = await swapResp.text();
+    console.log("[symbiosis] HTTP", swapResp.status, "| Resposta:", rawText.slice(0, 600));
+
+    if (!swapResp.ok) {
+      let errMsg = `HTTP ${swapResp.status}`;
+      try {
+        const errJson = JSON.parse(rawText);
+        errMsg = errJson.error?.message || errJson.message || errJson.error || errMsg;
+      } catch {}
+      return res.status(502).json({ success: false, error: "Swap falhou: " + errMsg });
     }
 
-    const quote = await quoteResp.json();
-
-    if (!quote.tx || !quote.tx.to) {
-      return res.status(502).json({ success: false, error: "Resposta sem calldata de transação." });
+    let swapData;
+    try {
+      swapData = JSON.parse(rawText);
+    } catch {
+      return res.status(502).json({
+        success: false,
+        error: "Symbiosis não retornou JSON válido.",
+        raw: rawText.slice(0, 300)
+      });
     }
 
-    // 2. Retornar os dados para o front-end assinar
+    // ---- A API v1 retorna { tx: { to, data, value }, approveTo, ... } ----
+    if (!swapData.tx || !swapData.tx.to) {
+      return res.status(502).json({
+        success: false,
+        error: "Resposta sem calldata de transação.",
+        raw: swapData
+      });
+    }
+
+    // ---- Retorno para o front-end ----
     return res.status(200).json({
       success: true,
       tx: {
-        to: quote.tx.to,
-        data: quote.tx.data,
-        value: quote.tx.value || "0",
-        gasLimit: quote.tx.gas || "900000"
+        to:       swapData.tx.to,
+        data:     swapData.tx.data,
+        value:    swapData.tx.value || "0",
+        gasLimit: swapData.tx.gas || swapData.tx.gasLimit || "900000"
       },
-      approveTo: quote.approveTo || quote.tx.to,
-      amountOut: quote.to?.amount || "0",
-      amountIn: quote.from?.amount || amount
+      approveTo: swapData.approveTo || swapData.tx.to,
+      amountOut: swapData.tokenAmountOut?.amount || "0",
+      amountIn:  swapData.tokenAmountIn?.amount || amount,
+      fees:      swapData.fees || null,
+      route:     swapData.route || null
     });
 
   } catch (e) {
