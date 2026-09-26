@@ -1,13 +1,14 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.13
-// ✅ Bridge Cross-Chain SHIB Polygon ↔ Ethereum ↔ BSC (SideShift)
+// APP.JS — BRN Exchange | Versão 6.14
+// ✅ Bridge Cross-Chain SHIB/USDT/USDC Polygon ↔ Ethereum ↔ BSC (SideShift)
+// ✅ REMOVIDO: shib-bsc (SideShift não suporta essa rede)
 // ✅ Confirmação clara mostrando rede de envio + aviso de gas
-// ✅ Hint mostra "Saldo na BSC" / "Saldo na Polygon" / "Saldo na Ethereum"
+// ✅ Hint mostra "Saldo na BSC" / "Saldo na Polygon" / "Saldo na Ethereum" (símbolo limpo)
 // ✅ Bloqueia mesma rede na origem e destino
 // ✅ Leitura de saldos na BSC/BNB Chain (SHIB-BSC, USDT-BSC, USDC-BSC, BNB)
 // ✅ Endereço reduzido no rodapé dos cards + clique copia
 // ✅ Endereços em minúsculo (fix "bad address checksum")
-// ✅ RPC Polygon + Ethereum + BSC sem 401/CORS
+// ✅ RPCs Polygon + Ethereum + BSC sem 401/CORS (vivos em 2026-09)
 // ✅ Modal "Carteiras Aceitas" com detecção dinâmica (EIP-6963)
 // ✅ Multi-carteira via EIP-6963 + Brave + Pelagus
 // ✅ Botão 📋 para copiar contrato + rodapé "ENDEREÇO BRN" marrom
@@ -39,6 +40,7 @@ const TOKENS = [
 
   // ===== ETHEREUM (somente leitura) =====
   { symbol: "USDT-ETH",   name: "Tether USD (Ethereum)", address: "0xdac17f958d2ee523a2206206994597c13d831ec7", decimals: 6,  somenteEth: true, rede: "Ethereum" },
+  { symbol: "USDC-ETH",   name: "USD Coin (Ethereum)",   address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", decimals: 6,  somenteEth: true, rede: "Ethereum" },
   { symbol: "SHIB-ETH",   name: "Shiba Inu (Ethereum)",  address: "0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce", decimals: 18, somenteEth: true, rede: "Ethereum" },
 
   // ===== BSC / BNB Chain (somente leitura) =====
@@ -47,6 +49,8 @@ const TOKENS = [
   { symbol: "USDC-BSC",   name: "USD Coin (BSC)",        address: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", decimals: 18, somenteBsc: true, rede: "BSC" }
 ];
 
+// ⚠️ v6.14: shib-bsc REMOVIDO — a SideShift não suporta SHIB na rede BSC.
+// Pares suportados: shib/polygon, shib/ethereum, usdt/{polygon,ethereum,bsc}, usdc/{polygon,ethereum}, wbtc→btc
 const SIDESHIFT_MAP = {
   "usdt-polygon":  { coin: "usdt", network: "polygon",  tokenSymbol: "USDT" },
   "usdc-polygon":  { coin: "usdc", network: "polygon",  tokenSymbol: "USDC" },
@@ -54,29 +58,33 @@ const SIDESHIFT_MAP = {
   "usdt-ethereum": { coin: "usdt", network: "ethereum", tokenSymbol: "USDT-ETH" },
   "usdc-ethereum": { coin: "usdc", network: "ethereum", tokenSymbol: "USDC-ETH" },
   "shib-ethereum": { coin: "shib", network: "ethereum", tokenSymbol: "SHIB-ETH" },
-  "shib-bsc":      { coin: "shib", network: "bsc",      tokenSymbol: "SHIB-BSC" },
   "usdt-bsc":      { coin: "usdt", network: "bsc",      tokenSymbol: "USDT-BSC" }
 };
 
+// ✅ v6.14: RPCs Polygon atualizados (polygon.publicnode.com removido — timeout frequente)
 const RPC_LIST = [
-  "https://polygon.publicnode.com",
+  "https://polygon-rpc.com",
+  "https://polygon.llamarpc.com",
   "https://polygon.drpc.org",
   "https://1rpc.io/matic",
   "https://polygon-bor-rpc.publicnode.com"
 ];
 
+// ✅ v6.14: RPCs Ethereum atualizados
 const ETH_RPC_LIST = [
   "https://ethereum.publicnode.com",
+  "https://eth.llamarpc.com",
   "https://eth.drpc.org",
-  "https://1rpc.io/eth",
-  "https://eth-mainnet.public.blastapi.io"
+  "https://1rpc.io/eth"
 ];
 
+// ✅ v6.14: RPCs BSC atualizados (removidos binance.llamarpc.com morto e bsc.drpc.org com 429)
 const BSC_RPC_LIST = [
   "https://bsc-dataseed1.binance.org",
+  "https://bsc-dataseed2.binance.org",
+  "https://bsc-dataseed3.binance.org",
   "https://bsc.publicnode.com",
-  "https://binance.llamarpc.com",
-  "https://bsc.drpc.org"
+  "https://bsc-rpc.publicnode.com"
 ];
 
 const WALLETS_EVM_CATALOG = [
@@ -404,7 +412,7 @@ function atualizarStatusCarteiras() {
 
 async function testarRPC(url) {
   try {
-    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 8000 });
+    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 6000 });
     const rede = await p.getNetwork();
     if (rede.chainId === POLYGON_CHAIN_ID) return p;
   } catch {}
@@ -425,7 +433,7 @@ async function conectarRPC() {
 
 async function testarRPCEth(url) {
   try {
-    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 8000 });
+    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 6000 });
     const rede = await p.getNetwork();
     if (rede.chainId === 1) return p;
   } catch {}
@@ -450,7 +458,7 @@ async function conectarRPCEth() {
 
 async function testarRPCBSC(url) {
   try {
-    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 8000 });
+    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 6000 });
     const rede = await p.getNetwork();
     if (rede.chainId === BSC_CHAIN_ID) return p;
   } catch {}
@@ -631,7 +639,9 @@ async function atualizarHintCC() {
   const saldo = saldos[token.address] || 0n;
   const nomeRede = { polygon: "Polygon", ethereum: "Ethereum", bsc: "BSC" };
   const redeLabel = nomeRede[origem.network] || origem.network;
-  hint.textContent = `Saldo na ${redeLabel}: ${fmt(saldo, token.decimals)} ${token.symbol}`;
+  // ✅ v6.14: mostra símbolo limpo (SHIB em vez de SHIB-BSC)
+  const simboloLimpo = token.symbol.replace(/-(BSC|ETH)$/, "");
+  hint.textContent = `Saldo na ${redeLabel}: ${fmt(saldo, token.decimals)} ${simboloLimpo}`;
 }
 
 async function criarOrdemCrossChain() {
@@ -671,13 +681,15 @@ async function criarOrdemCrossChain() {
   if (saldoOrigem < valorWei) {
     const nomeRede = { polygon: "Polygon", ethereum: "Ethereum", bsc: "BSC" };
     const redeLabel = nomeRede[origem.network] || origem.network;
-    toast(`❌ Saldo insuficiente na ${redeLabel}. Você tem ${fmt(saldoOrigem, tokenOrigem.decimals)} ${tokenOrigem.symbol}.`, "err", 9000);
+    const simboloLimpo = tokenOrigem.symbol.replace(/-(BSC|ETH)$/, "");
+    toast(`❌ Saldo insuficiente na ${redeLabel}. Você tem ${fmt(saldoOrigem, tokenOrigem.decimals)} ${simboloLimpo}.`, "err", 9000);
     return;
   }
 
   const nomeRede = { polygon: "Polygon", ethereum: "Ethereum", bsc: "BSC / BNB Chain" };
   const redeOrigem = nomeRede[origem.network] || origem.network;
   const redeDestino = nomeRede[destino.network] || destino.network;
+  const gasNativo = origem.network === "bsc" ? "BNB" : (origem.network === "ethereum" ? "ETH" : "POL");
 
   const confirmar = window.confirm(
     `🌉 Bridge Cross-Chain\n\n` +
@@ -686,7 +698,7 @@ async function criarOrdemCrossChain() {
     `Endereço de destino (${redeDestino}):\n${destinoAddr}\n\n` +
     `⚠️ IMPORTANTE:\n` +
     `• Após criar a ordem, você precisará enviar o ${origem.coin.toUpperCase()} MANUALMENTE pela rede ${redeOrigem}\n` +
-    `• Você vai precisar de ${origem.network === 'bsc' ? 'BNB' : (origem.network === 'ethereum' ? 'ETH' : 'POL')} para pagar o gas\n` +
+    `• Você vai precisar de ${gasNativo} para pagar o gas\n` +
     `• Ative a rede ${redeOrigem} na sua carteira (MetaMask → Trocar rede)\n\n` +
     `Confira o endereço com MUITO cuidado.\nContinuar?`
   );
@@ -726,7 +738,6 @@ async function criarOrdemCrossChain() {
 
     if (resultBox) { resultBox.style.display = "block"; resultBox.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
 
-    // ✅ Toast explicativo com passo a passo
     toast(
       `✅ Ordem criada! Agora:\n` +
       `1) Abra a MetaMask → troque para a rede ${redeOrigem}\n` +
@@ -2187,7 +2198,7 @@ function configurarEventosWallet() {
 // init
 // ============================================================
 async function init() {
-  console.log("🚀 BRN Exchange v6.13 — inicializando…");
+  console.log("🚀 BRN Exchange v6.14 — inicializando…");
 
   inicializarDescobertaCarteiras();
 
