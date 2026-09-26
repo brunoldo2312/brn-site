@@ -1,9 +1,10 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.17
+// APP.JS — BRN Exchange | Versão 6.18
 // ✅ Symbiosis para SHIB (BSC ↔ Polygon) via proxy Vercel
 // ✅ SideShift para USDT/USDC entre Polygon, Ethereum, BSC
 // ✅ WBTC → BTC (SideShift)
-// ✅ RPCs Polygon + Ethereum + BSC validados (sem 401/CORS/DNS morto)
+// ✅ v6.18: Failover automático entre RPCs (evita timeout travando UI)
+// ✅ v6.18: RPC_LIST limpo (sem drpc.org/blastapi.io)
 // ✅ Confirmação clara mostrando rede de envio + aviso de gas
 // ✅ Hint mostra "Saldo na BSC" / "Saldo na Polygon" / "Saldo na Ethereum"
 // ✅ Bloqueia mesma rede na origem e destino
@@ -73,12 +74,12 @@ const SYMBIOSIS_MAP = {
   "shib-polygon": { coin: "shib", network: "polygon", tokenSymbol: "SHIB",     chainId: POLYGON_CHAIN_ID }
 };
 
-// ✅ v6.17: RPCs Polygon validados (sem 401/CORS/DNS morto)
+// ✅ v6.18: RPCs Polygon limpos (removidos drpc.org timeout e blastapi.io CORS)
 const RPC_LIST = [
-  "https://polygon.drpc.org",
   "https://polygon.publicnode.com",
   "https://1rpc.io/matic",
-  "https://polygon-mainnet.public.blastapi.io"
+  "https://polygon-bor-rpc.publicnode.com",
+  "https://rpc.ankr.com/polygon"
 ];
 
 // ✅ v6.17: RPCs Ethereum validados (removido eth.llamarpc.com com CORS)
@@ -169,6 +170,9 @@ let btcWallet = null;
 let btcSaldoSats = 0;
 let walletEscolhidaRdns = null;
 let eventosWalletConfigurados = false;
+
+// ✅ v6.18: Guarda lista de RPCs Polygon válidos para failover
+let rpcFallbacks = [];
 
 const $ = id => document.getElementById(id);
 const isAddr = a => /^0x[a-fA-F0-9]{40}$/i.test(a || "");
@@ -421,9 +425,10 @@ function atualizarStatusCarteiras() {
   }
 }
 
+// ✅ v6.18: timeout 15s (antes 6s — dava muitos falsos negativos)
 async function testarRPC(url) {
   try {
-    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 6000 });
+    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 15000 });
     const rede = await p.getNetwork();
     if (rede.chainId === POLYGON_CHAIN_ID) return p;
   } catch {}
@@ -438,13 +443,31 @@ async function conectarRPC() {
   }
   if (validos.length === 0) return false;
   rpcProvider = validos[0].p;
+  rpcFallbacks = validos; // ✅ v6.18: guarda lista para failover
   console.log(`✅ ${validos.length} RPC(s) Polygon conectados. Principal: ${validos[0].url}`);
   return true;
 }
 
+// ✅ v6.18: Tenta cada RPC até um funcionar
+async function chamarRPCComFailover(fn) {
+  for (let i = 0; i < rpcFallbacks.length; i++) {
+    try {
+      return await fn(rpcFallbacks[i].p);
+    } catch (e) {
+      const proximo = rpcFallbacks[i + 1];
+      if (proximo) {
+        console.warn(`⚠️ RPC ${rpcFallbacks[i].url} falhou, tentando ${proximo.url}…`);
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error("Todos os RPCs falharam");
+}
+
 async function testarRPCEth(url) {
   try {
-    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 6000 });
+    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 15000 });
     const rede = await p.getNetwork();
     if (rede.chainId === 1) return p;
   } catch {}
@@ -469,7 +492,7 @@ async function conectarRPCEth() {
 
 async function testarRPCBSC(url) {
   try {
-    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 6000 });
+    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 15000 });
     const rede = await p.getNetwork();
     if (rede.chainId === BSC_CHAIN_ID) return p;
   } catch {}
@@ -1154,16 +1177,17 @@ function preencherSeletores() {
   if (fp) fp.innerHTML = '<option value="">Pede: Todos</option>' + filtroOpts;
 }
 
+// ✅ v6.18: usa chamarRPCComFailover
 async function carregarSaldos() {
   if (!rpcProvider || !userAddress || !S) return;
   const t0 = Date.now();
   const falhas = [];
   try {
-    saldos.POL = BigInt((await rpcProvider.getBalance(userAddress)).toString());
+    saldos.POL = BigInt((await chamarRPCComFailover(p => p.getBalance(userAddress))).toString());
     for (const t of TOKENS) {
       if (t.somenteEth || t.somenteBsc) { saldos[t.address] = 0n; continue; }
       try {
-        const res = await rpcProvider.call({ to: t.address, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress) });
+        const res = await chamarRPCComFailover(p => p.call({ to: t.address, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress) }));
         saldos[t.address] = decUint(res.slice(2));
       } catch (e) {
         falhas.push(t.symbol);
@@ -1716,6 +1740,7 @@ async function copiarEndereco() {
 // ============================================================
 // Mural
 // ============================================================
+// ✅ v6.18: usa chamarRPCComFailover
 async function carregarOrdens() {
   if (loading || !rpcProvider || !S) return;
   loading = true;
@@ -1727,10 +1752,10 @@ async function carregarOrdens() {
     if (counter) counter.textContent = "⏳ Consultando…";
     if (container) container.innerHTML = '<div class="state"><div class="spinner"></div><p>Carregando ordens…</p></div>';
 
-    const listaRes = await rpcProvider.call({
+    const listaRes = await chamarRPCComFailover(p => p.call({
       to: ESCROW_FACTORY,
       data: "0x" + S.Factory.todasOrdens
-    });
+    }));
     const enderecos = decodificarListaEnderecos(listaRes);
     const total = enderecos.length;
 
@@ -1745,10 +1770,10 @@ async function carregarOrdens() {
     const ordens = [];
     await Promise.all(enderecos.map(async (endereco, i) => {
       try {
-        const dadosRes = await rpcProvider.call({
+        const dadosRes = await chamarRPCComFailover(p => p.call({
           to: endereco,
           data: "0x" + S.Escrow.obterDados
-        });
+        }));
         const d = decodificarOrdem(dadosRes);
         ordens.push({
           indice: i,
@@ -1884,16 +1909,16 @@ async function criarOrdem() {
     const ofVal = parseUnits(ofStr, ofToken.decimals);
     const deVal = parseUnits(deStr, deToken.decimals);
 
-    const saldo = decUint((await rpcProvider.call({
+    const saldo = decUint((await chamarRPCComFailover(p => p.call({
       to: ofAddr,
       data: "0x" + S.ERC20.balanceOf + encAddr(userAddress)
-    })).slice(2));
+    }))).slice(2));
     if (saldo < ofVal) throw new Error(`Saldo insuficiente de ${ofToken.symbol}`);
 
-    const allowance = decUint((await rpcProvider.call({
+    const allowance = decUint((await chamarRPCComFailover(p => p.call({
       to: ofAddr,
       data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(ESCROW_FACTORY)
-    })).slice(2));
+    }))).slice(2));
 
     if (allowance < ofVal) {
       toast(`⏳ Aprovando ${ofToken.symbol}…`, "info");
@@ -1940,13 +1965,13 @@ async function executarOrdem(escrowAddr) {
   if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
   try {
-    const dadosRes = await rpcProvider.call({ to: escrowAddr, data: "0x" + S.Escrow.obterDados });
+    const dadosRes = await chamarRPCComFailover(p => p.call({ to: escrowAddr, data: "0x" + S.Escrow.obterDados }));
     const d = decodificarOrdem(dadosRes);
 
-    const allowance = decUint((await rpcProvider.call({
+    const allowance = decUint((await chamarRPCComFailover(p => p.call({
       to: d.tokenDesejado,
       data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(escrowAddr)
-    })).slice(2));
+    }))).slice(2));
 
     if (allowance < d.valorDesejado) {
       const tok = tokenPorEndereco(d.tokenDesejado);
@@ -2336,7 +2361,7 @@ function configurarEventosWallet() {
 // init
 // ============================================================
 async function init() {
-  console.log("🚀 BRN Exchange v6.17 — inicializando…");
+  console.log("🚀 BRN Exchange v6.18 — inicializando…");
 
   inicializarDescobertaCarteiras();
 
