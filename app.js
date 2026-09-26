@@ -1,31 +1,19 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.10
-// ✅ NOVO: endereço reduzido no rodapé dos cards (0x1234…abcd)
-// ✅ NOVO: clicar no rodapé copia o endereço completo
-// ✅ Endereços em minúsculo (fix "bad address checksum")
-// ✅ RPC Polygon sem 401 (removido polygon-rpc.com)
-// ✅ RPC Ethereum sem CORS (removido eth.llamarpc.com)
-// ✅ Filtro de console para avisos da MetaMask
-// ✅ Rodapé "ENDEREÇO BRN" marrom no card de cada token
-// ✅ Leitura de saldos na rede Ethereum (USDT-ETH, ETH nativo)
-// ✅ Modal "Carteiras Aceitas" com detecção dinâmica (EIP-6963)
-// ✅ Brave Wallet + Pelagus no catálogo
-// ✅ Sem toast duplicado em conectarCarteira()
-// ✅ USDT-ETH mostra "(Ethereum)" no card de saldos
-// ✅ Flag eventosWalletConfigurados (evita listeners duplicados)
-// ✅ try/catch no setTimeout de inicializarDescobertaCarteiras
-// ✅ Multi-carteira via EIP-6963
-// ✅ Botão 📋 para copiar contrato de cada token
-// ✅ Bridge WBTC → BTC (SideShift)
-// ✅ Bridge Cross-Chain USDT Polygon → USDT Ethereum (SideShift)
-// ✅ traduzirErro() — mensagens amigáveis em PT-BR
-// ✅ Tratamento de cancelamento (code 4001)
-// ✅ BigInt x BigNumber (parseUnits helper)
-// ✅ Seletores ABI calculados após ethers carregar
-// ✅ criarOrdem: (addr, addr, uint, uint)
-// ✅ Mural em 1 chamada (obterContratosGerados)
-// ✅ Envio POL nativo (reserva de gas)
-// ✅ Envio BTC nativo (UniSat/OKX/Leather/Xverse/Magic Eden)
+// APP.JS — BRN Exchange | Versão 6.12
+// ✅ NOVO: Verificador de Redes (Polygon, BSC, Ethereum, Arbitrum, Optimism)
+// ✅ NOVO: Detecção de Solana (Phantom)
+// ✅ NOVO: Badge de rede no header
+// ✅ NOVO: Botão "Minhas Redes" + modal
+// ✅ Suporte BSC (SHIB-BSC, USDT-BSC, USDC-BSC, BUSD-BSC)
+// ✅ Endereço reduzido no rodapé dos cards
+// ✅ Clique no rodapé copia o endereço
+// ✅ Endereços em minúsculo (fix bad address checksum)
+// ✅ RPC Polygon sem 401
+// ✅ RPC Ethereum sem CORS
+// ✅ Rodapé "ENDEREÇO BRN" marrom
+// ✅ Modal "Carteiras Aceitas" (EIP-6963)
+// ✅ Multi-carteira
+// ✅ Bridge WBTC → BTC + Cross-Chain
 // ============================================================
 
 const ESCROW_FACTORY = "0x5c305acff5cdfaee90276c2acea4aa841f7062d8";
@@ -38,16 +26,25 @@ const RESERVA_GAS_POL = "0.05";
 const RESERVA_TAXA_BTC_SATS = 2000;
 
 const TOKENS = [
+  // ---------- POLYGON ----------
   { symbol: "BRN",        name: "BRN Token",             address: "0xdbc1c747b1d4c27113f65a4620b8feac74e2a210", decimals: 18 },
   { symbol: "USDC",       name: "USD Coin (nativo)",     address: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", decimals: 6  },
   { symbol: "USDC.e",     name: "USD Coin (bridged)",    address: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174", decimals: 6  },
   { symbol: "USDT",       name: "Tether USD (nativo)",   address: "0xc2132d05d31c914a87c6611c10748aeb04b58e8a", decimals: 6  },
   { symbol: "USDT.e",     name: "Tether USD (bridged)",  address: "0x9417669fbf23357d2774e9d4234219952d36a1e5", decimals: 6  },
-  { symbol: "USDT-ETH",   name: "Tether USD (Ethereum)", address: "0xdac17f958d2ee523a2206206994597c13d831ec7", decimals: 6, somenteEth: true, rede: "Ethereum" },
   { symbol: "SHIB",       name: "Shiba Inu",             address: "0x6f8a06447ff6fcf75d803135a7de15ce88c1d4ec", decimals: 18 },
   { symbol: "WPOL",       name: "Wrapped POL",           address: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270", decimals: 18 },
   { symbol: "WBTC",       name: "Wrapped BTC",           address: "0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6", decimals: 8  },
-  { symbol: "WETH",       name: "Wrapped Ether",         address: "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619", decimals: 18 }
+  { symbol: "WETH",       name: "Wrapped Ether",         address: "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619", decimals: 18 },
+
+  // ---------- ETHEREUM ----------
+  { symbol: "USDT-ETH",   name: "Tether USD (Ethereum)", address: "0xdac17f958d2ee523a2206206994597c13d831ec7", decimals: 6, somenteEth: true, rede: "Ethereum" },
+
+  // ---------- BSC ----------
+  { symbol: "SHIB-BSC",   name: "Shiba Inu (BSC)",       address: "0x2859e4544c4bb03966803b044a93563bd2d0dd4d", decimals: 18, somenteBsc: true, rede: "BSC" },
+  { symbol: "USDT-BSC",   name: "Tether USD (BSC)",      address: "0x55d398326f99059ff775485246999027b3197955", decimals: 18, somenteBsc: true, rede: "BSC" },
+  { symbol: "USDC-BSC",   name: "USD Coin (BSC)",        address: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", decimals: 18, somenteBsc: true, rede: "BSC" },
+  { symbol: "BUSD-BSC",   name: "BUSD (BSC)",            address: "0xe9e7cea3dedca5984780bafc599bd69add087d56", decimals: 18, somenteBsc: true, rede: "BSC" }
 ];
 
 const SIDESHIFT_MAP = {
@@ -70,6 +67,22 @@ const ETH_RPC_LIST = [
   "https://1rpc.io/eth",
   "https://eth-mainnet.public.blastapi.io"
 ];
+
+const BSC_RPC_LIST = [
+  "https://bsc.publicnode.com",
+  "https://bsc-dataseed.binance.org",
+  "https://bsc-dataseed1.defibit.io",
+  "https://bsc-dataseed1.ninicoin.io"
+];
+
+// ✅ NOVO v6.12: redes suportadas para o verificador
+const REDES_SUPORTADAS = {
+  137:   { nome: "Polygon",         icone: "🟣", cor: "#8247e5", rpc: "https://polygon.publicnode.com",   explorer: "https://polygonscan.com",         moeda: { name: "POL", symbol: "POL", decimals: 18 } },
+  56:    { nome: "BNB Chain (BSC)", icone: "🟡", cor: "#f0b90b", rpc: "https://bsc.publicnode.com",      explorer: "https://bscscan.com",             moeda: { name: "BNB", symbol: "BNB", decimals: 18 } },
+  1:     { nome: "Ethereum",        icone: "🔷", cor: "#627eea", rpc: "https://ethereum.publicnode.com", explorer: "https://etherscan.io",            moeda: { name: "ETH", symbol: "ETH", decimals: 18 } },
+  42161: { nome: "Arbitrum One",    icone: "🔵", cor: "#28a0f0", rpc: "https://arb1.arbitrum.io/rpc",    explorer: "https://arbiscan.io",             moeda: { name: "ETH", symbol: "ETH", decimals: 18 } },
+  10:    { nome: "Optimism",        icone: "🔴", cor: "#ff0420", rpc: "https://mainnet.optimism.io",     explorer: "https://optimistic.etherscan.io", moeda: { name: "ETH", symbol: "ETH", decimals: 18 } }
+};
 
 // ============================================================
 // Catálogos para o modal "Carteiras Aceitas"
@@ -132,6 +145,8 @@ let signer = null;
 let userAddress = null;
 let rpcProvider = null;
 let ethProvider = null;
+let bscProvider = null;
+let redeAtualChainId = null;   // ✅ NOVO v6.12
 let ordersCache = [];
 let loading = false;
 let isTxBusy = false;
@@ -269,7 +284,7 @@ function carteiraEvmDetectada(rdns) {
 function traduzirErro(e) {
   if (!e) return { msg: "Erro desconhecido.", tipo: "err" };
   if (e.code === 4001 || e.code === "ACTION_REJECTED") return { msg: "Operação cancelada na carteira.", tipo: "warn" };
-  if (e.code === "INSUFFICIENT_FUNDS" || /insufficient funds/i.test(e.message || "")) return { msg: "Saldo insuficiente para pagar o gas. Adicione POL à sua carteira.", tipo: "err" };
+  if (e.code === "INSUFFICIENT_FUNDS" || /insufficient funds/i.test(e.message || "")) return { msg: "Saldo insuficiente para pagar o gas.", tipo: "err" };
   if (/nonce too low|nonce has already been used/i.test(e.message || "")) return { msg: "Sincronização pendente. Espere a tx anterior confirmar e tente de novo.", tipo: "warn" };
   if (/out of gas|gas required exceeds allowance|intrinsic gas too low/i.test(e.message || "")) return { msg: "Gas insuficiente. Aumente o gasLimit ou tente novamente.", tipo: "err" };
   if (/chainId|network changed|wrong network/i.test(e.message || "")) return { msg: "Rede incorreta. Troque para Polygon Mainnet.", tipo: "err" };
@@ -395,6 +410,9 @@ function atualizarStatusCarteiras() {
       bt.textContent = "BTC Wallet: Desconectada";
     }
   }
+
+  // ✅ NOVO v6.12: atualiza badge de rede
+  atualizarBadgeRede();
 }
 
 async function testarRPC(url) {
@@ -440,6 +458,31 @@ async function conectarRPCEth() {
   }
   ethProvider = validos[0].p;
   console.log(`✅ ${validos.length} RPC(s) Ethereum conectados. Principal: ${validos[0].url}`);
+  return true;
+}
+
+async function testarRPCBsc(url) {
+  try {
+    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 8000 });
+    const rede = await p.getNetwork();
+    if (rede.chainId === 56) return p;
+  } catch {}
+  return null;
+}
+
+async function conectarRPCBsc() {
+  if (bscProvider) return true;
+  const validos = [];
+  for (const url of BSC_RPC_LIST) {
+    const p = await testarRPCBsc(url);
+    if (p) validos.push({ url, p });
+  }
+  if (validos.length === 0) {
+    console.warn("⚠️ Nenhum RPC BSC disponível");
+    return false;
+  }
+  bscProvider = validos[0].p;
+  console.log(`✅ ${validos.length} RPC(s) BSC conectados. Principal: ${validos[0].url}`);
   return true;
 }
 
@@ -588,7 +631,7 @@ async function copiarDepositAddress() {
 }
 
 // ============================================================
-// BRIDGE CROSS-CHAIN (USDT Polygon → USDT Ethereum)
+// BRIDGE CROSS-CHAIN
 // ============================================================
 async function atualizarHintCC() {
   const sel = $("ccTokenOrigem");
@@ -924,13 +967,14 @@ function atualizarStatusCarteiraBTC() {
 // Saldos e UI
 // ============================================================
 function preencherSeletores() {
-  const opts = TOKENS.map(t => `<option value="${t.address}">${t.symbol} — ${t.name}</option>`).join("");
+  const tokensPolygon = TOKENS.filter(t => !t.somenteEth && !t.somenteBsc);
+  const opts = tokensPolygon.map(t => `<option value="${t.address}">${t.symbol} — ${t.name}</option>`).join("");
   ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
     const el = $(id);
     if (el) el.innerHTML = opts;
   });
 
-  const filtroOpts = TOKENS.map(t => `<option value="${t.address}">${t.symbol}</option>`).join("");
+  const filtroOpts = tokensPolygon.map(t => `<option value="${t.address}">${t.symbol}</option>`).join("");
   const fo = $("filtroOferece");
   if (fo) fo.innerHTML = '<option value="">Oferece: Todos</option>' + filtroOpts;
   const fp = $("filtroPede");
@@ -944,7 +988,7 @@ async function carregarSaldos() {
   try {
     saldos.POL = BigInt((await rpcProvider.getBalance(userAddress)).toString());
     for (const t of TOKENS) {
-      if (t.somenteEth) { saldos[t.address] = 0n; continue; }
+      if (t.somenteEth || t.somenteBsc) { saldos[t.address] = 0n; continue; }
       try {
         const res = await rpcProvider.call({ to: t.address, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress) });
         saldos[t.address] = decUint(res.slice(2));
@@ -956,6 +1000,7 @@ async function carregarSaldos() {
     }
 
     await carregarSaldosEthereum();
+    await carregarSaldosBsc();
 
     renderizarSaldos();
     atualizarHintCC();
@@ -998,10 +1043,40 @@ async function carregarSaldosEthereum() {
   }
 }
 
-// ============================================================
-// CARD DE SALDO COM RODAPÉ "ENDEREÇO BRN" (MARROM)
-// ✅ v6.10: endereço reduzido no rodapé + clique copia
-// ============================================================
+async function carregarSaldosBsc() {
+  const tokensBsc = TOKENS.filter(t => t.somenteBsc);
+  if (tokensBsc.length === 0) return;
+
+  if (!bscProvider) {
+    const ok = await conectarRPCBsc();
+    if (!ok) {
+      console.warn("⚠️ Não foi possível conectar à rede BSC — pulando saldos BSC");
+      return;
+    }
+  }
+
+  try {
+    saldos["BNB_NATIVO"] = BigInt((await bscProvider.getBalance(userAddress)).toString());
+  } catch (e) {
+    console.warn("Falha ao ler BNB nativo:", e.message);
+    saldos["BNB_NATIVO"] = 0n;
+  }
+
+  for (const t of tokensBsc) {
+    try {
+      const res = await bscProvider.call({
+        to: t.address,
+        data: "0x" + S.ERC20.balanceOf + encAddr(userAddress)
+      });
+      saldos[t.address] = decUint(res.slice(2));
+      console.log(`💰 ${t.symbol}: ${fmt(saldos[t.address], t.decimals)}`);
+    } catch (e) {
+      console.warn(`Falha ao ler ${t.symbol} na BSC:`, e.message);
+      saldos[t.address] = 0n;
+    }
+  }
+}
+
 function renderizarSaldos() {
   const container = $("balances");
   if (!container) return;
@@ -1017,9 +1092,7 @@ function renderizarSaldos() {
       ? `<button class="btn-copy-token" data-copy="${tokenAddr}" data-symbol="${simbolo}" title="Copiar endereço do contrato">📋</button>`
       : "";
 
-    // ✅ Endereço completo (para título e cópia)
     const enderecoCompleto = userAddress || "— Não conectada —";
-    // ✅ Endereço reduzido (para exibir no rodapé)
     const enderecoCurto = userAddress ? short(userAddress) : "— Não conectada —";
 
     const rodape = `
@@ -1041,7 +1114,7 @@ function renderizarSaldos() {
   // ---------- POLYGON ----------
   add("POL (Polygon)", saldos.POL, 18);
   TOKENS.forEach(t => {
-    if (t.somenteEth) return;
+    if (t.somenteEth || t.somenteBsc) return;
     const valor = saldos[t.address] || 0n;
     const rede = t.rede || "Polygon";
     add(`${t.symbol} (${rede})`, valor, t.decimals, { tokenAddr: t.address });
@@ -1069,7 +1142,28 @@ function renderizarSaldos() {
     });
   }
 
-  // ---------- Hints ----------
+  // ---------- BSC ----------
+  const tokensBsc = TOKENS.filter(t => t.somenteBsc);
+  if (tokensBsc.length > 0) {
+    const sep = document.createElement("div");
+    sep.style.cssText = "grid-column: 1 / -1; height: 1px; background: var(--border); margin: 10px 0 6px 0;";
+    container.appendChild(sep);
+
+    const header = document.createElement("div");
+    header.style.cssText = "grid-column: 1 / -1; font-size: 0.85rem; color: #f0b90b; margin-bottom: 4px; font-weight: 600;";
+    header.textContent = "🟡 Saldos na rede BSC / BNB Chain (somente leitura)";
+    container.appendChild(header);
+
+    if (saldos.BNB_NATIVO !== undefined) {
+      add("BNB (BSC)", saldos.BNB_NATIVO, 18);
+    }
+
+    tokensBsc.forEach(t => {
+      const valor = saldos[t.address] || 0n;
+      add(`${t.symbol} (BSC)`, valor, t.decimals, { tokenAddr: t.address });
+    });
+  }
+
   document.querySelectorAll("[data-hint]").forEach(el => {
     const attr = el.getAttribute("data-hint") || "";
     const partes = attr.split(":");
@@ -1122,15 +1216,15 @@ function renderizarSaldos() {
 
       const ok = await copiar(addr);
       if (ok) {
-        const nomeLimpo = sym.replace(/\s*\((Polygon|Ethereum)\)$/, "");
-        toast(`✅ Contrato do ${nomeLimpo} copiado! Cole na MetaMask → "Importar tokens".`, "ok", 7000);
+        const nomeLimpo = sym.replace(/\s*\((Polygon|Ethereum|BSC)\)$/, "");
+        toast(`✅ Contrato do ${nomeLimpo} copiado!`, "ok", 7000);
       } else {
         toast("❌ Não foi possível copiar.", "err");
       }
     });
   });
 
-  // ✅ v6.10: clicar no ENDEREÇO BRN copia ele
+  // ---------- Listener: copiar endereço BRN ----------
   container.querySelectorAll(".bal-endereco").forEach(el => {
     el.addEventListener("click", async (e) => {
       e.stopPropagation();
@@ -1162,7 +1256,229 @@ function renderizarSaldos() {
 }
 
 // ============================================================
-// Modal "Carteiras Aceitas" — renderização dinâmica
+// ✅ NOVO v6.12: Verificador de Redes
+// ============================================================
+async function obterChainIdAtual() {
+  if (!provider) return null;
+  try {
+    const rede = await provider.getNetwork();
+    return rede.chainId;
+  } catch { return null; }
+}
+
+async function trocarRede(chainId) {
+  if (!provider) { toast("Conecte a carteira primeiro.", "warn"); return; }
+  const rede = REDES_SUPORTADAS[chainId];
+  if (!rede) { toast("❌ Rede não suportada.", "err"); return; }
+
+  const chainIdHex = "0x" + chainId.toString(16);
+  try {
+    await provider.send("wallet_switchEthereumChain", [{ chainId: chainIdHex }]);
+    toast(`✅ Rede alterada para ${rede.nome}`, "ok");
+    setTimeout(() => window.location.reload(), 1500);
+  } catch (e) {
+    if (e.code === 4902 || /unrecognized chain/i.test(e.message || "")) {
+      try {
+        await provider.send("wallet_addEthereumChain", [{
+          chainId: chainIdHex,
+          chainName: rede.nome,
+          nativeCurrency: rede.moeda,
+          rpcUrls: [rede.rpc],
+          blockExplorerUrls: [rede.explorer]
+        }]);
+        toast(`✅ Rede ${rede.nome} adicionada! Recarregue a página.`, "ok", 6000);
+      } catch (err) {
+        console.error("addEthereumChain:", err);
+        toast("❌ Não foi possível adicionar a rede.", "err");
+      }
+    } else if (e.code === 4001) {
+      toast("Troca de rede cancelada.", "warn");
+    } else {
+      toast("❌ Falha ao trocar de rede.", "err");
+    }
+  }
+}
+
+function abrirModalRedes() {
+  const modal = $("modalRedes");
+  if (!modal) return;
+  renderizarModalRedes();
+  modal.style.display = "flex";
+  document.body.style.overflow = "hidden";
+}
+
+function fecharModalRedes() {
+  const modal = $("modalRedes");
+  if (!modal) return;
+  modal.style.display = "none";
+  document.body.style.overflow = "";
+}
+
+async function renderizarModalRedes() {
+  const conteudo = $("modalRedesConteudo");
+  if (!conteudo) return;
+
+  if (!userAddress) {
+    conteudo.innerHTML = `
+      <p class="dim" style="padding: 30px; text-align: center; font-size: 0.95rem;">
+        🔌 Conecte sua carteira primeiro para verificar as redes.
+      </p>
+    `;
+    return;
+  }
+
+  const chainAtual = await obterChainIdAtual();
+  redeAtualChainId = chainAtual;
+  const redeAtual = REDES_SUPORTADAS[chainAtual];
+
+  let html = `
+    <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+      <p class="dim" style="font-size: 0.75rem; margin-bottom: 6px; font-weight: 600;">🔑 SEU ENDEREÇO EVM (mesmo em todas as redes):</p>
+      <code style="display: block; word-break: break-all; font-size: 0.82rem; color: #58a6ff;">${userAddress}</code>
+      <p class="dim" style="font-size: 0.7rem; margin-top: 6px;">Polygon + BSC + Ethereum usam o MESMO endereço. Só os saldos são separados.</p>
+    </div>
+  `;
+
+  if (redeAtual) {
+    html += `
+      <div style="background: ${redeAtual.cor}22; border: 2px solid ${redeAtual.cor}; border-radius: 8px; padding: 14px; margin-bottom: 20px;">
+        <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 600;">REDE ATUAL DA CARTEIRA:</p>
+        <div style="font-size: 1.15rem; font-weight: 700;">${redeAtual.icone} ${redeAtual.nome}</div>
+        <p class="dim" style="font-size: 0.72rem; margin-top: 4px;">Chain ID: ${chainAtual}</p>
+      </div>
+    `;
+  } else if (chainAtual) {
+    html += `
+      <div style="background: rgba(218,54,51,0.15); border: 2px solid var(--danger); border-radius: 8px; padding: 14px; margin-bottom: 20px;">
+        <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 600;">REDE ATUAL:</p>
+        <div style="font-size: 1rem; font-weight: 700;">⚠️ Chain ID desconhecido: ${chainAtual}</div>
+      </div>
+    `;
+  }
+
+  html += `
+    <h3 class="modal-section-title">🔀 Redes EVM compatíveis</h3>
+    <p class="dim" style="font-size: 0.8rem; margin-bottom: 12px;">
+      O mesmo endereço <strong>0x...</strong> funciona em todas essas redes. Clique para mudar.
+    </p>
+    <div class="redes-grid">
+  `;
+
+  for (const [idStr, rede] of Object.entries(REDES_SUPORTADAS)) {
+    const id = parseInt(idStr);
+    const ativa = (id === chainAtual);
+    html += `
+      <div class="rede-card ${ativa ? "ativa" : ""}" style="border-color: ${ativa ? rede.cor : "var(--border)"};">
+        <span class="rede-icon">${rede.icone}</span>
+        <span class="rede-nome">${rede.nome}</span>
+        <span class="rede-status ${ativa ? "ok" : "off"}">${ativa ? "✅ Conectada" : "○ Inativa"}</span>
+        ${!ativa ? `<button class="carteira-btn primary" data-chain="${id}">Mudar</button>` : `<span class="dim" style="font-size: 0.7rem;">Rede em uso</span>`}
+      </div>
+    `;
+  }
+  html += `</div>`;
+
+  html += `
+    <h3 class="modal-section-title" style="margin-top: 28px;">☀️ Solana (rede NÃO-EVM)</h3>
+    <p class="dim" style="font-size: 0.8rem; margin-bottom: 12px;">
+      Solana é uma rede diferente. O endereço começa com letras/números e <strong>não é 0x...</strong>.
+    </p>
+    <div id="solana-info" style="background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px;">
+      <p class="dim" style="font-size: 0.85rem;">Verificando carteira Solana...</p>
+    </div>
+  `;
+
+  conteudo.innerHTML = html;
+
+  // Listeners dos botões "Mudar"
+  conteudo.querySelectorAll("[data-chain]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const id = parseInt(btn.getAttribute("data-chain"));
+      fecharModalRedes();
+      await trocarRede(id);
+    });
+  });
+
+  // Detecta Solana (Phantom)
+  const solanaEl = $("solana-info");
+  if (solanaEl) {
+    const phantomSolana = window.phantom?.solana || window.solana;
+    if (phantomSolana && phantomSolana.isPhantom) {
+      solanaEl.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+          <span style="font-size: 1.6rem;">👻</span>
+          <span style="font-weight: 700; font-size: 0.95rem;">Phantom Solana detectada</span>
+        </div>
+        <p class="dim" style="font-size: 0.8rem; margin-bottom: 12px;">
+          Clique para conectar e ver seu endereço Solana.
+        </p>
+        <button id="btnConectarSolana" class="carteira-btn primary" style="background:#9945ff; border-color:#9945ff;">Conectar Solana</button>
+        <div id="solana-endereco" style="margin-top: 12px;"></div>
+      `;
+      const btnSol = $("btnConectarSolana");
+      if (btnSol) {
+        btnSol.addEventListener("click", async () => {
+          try {
+            const resp = await phantomSolana.connect();
+            const endereco = resp.publicKey.toString();
+            $("solana-endereco").innerHTML = `
+              <p class="dim" style="font-size: 0.72rem; font-weight: 600; margin-bottom: 4px;">🔑 SEU ENDEREÇO SOLANA:</p>
+              <code style="display: block; word-break: break-all; font-size: 0.78rem; color: #9945ff;">${endereco}</code>
+              <p class="dim" style="font-size: 0.7rem; margin-top: 6px;">
+                ⚠️ Este endereço é diferente do seu endereço EVM (0x...).<br>
+                Solana tem seu próprio saldo separado.
+              </p>
+            `;
+            toast("✅ Solana conectada!", "ok");
+          } catch (e) {
+            if (e.code === 4001) toast("Conexão Solana cancelada.", "warn");
+            else toast("❌ Falha ao conectar Solana.", "err");
+          }
+        });
+      }
+    } else {
+      solanaEl.innerHTML = `
+        <p style="font-size: 0.85rem;">❌ Nenhuma carteira Solana detectada.</p>
+        <p class="dim" style="font-size: 0.78rem; margin-top: 8px;">
+          Para usar Solana, instale a
+          <a href="https://phantom.app/download" target="_blank" rel="noopener" style="color: #9945ff; font-weight: 600;">Phantom Wallet ↗</a>.
+        </p>
+      `;
+    }
+  }
+}
+
+async function atualizarBadgeRede() {
+  const badge = $("redeBadge");
+  if (!badge) return;
+
+  if (!userAddress) {
+    badge.style.display = "none";
+    return;
+  }
+
+  const chainAtual = await obterChainIdAtual();
+  const rede = REDES_SUPORTADAS[chainAtual];
+
+  if (rede) {
+    badge.style.display = "inline-flex";
+    badge.style.background = rede.cor + "33";
+    badge.style.border = `1px solid ${rede.cor}`;
+    badge.style.color = rede.cor;
+    badge.textContent = `${rede.icone} ${rede.nome}`;
+  } else if (chainAtual) {
+    badge.style.display = "inline-flex";
+    badge.style.background = "rgba(218,54,51,0.2)";
+    badge.style.border = "1px solid var(--danger)";
+    badge.style.color = "var(--danger)";
+    badge.textContent = `⚠️ Chain ${chainAtual}`;
+  } else {
+    badge.style.display = "none";
+  }
+}
+
+// ============================================================
+// Modal "Carteiras Aceitas"
 // ============================================================
 function abrirModalCarteiras() {
   const modal = $("modalCarteiras");
@@ -1264,16 +1580,17 @@ function renderizarModalCarteiras() {
         <span class="carteira-status off">❌ Não instalada</span>
         <a class="carteira-btn" href="${w.install}" target="_blank" rel="noopener">Instalar</a>
       `;
-      btcEl.appendChild(card);
+";
+      btcEl.appendChild(c ard);
     });
   }
 }
 
-// ============================================================
-// Conexão de carteira (multi-provider EIP-6963)
-// ============================================================
-async function conectarCarteira(rdnsForcado) {
-  const carteiras = listarCarteirasDisponiveis();
+// =========================================================== if=
+// Conexão de carteira
+// = ($===========================================================
+async function conectar("Carteira(rdnsForcadowal) {
+  const carteiras = listarCarteletirasDisponiveis();
 
   if (carteiras.length === 0) {
     toast("❌ Nenhuma carteira EVM detectada. Instale MetaMask, Trust Wallet ou Rabby.", "err", 10000);
@@ -1362,8 +1679,7 @@ function desconectarCarteira() {
 
   eventosWalletConfigurados = false;
 
-  if ($("btnConnect")) $("btnConnect").style.display = "block";
-  if ($("walletInfo")) $("walletInfo").style.display = "none";
+  if ($("btnConnect")) $("btnConnect").style.display = "blockInfo")) $("walletInfo").style.display = "none";
   fecharPainelCompartilhar();
   renderizarSaldos();
   aplicarFiltros();
@@ -1603,8 +1919,8 @@ async function criarOrdem() {
     if (!ofToken || !deToken) throw new Error("Selecione os tokens");
     if (mesmoAddr(ofAddr, deAddr)) throw new Error("Tokens devem ser diferentes");
 
-    if (ofToken.somenteEth || deToken.somenteEth) {
-      throw new Error("Token da rede Ethereum não suportado. Este app opera apenas na Polygon.");
+    if (ofToken.somenteEth || deToken.somenteEth || ofToken.somenteBsc || deToken.somenteBsc) {
+      throw new Error("Este app opera apenas na rede Polygon para ordens P2P.");
     }
 
     const ofStr = $("valorOferece").value.trim().replace(",", ".");
@@ -1749,7 +2065,7 @@ async function enviarToken() {
     const token = tokenPorEndereco(tokenAddr);
 
     if (!token) throw new Error("Selecione um token");
-    if (token.somenteEth) throw new Error("Token da rede Ethereum não suportado. Este app opera apenas na Polygon.");
+    if (token.somenteEth || token.somenteBsc) throw new Error("Este app envia apenas tokens da Polygon.");
     if (!isAddr(destino)) throw new Error("Endereço inválido");
     if (mesmoAddr(destino, userAddress)) throw new Error("Não pode enviar para você mesmo");
     if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
@@ -2005,8 +2321,23 @@ function configurarBotoes() {
     });
   }
 
+  // ✅ NOVO v6.12: modal de verificação de redes
+  const mr1 = $("btnMinhasRedes");            if (mr1) mr1.addEventListener("click", abrirModalRedes);
+  const mr2 = $("btnFecharModalRedes");       if (mr2) mr2.addEventListener("click", fecharModalRedes);
+  const mr3 = $("btnFecharModalRedes2");      if (mr3) mr3.addEventListener("click", fecharModalRedes);
+
+  const modalRedes = $("modalRedes");
+  if (modalRedes) {
+    modalRedes.addEventListener("click", (e) => {
+      if (e.target === modalRedes) fecharModalRedes();
+    });
+  }
+
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") fecharModalCarteiras();
+    if (e.key === "Escape") {
+      fecharModalCarteiras();
+      fecharModalRedes();
+    }
   });
 
   ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
@@ -2067,7 +2398,7 @@ function configurarEventosWallet() {
 // init
 // ============================================================
 async function init() {
-  console.log("🚀 BRN Exchange v6.10 — inicializando…");
+  console.log("🚀 BRN Exchange v6.12 — inicializando…");
 
   inicializarDescobertaCarteiras();
 
@@ -2099,6 +2430,7 @@ async function init() {
     ]);
 
     conectarRPCEth().catch(() => {});
+    conectarRPCBsc().catch(() => {});
 
     await new Promise(r => setTimeout(r, 600));
 
