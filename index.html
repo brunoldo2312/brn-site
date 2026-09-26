@@ -4,6 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BRN Exchange — Mural de Ordens P2P</title>
+
+    <!-- ✅ FILTRO DE CONSOLE: remove avisos da MetaMask ANTES de qualquer script rodar -->
+    <script>
+      (function() {
+        const origWarn = console.warn.bind(console);
+        const origError = console.error.bind(console);
+        const origLog = console.log.bind(console);
+
+        const ehRuidoMetaMask = (args) => {
+          const msg = String(args[0] || "");
+          return msg.includes("ObjectMultiplex") ||
+                 msg.includes("MaxListenersExceeded") ||
+                 msg.includes("Possible EventEmitter memory leak");
+        };
+
+        console.warn = (...args) => { if (!ehRuidoMetaMask(args)) origWarn(...args); };
+        console.error = (...args) => { if (!ehRuidoMetaMask(args)) origError(...args); };
+        console.log = (...args) => { if (!ehRuidoMetaMask(args)) origLog(...args); };
+      })();
+    </script>
+
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <script>
