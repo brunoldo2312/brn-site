@@ -1,9 +1,10 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.14
-// ✅ Bridge Cross-Chain SHIB/USDT/USDC Polygon ↔ Ethereum ↔ BSC (SideShift)
-// ✅ REMOVIDO: shib-bsc (SideShift não suporta essa rede)
+// APP.JS — BRN Exchange | Versão 6.16
+// ✅ Symbiosis para SHIB (BSC ↔ Polygon) cross-chain
+// ✅ SideShift para USDT/USDC entre Polygon, Ethereum, BSC
+// ✅ WBTC → BTC (SideShift)
 // ✅ Confirmação clara mostrando rede de envio + aviso de gas
-// ✅ Hint mostra "Saldo na BSC" / "Saldo na Polygon" / "Saldo na Ethereum" (símbolo limpo)
+// ✅ Hint mostra "Saldo na BSC" / "Saldo na Polygon" / "Saldo na Ethereum"
 // ✅ Bloqueia mesma rede na origem e destino
 // ✅ Leitura de saldos na BSC/BNB Chain (SHIB-BSC, USDT-BSC, USDC-BSC, BNB)
 // ✅ Endereço reduzido no rodapé dos cards + clique copia
@@ -12,7 +13,6 @@
 // ✅ Modal "Carteiras Aceitas" com detecção dinâmica (EIP-6963)
 // ✅ Multi-carteira via EIP-6963 + Brave + Pelagus
 // ✅ Botão 📋 para copiar contrato + rodapé "ENDEREÇO BRN" marrom
-// ✅ Bridge WBTC → BTC (SideShift)
 // ✅ traduzirErro() PT-BR + tratamento de cancelamento
 // ============================================================
 
@@ -21,6 +21,7 @@ const POLYGON_CHAIN_ID = 137;
 const BSC_CHAIN_ID = 56;
 const REFRESH_MS = 30000;
 const SIDESHIFT_API_URL = "https://brn-site.vercel.app/api/sideshift";
+const SYMBIOSIS_API_URL = "/api/symbiosis";
 const BLOCKSTREAM_API = "https://blockstream.info/api";
 
 const RESERVA_GAS_POL = "0.05";
@@ -49,8 +50,9 @@ const TOKENS = [
   { symbol: "USDC-BSC",   name: "USD Coin (BSC)",        address: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", decimals: 18, somenteBsc: true, rede: "BSC" }
 ];
 
-// ⚠️ v6.14: shib-bsc REMOVIDO — a SideShift não suporta SHIB na rede BSC.
-// Pares suportados: shib/polygon, shib/ethereum, usdt/{polygon,ethereum,bsc}, usdc/{polygon,ethereum}, wbtc→btc
+// ============================================================
+// MAPA SIDESHIFT — USDT / USDC entre redes
+// ============================================================
 const SIDESHIFT_MAP = {
   "usdt-polygon":  { coin: "usdt", network: "polygon",  tokenSymbol: "USDT" },
   "usdc-polygon":  { coin: "usdc", network: "polygon",  tokenSymbol: "USDC" },
@@ -61,30 +63,34 @@ const SIDESHIFT_MAP = {
   "usdt-bsc":      { coin: "usdt", network: "bsc",      tokenSymbol: "USDT-BSC" }
 };
 
-// ✅ v6.14: RPCs Polygon atualizados (polygon.publicnode.com removido — timeout frequente)
+// ============================================================
+// MAPA SYMBIOSIS — SHIB entre BSC e Polygon (cross-chain real)
+// ============================================================
+const SYMBIOSIS_MAP = {
+  "shib-bsc":     { coin: "shib", network: "bsc",     tokenSymbol: "SHIB-BSC", chainId: BSC_CHAIN_ID },
+  "shib-polygon": { coin: "shib", network: "polygon", tokenSymbol: "SHIB",     chainId: POLYGON_CHAIN_ID }
+};
+
 const RPC_LIST = [
   "https://polygon-rpc.com",
-  "https://polygon.llamarpc.com",
+  "https://polygon.publicnode.com",
   "https://polygon.drpc.org",
-  "https://1rpc.io/matic",
-  "https://polygon-bor-rpc.publicnode.com"
+  "https://1rpc.io/matic"
 ];
 
-// ✅ v6.14: RPCs Ethereum atualizados
 const ETH_RPC_LIST = [
   "https://ethereum.publicnode.com",
-  "https://eth.llamarpc.com",
   "https://eth.drpc.org",
-  "https://1rpc.io/eth"
+  "https://1rpc.io/eth",
+  "https://eth-mainnet.public.blastapi.io"
 ];
 
-// ✅ v6.14: RPCs BSC atualizados (removidos binance.llamarpc.com morto e bsc.drpc.org com 429)
 const BSC_RPC_LIST = [
   "https://bsc-dataseed1.binance.org",
   "https://bsc-dataseed2.binance.org",
-  "https://bsc-dataseed3.binance.org",
   "https://bsc.publicnode.com",
-  "https://bsc-rpc.publicnode.com"
+  "https://bsc-rpc.publicnode.com",
+  "https://1rpc.io/bnb"
 ];
 
 const WALLETS_EVM_CATALOG = [
@@ -626,20 +632,20 @@ async function copiarDepositAddress() {
 }
 
 // ============================================================
-// BRIDGE CROSS-CHAIN — SHIB/USDT/USDC entre Polygon, Ethereum, BSC
+// BRIDGE CROSS-CHAIN — SideShift (USDT/USDC) + Symbiosis (SHIB BSC↔Polygon)
 // ============================================================
 async function atualizarHintCC() {
   const sel = $("ccTokenOrigem");
   const hint = $("ccSaldoHint");
   if (!sel || !hint) return;
-  const origem = SIDESHIFT_MAP[sel.value];
+  const origemKey = sel.value;
+  const origem = SIDESHIFT_MAP[origemKey] || SYMBIOSIS_MAP[origemKey];
   if (!origem) { hint.textContent = "Saldo: —"; return; }
   const token = TOKENS.find(t => t.symbol === origem.tokenSymbol);
   if (!token) { hint.textContent = "Saldo: —"; return; }
   const saldo = saldos[token.address] || 0n;
   const nomeRede = { polygon: "Polygon", ethereum: "Ethereum", bsc: "BSC" };
   const redeLabel = nomeRede[origem.network] || origem.network;
-  // ✅ v6.14: mostra símbolo limpo (SHIB em vez de SHIB-BSC)
   const simboloLimpo = token.symbol.replace(/-(BSC|ETH)$/, "");
   hint.textContent = `Saldo na ${redeLabel}: ${fmt(saldo, token.decimals)} ${simboloLimpo}`;
 }
@@ -656,23 +662,150 @@ async function criarOrdemCrossChain() {
   if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) { toast("Digite uma quantidade válida.", "warn"); return; }
   if (!isAddr(destinoAddr)) { toast("❌ Endereço de destino inválido. Use um endereço 0x...", "err", 8000); return; }
 
+  const isShibPair = SYMBIOSIS_MAP[origemKey] && SYMBIOSIS_MAP[destinoKey];
+  const isSideShiftPair = SIDESHIFT_MAP[origemKey] && SIDESHIFT_MAP[destinoKey];
+
+  if (!isShibPair && !isSideShiftPair) { toast("❌ Par de tokens não suportado.", "err"); return; }
+
+  // ==========================================
+  // FLUXO SHIB (BSC ↔ Polygon) — Symbiosis
+  // ==========================================
+  if (isShibPair) {
+    const origem = SYMBIOSIS_MAP[origemKey];
+    const destino = SYMBIOSIS_MAP[destinoKey];
+
+    if (origem.coin !== destino.coin) {
+      toast("❌ Tokens devem ser do mesmo tipo (SHIB → SHIB).", "err", 8000);
+      return;
+    }
+    if (origem.network === destino.network) {
+      toast("❌ Origem e destino não podem ser a mesma rede.", "warn", 8000);
+      return;
+    }
+
+    const tokenOrigem = TOKENS.find(t => t.symbol === origem.tokenSymbol);
+    if (!tokenOrigem) { toast("❌ Token não encontrado no catálogo.", "err"); return; }
+
+    const saldoOrigem = saldos[tokenOrigem.address] || 0n;
+    const valorWei = parseUnits(valorStr, tokenOrigem.decimals);
+    if (saldoOrigem < valorWei) {
+      const nomeRede = { polygon: "Polygon", bsc: "BSC" };
+      const redeLabel = nomeRede[origem.network] || origem.network;
+      const simboloLimpo = tokenOrigem.symbol.replace(/-(BSC|ETH)$/, "");
+      toast(`❌ Saldo insuficiente na ${redeLabel}. Você tem ${fmt(saldoOrigem, tokenOrigem.decimals)} ${simboloLimpo}.`, "err", 9000);
+      return;
+    }
+
+    const gasNativo = origem.network === "bsc" ? "BNB" : "POL";
+    const redeOrigemLabel = origem.network === "bsc" ? "BSC / BNB Chain" : "Polygon";
+    const redeDestinoLabel = destino.network === "polygon" ? "Polygon" : "BSC / BNB Chain";
+
+    const confirmar = window.confirm(
+      `🐕 Cross-Chain SHIB (Symbiosis)\n\n` +
+      `De: ${valorStr} SHIB (${redeOrigemLabel})\n` +
+      `Para: SHIB (${redeDestinoLabel})\n\n` +
+      `Endereço de destino:\n${destinoAddr}\n\n` +
+      `⚠️ IMPORTANTE:\n` +
+      `• Você vai precisar de ${gasNativo} para pagar o gas\n` +
+      `• Certifique-se de estar na rede ${redeOrigemLabel}\n` +
+      `• O swap leva de 5 a 30 min\n\n` +
+      `Confira o endereço com MUITO cuidado.\nContinuar?`
+    );
+    if (!confirmar) return;
+
+    toast("⏳ Buscando rota na Symbiosis…", "info", 8000);
+    if (resultBox) resultBox.style.display = "none";
+
+    try {
+      const tokenDestino = TOKENS.find(t => t.symbol === destino.tokenSymbol);
+
+      const resp = await fetch(SYMBIOSIS_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fromChainId: origem.chainId,
+          fromToken: tokenOrigem.address,
+          toChainId: destino.chainId,
+          toToken: tokenDestino.address,
+          amount: valorWei.toString(),
+          recipient: destinoAddr,
+          slippage: 100
+        })
+      });
+
+      const data = await resp.json();
+      if (!resp.ok || !data.success) throw new Error(data.error || `HTTP ${resp.status}`);
+
+      // Aprovar SHIB se necessário
+      const approveTo = data.approveTo || data.tx.to;
+      let allowance = 0n;
+      try {
+        const chainProv = origem.network === "bsc" ? bscProvider : rpcProvider;
+        const res = await chainProv.call({
+          to: tokenOrigem.address,
+          data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(approveTo)
+        });
+        allowance = decUint(res.slice(2));
+      } catch (e) {
+        console.warn("Falha ao ler allowance:", e.message);
+      }
+
+      if (allowance < valorWei) {
+        toast(`⏳ Aprovando SHIB…`, "info");
+        const txA = await signer.sendTransaction({
+          to: tokenOrigem.address,
+          data: "0x" + S.ERC20.approve + encAddr(approveTo) + encUint(valorWei),
+          gasLimit: 100000
+        });
+        toastTx("📤 Aprovação:", txA.hash, "ok");
+        await txA.wait();
+        toast("✅ Aprovado!", "ok");
+      }
+
+      toast("⏳ Envie a transação na sua carteira…", "info", 10000);
+      const tx = await signer.sendTransaction({
+        to: data.tx.to,
+        data: data.tx.data,
+        value: data.tx.value || "0x0",
+        gasLimit: data.tx.gasLimit || 900000
+      });
+
+      toastTx("📤 Transação Symbiosis:", tx.hash, "ok");
+      await tx.wait();
+      toast(`✅ Cross-Chain SHIB enviado! Aguarde 5-30 min para receber em ${redeDestinoLabel}.`, "ok", 15000);
+
+      if (resultBox) { resultBox.style.display = "block"; resultBox.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+      $("cc-deposit-amount").textContent = valorStr;
+      $("cc-deposit-token").textContent = `SHIB (${redeOrigemLabel})`;
+      $("cc-deposit-address").textContent = data.tx.to;
+      $("cc-settle-amount").textContent = data.amountOut ? fmt(BigInt(data.amountOut), 18) : "~" + valorStr;
+      $("cc-settle-token").textContent = `SHIB (${redeDestinoLabel})`;
+      $("cc-expires").textContent = "~15 min";
+
+      await carregarSaldos();
+    } catch (e) {
+      console.error("Symbiosis:", e);
+      toast("❌ " + (e.message || "Erro desconhecido"), "err", 10000);
+    }
+    return;
+  }
+
+  // ==========================================
+  // FLUXO SIDESHIFT (USDT/USDC)
+  // ==========================================
   const origem = SIDESHIFT_MAP[origemKey];
   const destino = SIDESHIFT_MAP[destinoKey];
   if (!origem || !destino) { toast("❌ Par de tokens não suportado.", "err"); return; }
 
-  // ✅ Valida que é o mesmo tipo de token (SHIB → SHIB, USDT → USDT)
   if (origem.coin !== destino.coin) {
     toast("❌ Tokens de origem e destino devem ser do mesmo tipo (ex: SHIB → SHIB).", "err", 8000);
     return;
   }
-
-  // ✅ Não permite mesma rede na origem e destino
   if (origem.network === destino.network) {
     toast("❌ Origem e destino não podem ser a mesma rede.", "warn", 8000);
     return;
   }
 
-  // ✅ Identifica o token de origem e valida saldo
   const tokenOrigem = TOKENS.find(t => t.symbol === origem.tokenSymbol);
   if (!tokenOrigem) { toast(`❌ Token ${origem.tokenSymbol} não encontrado no catálogo.`, "err"); return; }
 
@@ -692,7 +825,7 @@ async function criarOrdemCrossChain() {
   const gasNativo = origem.network === "bsc" ? "BNB" : (origem.network === "ethereum" ? "ETH" : "POL");
 
   const confirmar = window.confirm(
-    `🌉 Bridge Cross-Chain\n\n` +
+    `🌉 Bridge Cross-Chain (SideShift)\n\n` +
     `De: ${valorStr} ${origem.coin.toUpperCase()} (${redeOrigem})\n` +
     `Para: ${destino.coin.toUpperCase()} (${redeDestino})\n\n` +
     `Endereço de destino (${redeDestino}):\n${destinoAddr}\n\n` +
@@ -2090,7 +2223,7 @@ function configurarMax() {
   const m8 = $("btnMaxCC");
   if (m8) m8.addEventListener("click", () => {
     const origemKey = $("ccTokenOrigem").value;
-    const origem = SIDESHIFT_MAP[origemKey];
+    const origem = SIDESHIFT_MAP[origemKey] || SYMBIOSIS_MAP[origemKey];
     if (!origem) return;
     const token = TOKENS.find(t => t.symbol === origem.tokenSymbol);
     if (token && saldos[token.address] > 0n) {
@@ -2198,7 +2331,7 @@ function configurarEventosWallet() {
 // init
 // ============================================================
 async function init() {
-  console.log("🚀 BRN Exchange v6.14 — inicializando…");
+  console.log("🚀 BRN Exchange v6.16 — inicializando…");
 
   inicializarDescobertaCarteiras();
 
