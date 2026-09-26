@@ -1,32 +1,25 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.20
-// ✅ v6.20: DOIS BOTÕES para SHIB cross-chain:
-//    🚀 Trocar aqui no site (via /api/symbiosis na Vercel)
-//    🌐 Abrir Symbiosis em nova aba (redirecionamento)
-// ✅ v6.20: FIX — abrirSymbiosisSwap() agora é async (corrige SyntaxError)
+// APP.JS — BRN Exchange | Versão 6.23
+// ✅ v6.23: Integração CEXSwap (prices + markets summary)
+// ✅ v6.22: FIX — trocarRede() usa provider da carteira conectada
+// ✅ v6.22: FIX — recriação de provider pós-troca usa walletEscolhidaRdns
+// ✅ v6.21: Modais customizados (substituem window.confirm)
+// ✅ v6.21: Gas dinâmico (evita falhas de transação)
+// ✅ v6.21: Troca automática de rede no Cross-Chain
+// ✅ v6.21: Auto-refresh respeita visibilidade da aba
+// ✅ v6.20: DOIS BOTÕES para SHIB cross-chain
 // ✅ v6.18: Failover automático entre RPCs Polygon
-// ✅ Symbiosis para SHIB (BSC ↔ Polygon)
-// ✅ SideShift para USDT/USDC entre Polygon, Ethereum, BSC
-// ✅ WBTC → BTC (SideShift)
-// ✅ Confirmação clara mostrando rede de envio + aviso de gas
-// ✅ Hint mostra "Saldo na BSC" / "Saldo na Polygon" / "Saldo na Ethereum"
-// ✅ Bloqueia mesma rede na origem e destino
-// ✅ Leitura de saldos na BSC/BNB Chain (SHIB-BSC, USDT-BSC, USDC-BSC, BNB)
-// ✅ Endereço reduzido no rodapé dos cards + clique copia
-// ✅ Endereços em minúsculo (fix "bad address checksum")
-// ✅ Modal "Carteiras Aceitas" com detecção dinâmica (EIP-6963)
-// ✅ Multi-carteira via EIP-6963 + Brave + Pelagus
-// ✅ Botão 📋 para copiar contrato + rodapé "ENDEREÇO BRN" marrom
-// ✅ traduzirErro() PT-BR + tratamento de cancelamento
 // ============================================================
 
 const ESCROW_FACTORY = "0x5c305acff5cdfaee90276c2acea4aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
 const BSC_CHAIN_ID = 56;
-const REFRESH_MS = 30000;
+const ETH_CHAIN_ID = 1;
+const REFRESH_MS = 60000;
 
 const SIDESHIFT_API_URL = "https://brn-site.vercel.app/api/sideshift";
 const SYMBIOSIS_API_URL = "https://brn-site.vercel.app/api/symbiosis";
+const CEXSWAP_API_URL   = "https://brn-site.vercel.app/api/cexswap"; // ✅ v6.23
 const SYMBIOSIS_APP_URL = "https://app.symbiosis.finance/swap";
 const BLOCKSTREAM_API   = "https://blockstream.info/api";
 
@@ -167,6 +160,10 @@ let eventosWalletConfigurados = false;
 
 let rpcFallbacks = [];
 
+// ✅ v6.23: Caches de dados da CEXSwap
+let precosCexSwap = {};     // { "BRN": 0.05, "USDT": 1.0, ... }
+let mercadoCexSwap = [];    // [ { pair: "WRKZ-DOGE", last: 0.1, ... }, ... ]
+
 const $ = id => document.getElementById(id);
 const isAddr = a => /^0x[a-fA-F0-9]{40}$/i.test(a || "");
 const short = a => isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—";
@@ -215,6 +212,182 @@ function toastBtcTx(txid) {
   container.appendChild(el);
   setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, 9000);
 }
+
+// ============================================================
+// ✅ v6.21: FUNÇÕES AUXILIARES DE UX E SEGURANÇA
+// ============================================================
+
+function confirmarAcao(titulo, mensagem) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("modalConfirmacao");
+    const tituloEl = document.getElementById("modalConfirmTitulo");
+    const msgEl = document.getElementById("modalConfirmMensagem");
+    const btnSim = document.getElementById("btnConfirmSim");
+    const btnNao = document.getElementById("btnConfirmNao");
+
+    if (!modal || !btnSim || !btnNao) {
+      resolve(window.confirm(titulo + "\n\n" + mensagem));
+      return;
+    }
+
+    tituloEl.textContent = titulo;
+    msgEl.textContent = mensagem;
+    modal.style.display = "flex";
+
+    const limpar = () => {
+      modal.style.display = "none";
+      btnSim.removeEventListener("click", onSim);
+      btnNao.removeEventListener("click", onNao);
+    };
+
+    const onSim = () => { limpar(); resolve(true); };
+    const onNao = () => { limpar(); resolve(false); };
+
+    btnSim.addEventListener("click", onSim);
+    btnNao.addEventListener("click", onNao);
+  });
+}
+
+async function estimarGas(txParams) {
+  if (!signer) return null;
+  try {
+    const estimativa = await signer.estimateGas(txParams);
+    return estimativa.mul(120).div(100);
+  } catch (e) {
+    console.warn("⚠️ Falha ao estimar gas, usando fallback:", e.message);
+    return null;
+  }
+}
+
+async function trocarRede(chainId) {
+  const prov = provider?.provider || (walletEscolhidaRdns ? obterProviderPorRdns(walletEscolhidaRdns) : null) || window.ethereum;
+  if (!prov || !prov.request) {
+    toast("❌ Carteira não suporta troca de rede.", "err");
+    return false;
+  }
+  const hexChainId = "0x" + chainId.toString(16);
+  try {
+    await prov.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: hexChainId }],
+    });
+    toast("✅ Rede alterada com sucesso!", "ok");
+    return true;
+  } catch (switchError) {
+    const nomes = { 1: "Ethereum", 56: "BSC (BNB Chain)", 137: "Polygon" };
+    const nomeRede = nomes[chainId] || `Chain ${chainId}`;
+    if (switchError.code === 4902) {
+      toast(`❌ A rede ${nomeRede} não está na sua carteira. Adicione manualmente.`, "warn", 10000);
+    } else {
+      toast("❌ Você precisa aceitar a troca de rede na carteira.", "warn");
+    }
+    return false;
+  }
+}
+
+function recriarProviderAposTroca() {
+  const provEscolhido = walletEscolhidaRdns ? obterProviderPorRdns(walletEscolhidaRdns) : window.ethereum;
+  if (!provEscolhido) {
+    console.warn("⚠️ Provider não encontrado para recriar após troca de rede");
+    return false;
+  }
+  provider = new ethers.providers.Web3Provider(provEscolhido);
+  signer = provider.getSigner();
+  return true;
+}
+
+// ============================================================
+// ✅ v6.23: INTEGRAÇÃO CEXSWAP
+// ============================================================
+
+/**
+ * Busca preços em USD da CEXSwap.
+ * Endpoint público: /api/public/coins/prices-usd
+ * Resultado armazenado em `precosCexSwap` (objeto { SYMBOL: preco }).
+ */
+async function buscarPrecosCexSwap() {
+  try {
+    const r = await fetchTimeout(CEXSWAP_API_URL, 8000);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+
+    // Aceita múltiplos formatos possíveis de resposta
+    if (data?.success && data?.data) {
+      // Formato do backend proxy: { success: true, data: {...} }
+      if (Array.isArray(data.data)) {
+        data.data.forEach(item => {
+          const sym = (item.symbol || item.code || "").toUpperCase();
+          const preco = Number(item.price || item.priceUsd || item.usd || 0);
+          if (sym && preco > 0) precosCexSwap[sym] = preco;
+        });
+      } else if (typeof data.data === "object") {
+        Object.entries(data.data).forEach(([sym, preco]) => {
+          const p = Number(preco);
+          if (sym && p > 0) precosCexSwap[sym.toUpperCase()] = p;
+        });
+      }
+    } else if (Array.isArray(data)) {
+      data.forEach(item => {
+        const sym = (item.symbol || item.code || "").toUpperCase();
+        const preco = Number(item.price || item.priceUsd || item.usd || 0);
+        if (sym && preco > 0) precosCexSwap[sym] = preco;
+      });
+    }
+
+    console.log(`✅ CEXSwap: ${Object.keys(precosCexSwap).length} preços carregados.`);
+    return precosCexSwap;
+  } catch (e) {
+    console.warn("⚠️ CEXSwap prices falhou (não bloqueante):", e.message);
+    return null;
+  }
+}
+
+/**
+ * Busca resumo do mercado 24h da CEXSwap.
+ * Endpoint público: /api/public/markets/summary
+ * Resultado armazenado em `mercadoCexSwap` (array).
+ */
+async function buscarResumoMercado() {
+  try {
+    const r = await fetchTimeout(CEXSWAP_API_URL, 8000);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+
+    let lista = [];
+    if (data?.success && Array.isArray(data?.data)) lista = data.data;
+    else if (Array.isArray(data)) lista = data;
+
+    mercadoCexSwap = lista;
+    console.log(`✅ CEXSwap: ${lista.length} pares carregados.`);
+    return lista;
+  } catch (e) {
+    console.warn("⚠️ CEXSwap markets falhou (não bloqueante):", e.message);
+    return null;
+  }
+}
+
+/**
+ * Helper: retorna o preço em USD de um símbolo (ex: "BRN", "USDT").
+ * Procura em `precosCexSwap`. Case-insensitive.
+ */
+function precoUsd(symbol) {
+  if (!symbol) return null;
+  const s = symbol.toUpperCase().replace(/-(BSC|ETH|E)$/, ""); // remove sufixos de rede
+  return precosCexSwap[s] ?? precosCexSwap[symbol.toUpperCase()] ?? null;
+}
+
+/**
+ * Helper: formata preço em USD para exibição (ex: "$0,0523").
+ */
+function fmtUsd(valor) {
+  if (valor == null || isNaN(valor)) return "—";
+  if (valor >= 1) return `$${valor.toFixed(4)}`;
+  if (valor >= 0.01) return `$${valor.toFixed(4)}`;
+  if (valor >= 0.0001) return `$${valor.toFixed(6)}`;
+  return `$${valor.toExponential(3)}`;
+}
+
+// ============================================================
 
 const announcedProviders = new Map();
 
@@ -591,7 +764,8 @@ async function criarOrdemSideShift() {
   const saldo = saldos[wbtc.address] || 0n;
   if (saldo < valorWei) { toast(`❌ Saldo insuficiente. Você tem ${fmt(saldo, wbtc.decimals)} WBTC.`, "err", 8000); return; }
 
-  const confirmar = window.confirm(
+  const confirmar = await confirmarAcao(
+    "Converter WBTC → BTC",
     `Converter ${valorStr} WBTC (Polygon)\n→ BTC nativo para:\n${btcDestino}\n\nConfira o endereço com MUITO cuidado.\nContinuar?`
   );
   if (!confirmar) return;
@@ -657,7 +831,6 @@ async function atualizarHintCC() {
   hint.textContent = `Saldo na ${redeLabel}: ${fmt(saldo, token.decimals)} ${simboloLimpo}`;
 }
 
-// ✅ v6.20 FIX: async (para permitir await navigator.clipboard dentro)
 async function abrirSymbiosisSwap() {
   if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
 
@@ -682,8 +855,8 @@ async function abrirSymbiosisSwap() {
   const redeOrigemLabel = origem.network === "bsc" ? "BSC / BNB Chain" : "Polygon";
   const redeDestinoLabel = destino.network === "polygon" ? "Polygon" : "BSC / BNB Chain";
 
-  const confirmar = window.confirm(
-    `🌐 Cross-Chain SHIB (abrir Symbiosis em nova aba)\n\n` +
+  const confirmar = await confirmarAcao(
+    "🌐 Cross-Chain SHIB (nova aba)",
     `De: ${valorStr} SHIB (${redeOrigemLabel})\n` +
     `Para: SHIB (${redeDestinoLabel})\n\n` +
     `⚠️ IMPORTANTE:\n` +
@@ -706,9 +879,9 @@ async function abrirSymbiosisSwap() {
   const novaAba = window.open(url, "_blank", "noopener,noreferrer");
 
   if (!novaAba) {
-    const abrirManual = window.confirm(
-      "⚠️ O navegador bloqueou a abertura da nova aba.\n\n" +
-      "Clique em OK e depois cole este endereço no navegador:\n\n" + url
+    const abrirManual = await confirmarAcao(
+      "Abrir link manualmente",
+      "⚠️ O navegador bloqueou a abertura da nova aba.\n\nClique em OK e depois cole este endereço no navegador:\n\n" + url
     );
     if (abrirManual) {
       try {
@@ -777,8 +950,8 @@ async function criarOrdemCrossChain() {
     const redeOrigemLabel = origem.network === "bsc" ? "BSC / BNB Chain" : "Polygon";
     const redeDestinoLabel = destino.network === "polygon" ? "Polygon" : "BSC / BNB Chain";
 
-    const confirmar = window.confirm(
-      `🚀 Cross-Chain SHIB (direto no site via Symbiosis API)\n\n` +
+    const confirmar = await confirmarAcao(
+      "🚀 Cross-Chain SHIB (Symbiosis)",
       `De: ${valorStr} SHIB (${redeOrigemLabel})\n` +
       `Para: SHIB (${redeDestinoLabel})\n\n` +
       `Endereço de destino:\n${destinoAddr}\n\n` +
@@ -790,6 +963,17 @@ async function criarOrdemCrossChain() {
       `Confira o endereço com MUITO cuidado.\nContinuar?`
     );
     if (!confirmar) return;
+
+    const redeAtual = await provider.getNetwork();
+    const chainEsperada = origem.chainId;
+    if (redeAtual.chainId !== chainEsperada) {
+      const nomeRedeAlvo = origem.network === "bsc" ? "BSC (BNB Chain)" : "Polygon";
+      toast(`⚠️ Trocando para ${nomeRedeAlvo}...`, "info");
+      const trocou = await trocarRede(chainEsperada);
+      if (!trocou) return;
+      await new Promise(r => setTimeout(r, 800));
+      if (!recriarProviderAposTroca()) return;
+    }
 
     toast("⏳ Buscando rota na Symbiosis…", "info", 8000);
     if (resultBox) resultBox.style.display = "none";
@@ -831,23 +1015,25 @@ async function criarOrdemCrossChain() {
 
       if (allowance < valorWei) {
         toast(`⏳ Aprovando SHIB…`, "info");
-        const txA = await signer.sendTransaction({
+        const txParams = {
           to: tokenOrigem.address,
-          data: "0x" + S.ERC20.approve + encAddr(approveTo) + encUint(valorWei),
-          gasLimit: 100000
-        });
+          data: "0x" + S.ERC20.approve + encAddr(approveTo) + encUint(valorWei)
+        };
+        const gasEstimado = await estimarGas(txParams);
+        const txA = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 100000 });
         toastTx("📤 Aprovação:", txA.hash, "ok");
         await txA.wait();
         toast("✅ Aprovado!", "ok");
       }
 
       toast("⏳ Envie a transação na sua carteira…", "info", 10000);
-      const tx = await signer.sendTransaction({
+      const txParams = {
         to: data.tx.to,
         data: data.tx.data,
-        value: data.tx.value || "0x0",
-        gasLimit: data.tx.gasLimit || 900000
-      });
+        value: data.tx.value || "0x0"
+      };
+      const gasEstimado = await estimarGas(txParams);
+      const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 900000 });
 
       toastTx("📤 Transação Symbiosis:", tx.hash, "ok");
       await tx.wait();
@@ -900,18 +1086,30 @@ async function criarOrdemCrossChain() {
   const redeDestino = nomeRede[destino.network] || destino.network;
   const gasNativo = origem.network === "bsc" ? "BNB" : (origem.network === "ethereum" ? "ETH" : "POL");
 
-  const confirmar = window.confirm(
-    `🌉 Bridge Cross-Chain (SideShift)\n\n` +
+  const confirmar = await confirmarAcao(
+    "🌉 Bridge Cross-Chain (SideShift)",
     `De: ${valorStr} ${origem.coin.toUpperCase()} (${redeOrigem})\n` +
     `Para: ${destino.coin.toUpperCase()} (${redeDestino})\n\n` +
     `Endereço de destino (${redeDestino}):\n${destinoAddr}\n\n` +
     `⚠️ IMPORTANTE:\n` +
     `• Após criar a ordem, você precisará enviar o ${origem.coin.toUpperCase()} MANUALMENTE pela rede ${redeOrigem}\n` +
     `• Você vai precisar de ${gasNativo} para pagar o gas\n` +
-    `• Ative a rede ${redeOrigem} na sua carteira (MetaMask → Trocar rede)\n\n` +
+    `• Vamos trocar a rede automaticamente se necessário\n\n` +
     `Confira o endereço com MUITO cuidado.\nContinuar?`
   );
   if (!confirmar) return;
+
+  const redeAtual = await provider.getNetwork();
+  const chainEsperada = origem.network === "bsc" ? BSC_CHAIN_ID
+                      : origem.network === "ethereum" ? ETH_CHAIN_ID
+                      : POLYGON_CHAIN_ID;
+  if (redeAtual.chainId !== chainEsperada) {
+    toast(`⚠️ Trocando para ${redeOrigem}...`, "info");
+    const trocou = await trocarRede(chainEsperada);
+    if (!trocou) return;
+    await new Promise(r => setTimeout(r, 800));
+    if (!recriarProviderAposTroca()) return;
+  }
 
   toast("⏳ Criando ordem na SideShift…", "info", 6000);
   if (resultBox) resultBox.style.display = "none";
@@ -949,9 +1147,8 @@ async function criarOrdemCrossChain() {
 
     toast(
       `✅ Ordem criada! Agora:\n` +
-      `1) Abra a MetaMask → troque para a rede ${redeOrigem}\n` +
-      `2) Envie ${data.depositAmount} ${origem.coin.toUpperCase()} para o endereço exibido\n` +
-      `3) Aguarde 5-30 min → você recebe em ${redeDestino}`,
+      `1) Envie ${data.depositAmount} ${origem.coin.toUpperCase()} para o endereço exibido\n` +
+      `2) Aguarde 5-30 min → você recebe em ${redeDestino}`,
       "ok", 20000
     );
   } catch (e) {
@@ -993,13 +1190,17 @@ async function enviarPOL() {
       );
     }
 
-    const confirmar = window.confirm(
+    const confirmar = await confirmarAcao(
+      "Confirmar envio de POL",
       `Enviar ${valorStr} POL para:\n${destino}\n\n⚠️ Transação irreversível. Confira o endereço.\nContinuar?`
     );
     if (!confirmar) { isTxBusy = false; return; }
 
     toast(`⏳ Enviando ${fmt(valor, 18, 6)} POL…`, "info");
-    const tx = await signer.sendTransaction({ to: destino, value: valor, gasLimit: 21000 });
+
+    const txParams = { to: destino, value: valor };
+    const gasEstimado = await estimarGas(txParams);
+    const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 21000 });
 
     toastTx("📤 POL enviado:", tx.hash, "ok");
     await tx.wait();
@@ -1128,7 +1329,10 @@ async function enviarBTC() {
       throw new Error(`Saldo insuficiente. Você tem ${(btcSaldoSats / 1e8).toFixed(8)} BTC (reservando ~${RESERVA_TAXA_BTC_SATS} sats para taxa).`);
     }
 
-    const ok = window.confirm(`Enviar ${valorStr} BTC (${sats} sats) para:\n${destino}\n\n⚠️ Transação irreversível. Continuar?`);
+    const ok = await confirmarAcao(
+      "Confirmar envio de BTC",
+      `Enviar ${valorStr} BTC (${sats} sats) para:\n${destino}\n\n⚠️ Transação irreversível. Continuar?`
+    );
     if (!ok) { isTxBusy = false; return; }
 
     toast(`⏳ Solicitando assinatura na ${btcWallet.label}…`, "info");
@@ -1266,7 +1470,7 @@ function renderizarSaldos() {
   container.innerHTML = "";
 
   const add = (simbolo, valor, decimais, opts = {}) => {
-    const { aviso = null, tokenAddr = null } = opts;
+    const { aviso = null, tokenAddr = null, mostrarPreco = false } = opts;
     const div = document.createElement("div");
     div.className = "bal";
     const classe = valor === 0n ? "v dim" : "v";
@@ -1278,6 +1482,14 @@ function renderizarSaldos() {
     const enderecoCompleto = userAddress || "— Não conectada —";
     const enderecoCurto = userAddress ? short(userAddress) : "— Não conectada —";
 
+    // ✅ v6.23: preço em USD da CEXSwap (se disponível)
+    let precoHtml = "";
+    if (mostrarPreco) {
+      const symBase = simbolo.split(" ")[0].replace(/-(BSC|ETH)$/, "");
+      const p = precoUsd(symBase);
+      if (p) precoHtml = `<span class="bal-preco">${fmtUsd(p)}</span>`;
+    }
+
     const rodape = `
       <div class="bal-endereco" data-copy="${enderecoCompleto}" title="Clique para copiar: ${enderecoCompleto}">
         <span class="bal-endereco-label">ENDEREÇO BRN:</span>
@@ -1288,18 +1500,19 @@ function renderizarSaldos() {
     div.innerHTML = `
       <span class="t">${simbolo}${aviso ? " ⚠️" : ""}${copyBtn}</span>
       <span class="${classe}">${fmt(valor, decimais)}</span>
+      ${precoHtml}
       ${aviso ? `<span class="bal-sub">${aviso}</span>` : ""}
       ${rodape}
     `;
     container.appendChild(div);
   };
 
-  add("POL (Polygon)", saldos.POL, 18);
+  add("POL (Polygon)", saldos.POL, 18, { mostrarPreco: true });
   TOKENS.forEach(t => {
     if (t.somenteEth || t.somenteBsc) return;
     const valor = saldos[t.address] || 0n;
     const rede = t.rede || "Polygon";
-    add(`${t.symbol} (${rede})`, valor, t.decimals, { tokenAddr: t.address });
+    add(`${t.symbol} (${rede})`, valor, t.decimals, { tokenAddr: t.address, mostrarPreco: true });
   });
 
   const tokensEth = TOKENS.filter(t => t.somenteEth);
@@ -1313,11 +1526,11 @@ function renderizarSaldos() {
     header.textContent = "⛓️ Saldos na rede Ethereum (somente leitura)";
     container.appendChild(header);
 
-    if (saldos.ETH_NATIVO !== undefined) add("ETH (Ethereum)", saldos.ETH_NATIVO, 18);
+    if (saldos.ETH_NATIVO !== undefined) add("ETH (Ethereum)", saldos.ETH_NATIVO, 18, { mostrarPreco: true });
 
     tokensEth.forEach(t => {
       const valor = saldos[t.address] || 0n;
-      add(`${t.symbol} (Ethereum)`, valor, t.decimals, { tokenAddr: t.address });
+      add(`${t.symbol} (Ethereum)`, valor, t.decimals, { tokenAddr: t.address, mostrarPreco: true });
     });
   }
 
@@ -1332,11 +1545,11 @@ function renderizarSaldos() {
     header.textContent = "🟡 Saldos na BSC / BNB Chain (somente leitura)";
     container.appendChild(header);
 
-    if (saldos.BNB_NATIVO !== undefined) add("BNB (BSC)", saldos.BNB_NATIVO, 18);
+    if (saldos.BNB_NATIVO !== undefined) add("BNB (BSC)", saldos.BNB_NATIVO, 18, { mostrarPreco: true });
 
     tokensBsc.forEach(t => {
       const valor = saldos[t.address] || 0n;
-      add(`${t.symbol} (BSC)`, valor, t.decimals, { tokenAddr: t.address });
+      add(`${t.symbol} (BSC)`, valor, t.decimals, { tokenAddr: t.address, mostrarPreco: true });
     });
   }
 
@@ -1814,11 +2027,12 @@ async function criarOrdem() {
 
     if (allowance < ofVal) {
       toast(`⏳ Aprovando ${ofToken.symbol}…`, "info");
-      const tx = await signer.sendTransaction({
+      const txParams = {
         to: ofAddr,
-        data: "0x" + S.ERC20.approve + encAddr(ESCROW_FACTORY) + encUint(ofVal),
-        gasLimit: 100000
-      });
+        data: "0x" + S.ERC20.approve + encAddr(ESCROW_FACTORY) + encUint(ofVal)
+      };
+      const gasEstimado = await estimarGas(txParams);
+      const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 100000 });
       toastTx("📤 Aprovação:", tx.hash, "ok");
       await tx.wait();
       toast("✅ Aprovado!", "ok");
@@ -1827,7 +2041,10 @@ async function criarOrdem() {
     toast("⏳ Criando ordem…", "info");
     const data = "0x" + S.Factory.criarOrdem + encAddr(ofAddr) + encAddr(deAddr) + encUint(ofVal) + encUint(deVal);
 
-    const tx = await signer.sendTransaction({ to: ESCROW_FACTORY, data, gasLimit: 900000 });
+    const txParams = { to: ESCROW_FACTORY, data };
+    const gasEstimado = await estimarGas(txParams);
+    const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 900000 });
+
     toastTx("📤 Ordem criada:", tx.hash, "ok");
     await tx.wait();
     toast("✅ Ordem criada com sucesso!", "ok", 6000);
@@ -1857,18 +2074,22 @@ async function executarOrdem(escrowAddr) {
     if (allowance < d.valorDesejado) {
       const tok = tokenPorEndereco(d.tokenDesejado);
       toast(`⏳ Aprovando ${tok?.symbol || "token"}…`, "info");
-      const txA = await signer.sendTransaction({
+      const txParams = {
         to: d.tokenDesejado,
-        data: "0x" + S.ERC20.approve + encAddr(escrowAddr) + encUint(d.valorDesejado),
-        gasLimit: 100000
-      });
+        data: "0x" + S.ERC20.approve + encAddr(escrowAddr) + encUint(d.valorDesejado)
+      };
+      const gasEstimado = await estimarGas(txParams);
+      const txA = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 100000 });
       toastTx("📤 Aprovação:", txA.hash, "ok");
       await txA.wait();
       toast("✅ Aprovado!", "ok");
     }
 
     toast("⏳ Executando…", "info");
-    const tx = await signer.sendTransaction({ to: escrowAddr, data: "0x" + S.Escrow.executar, gasLimit: 300000 });
+    const txParams = { to: escrowAddr, data: "0x" + S.Escrow.executar };
+    const gasEstimado = await estimarGas(txParams);
+    const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 300000 });
+
     toastTx("📤 Transação:", tx.hash, "ok");
     await tx.wait();
     toast("✅ Ordem executada!", "ok", 6000);
@@ -1886,7 +2107,10 @@ async function cancelarOrdem(escrowAddr) {
   isTxBusy = true;
   try {
     toast("⏳ Cancelando…", "info");
-    const tx = await signer.sendTransaction({ to: escrowAddr, data: "0x" + S.Escrow.cancelar, gasLimit: 200000 });
+    const txParams = { to: escrowAddr, data: "0x" + S.Escrow.cancelar };
+    const gasEstimado = await estimarGas(txParams);
+    const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 200000 });
+
     toastTx("📤 Transação:", tx.hash, "ok");
     await tx.wait();
     toast("✅ Ordem cancelada!", "ok", 6000);
@@ -1920,11 +2144,13 @@ async function enviarToken() {
 
     toast(`⏳ Enviando ${fmt(valor, token.decimals, 4)} ${token.symbol}…`, "info");
 
-    const tx = await signer.sendTransaction({
+    const txParams = {
       to: token.address,
-      data: "0x" + S.ERC20.transfer + encAddr(destino) + encUint(valor),
-      gasLimit: 100000
-    });
+      data: "0x" + S.ERC20.transfer + encAddr(destino) + encUint(valor)
+    };
+    const gasEstimado = await estimarGas(txParams);
+    const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 100000 });
+
     toastTx("📤 Transação:", tx.hash, "ok");
     await tx.wait();
     toast(`✅ ${token.symbol} enviado!`, "ok", 6000);
@@ -1950,7 +2176,11 @@ async function wrapPOL() {
     if (valor > saldos.POL) throw new Error(`Saldo insuficiente. Você tem ${fmt(saldos.POL, 18)} POL.`);
 
     toast(`⏳ Convertendo ${fmt(valor, 18, 4)} POL → WPOL…`, "info");
-    const tx = await signer.sendTransaction({ to: wpol.address, data: "0x" + S.WPOL.deposit, value: valor, gasLimit: 100000 });
+
+    const txParams = { to: wpol.address, data: "0x" + S.WPOL.deposit, value: valor };
+    const gasEstimado = await estimarGas(txParams);
+    const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 100000 });
+
     toastTx("📤 Transação enviada:", tx.hash, "ok");
     await tx.wait();
     toast("✅ POL convertido em WPOL!", "ok", 6000);
@@ -1976,7 +2206,11 @@ async function unwrapWPOL() {
     if (valor > saldoWPOL) throw new Error(`Saldo insuficiente. Você tem ${fmt(saldoWPOL, 18)} WPOL.`);
 
     toast(`⏳ Convertendo ${fmt(valor, 18, 4)} WPOL → POL…`, "info");
-    const tx = await signer.sendTransaction({ to: wpol.address, data: "0x" + S.WPOL.withdraw + encUint(valor), gasLimit: 100000 });
+
+    const txParams = { to: wpol.address, data: "0x" + S.WPOL.withdraw + encUint(valor) };
+    const gasEstimado = await estimarGas(txParams);
+    const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 100000 });
+
     toastTx("📤 Transação enviada:", tx.hash, "ok");
     await tx.wait();
     toast("✅ WPOL convertido em POL!", "ok", 6000);
@@ -2159,8 +2393,12 @@ function configurarBotoes() {
 function iniciarAutoRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = setInterval(() => {
-    if (!loading) carregarOrdens();
-    if (userAddress) carregarSaldos();
+    if (document.visibilityState === 'visible') {
+      if (!loading) carregarOrdens();
+      if (userAddress) carregarSaldos();
+      // ✅ v6.23: atualiza preços da CEXSwap a cada 60s
+      if (Object.keys(precosCexSwap).length > 0) buscarPrecosCexSwap().then(() => renderizarSaldos());
+    }
   }, REFRESH_MS);
 }
 
@@ -2186,7 +2424,7 @@ function configurarEventosWallet() {
 }
 
 async function init() {
-  console.log("🚀 BRN Exchange v6.20 — inicializando…");
+  console.log("🚀 BRN Exchange v6.23 — inicializando…");
 
   inicializarDescobertaCarteiras();
 
@@ -2210,6 +2448,10 @@ async function init() {
     console.error("❌ Falha ao configurar UI:", e);
     toast("⚠️ Erro na configuração da UI: " + e.message, "warn", 10000);
   }
+
+  // ✅ v6.23: busca preços da CEXSwap em paralelo (não bloqueante)
+  buscarPrecosCexSwap().then(() => renderizarSaldos()).catch(() => {});
+  buscarResumoMercado().catch(() => {});
 
   try {
     const [okPoly] = await Promise.all([atualizarStatusRede(), verificarStatusRedeBitcoin()]);
