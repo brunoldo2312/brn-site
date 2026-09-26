@@ -3,6 +3,7 @@
 // ✅ v6.20: DOIS BOTÕES para SHIB cross-chain:
 //    🚀 Trocar aqui no site (via /api/symbiosis na Vercel)
 //    🌐 Abrir Symbiosis em nova aba (redirecionamento)
+// ✅ v6.20: FIX — abrirSymbiosisSwap() agora é async (corrige SyntaxError)
 // ✅ v6.18: Failover automático entre RPCs Polygon
 // ✅ Symbiosis para SHIB (BSC ↔ Polygon)
 // ✅ SideShift para USDT/USDC entre Polygon, Ethereum, BSC
@@ -24,7 +25,6 @@ const POLYGON_CHAIN_ID = 137;
 const BSC_CHAIN_ID = 56;
 const REFRESH_MS = 30000;
 
-// ✅ URLs das APIs (Vercel) e do app da Symbiosis (redirect)
 const SIDESHIFT_API_URL = "https://brn-site.vercel.app/api/sideshift";
 const SYMBIOSIS_API_URL = "https://brn-site.vercel.app/api/symbiosis";
 const SYMBIOSIS_APP_URL = "https://app.symbiosis.finance/swap";
@@ -56,9 +56,6 @@ const TOKENS = [
   { symbol: "USDC-BSC",   name: "USD Coin (BSC)",        address: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", decimals: 18, somenteBsc: true, rede: "BSC" }
 ];
 
-// ============================================================
-// MAPA SIDESHIFT — USDT / USDC entre redes
-// ============================================================
 const SIDESHIFT_MAP = {
   "usdt-polygon":  { coin: "usdt", network: "polygon",  tokenSymbol: "USDT" },
   "usdc-polygon":  { coin: "usdc", network: "polygon",  tokenSymbol: "USDC" },
@@ -69,16 +66,11 @@ const SIDESHIFT_MAP = {
   "usdt-bsc":      { coin: "usdt", network: "bsc",      tokenSymbol: "USDT-BSC" }
 };
 
-// ============================================================
-// MAPA SYMBIOSIS — SHIB entre BSC e Polygon
-// ✅ v6.20: tem chainId (API) E chainName (URL de redirect)
-// ============================================================
 const SYMBIOSIS_MAP = {
   "shib-bsc":     { coin: "shib", network: "bsc",     tokenSymbol: "SHIB-BSC", chainId: BSC_CHAIN_ID,     chainName: "BNB" },
   "shib-polygon": { coin: "shib", network: "polygon", tokenSymbol: "SHIB",     chainId: POLYGON_CHAIN_ID, chainName: "Polygon" }
 };
 
-// ✅ v6.18: RPCs Polygon limpos
 const RPC_LIST = [
   "https://polygon.publicnode.com",
   "https://1rpc.io/matic",
@@ -86,7 +78,6 @@ const RPC_LIST = [
   "https://rpc.ankr.com/polygon"
 ];
 
-// ✅ v6.17: RPCs Ethereum validados
 const ETH_RPC_LIST = [
   "https://ethereum.publicnode.com",
   "https://eth.drpc.org",
@@ -94,7 +85,6 @@ const ETH_RPC_LIST = [
   "https://eth-mainnet.public.blastapi.io"
 ];
 
-// ✅ v6.17: RPCs BSC validados
 const BSC_RPC_LIST = [
   "https://bsc-dataseed1.binance.org",
   "https://bsc-dataseed2.binance.org",
@@ -226,9 +216,6 @@ function toastBtcTx(txid) {
   setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, 9000);
 }
 
-// ============================================================
-// Descoberta multi-carteira via EIP-6963
-// ============================================================
 const announcedProviders = new Map();
 
 function inicializarDescobertaCarteiras() {
@@ -294,9 +281,6 @@ function carteiraEvmDetectada(rdns) {
   return false;
 }
 
-// ============================================================
-// Tradutor de erros → PT-BR
-// ============================================================
 function traduzirErro(e) {
   if (!e) return { msg: "Erro desconhecido.", tipo: "err" };
   if (e.code === 4001 || e.code === "ACTION_REJECTED") return { msg: "Operação cancelada na carteira.", tipo: "warn" };
@@ -589,9 +573,6 @@ function atualizarHintWbtc() {
   hint.textContent = `Saldo: ${fmt(saldo, wbtc.decimals)} WBTC`;
 }
 
-// ============================================================
-// BRIDGE WBTC → BTC (SideShift)
-// ============================================================
 async function criarOrdemSideShift() {
   if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
 
@@ -660,9 +641,6 @@ async function copiarDepositAddress() {
   catch { toast("❌ Não foi possível copiar.", "err"); }
 }
 
-// ============================================================
-// BRIDGE CROSS-CHAIN — SideShift (USDT/USDC) + Symbiosis (SHIB)
-// ============================================================
 async function atualizarHintCC() {
   const sel = $("ccTokenOrigem");
   const hint = $("ccSaldoHint");
@@ -679,8 +657,8 @@ async function atualizarHintCC() {
   hint.textContent = `Saldo na ${redeLabel}: ${fmt(saldo, token.decimals)} ${simboloLimpo}`;
 }
 
-// ✅ v6.20: Abre a Symbiosis em nova aba com parâmetros preenchidos
-function abrirSymbiosisSwap() {
+// ✅ v6.20 FIX: async (para permitir await navigator.clipboard dentro)
+async function abrirSymbiosisSwap() {
   if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
 
   const origemKey = $("ccTokenOrigem").value;
@@ -725,14 +703,12 @@ function abrirSymbiosisSwap() {
     `&tokenOut=${destino.coin.toUpperCase()}`;
 
   console.log("🔗 Abrindo Symbiosis:", url);
-
   const novaAba = window.open(url, "_blank", "noopener,noreferrer");
 
   if (!novaAba) {
     const abrirManual = window.confirm(
       "⚠️ O navegador bloqueou a abertura da nova aba.\n\n" +
-      "Clique em OK e depois cole este endereço no navegador:\n\n" +
-      url
+      "Clique em OK e depois cole este endereço no navegador:\n\n" + url
     );
     if (abrirManual) {
       try {
@@ -750,12 +726,10 @@ function abrirSymbiosisSwap() {
     `1) Conecte a carteira lá\n` +
     `2) Revise o preço e taxas\n` +
     `3) Clique em "Swap" e confirme`,
-    "ok",
-    15000
+    "ok", 15000
   );
 }
 
-// ✅ v6.20: Executa o swap AQUI no site via API Symbiosis
 async function criarOrdemCrossChain() {
   if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
 
@@ -773,9 +747,6 @@ async function criarOrdemCrossChain() {
 
   if (!isShibPair && !isSideShiftPair) { toast("❌ Par de tokens não suportado.", "err"); return; }
 
-  // ==========================================
-  // FLUXO SHIB (BSC ↔ Polygon) — Symbiosis API
-  // ==========================================
   if (isShibPair) {
     const origem = SYMBIOSIS_MAP[origemKey];
     const destino = SYMBIOSIS_MAP[destinoKey];
@@ -832,20 +803,19 @@ async function criarOrdemCrossChain() {
         body: JSON.stringify({
           fromChainId:  origem.chainId,
           fromToken:    tokenOrigem.address,
-          fromDecimals: tokenOrigem.decimals,     // ✅ v6.20
+          fromDecimals: tokenOrigem.decimals,
           toChainId:    destino.chainId,
           toToken:      tokenDestino.address,
-          toDecimals:   tokenDestino.decimals,    // ✅ v6.20
+          toDecimals:   tokenDestino.decimals,
           amount:       valorWei.toString(),
           recipient:    destinoAddr,
-          slippage:     300                       // ✅ v6.20: 3% em basis points
+          slippage:     300
         })
       });
 
       const data = await resp.json();
       if (!resp.ok || !data.success) throw new Error(data.error || `HTTP ${resp.status}`);
 
-      // Aprovar SHIB se necessário
       const approveTo = data.approveTo || data.tx.to;
       let allowance = 0n;
       try {
@@ -899,9 +869,6 @@ async function criarOrdemCrossChain() {
     return;
   }
 
-  // ==========================================
-  // FLUXO SIDESHIFT (USDT/USDC)
-  // ==========================================
   const origem = SIDESHIFT_MAP[origemKey];
   const destino = SIDESHIFT_MAP[destinoKey];
   if (!origem || !destino) { toast("❌ Par de tokens não suportado.", "err"); return; }
@@ -985,8 +952,7 @@ async function criarOrdemCrossChain() {
       `1) Abra a MetaMask → troque para a rede ${redeOrigem}\n` +
       `2) Envie ${data.depositAmount} ${origem.coin.toUpperCase()} para o endereço exibido\n` +
       `3) Aguarde 5-30 min → você recebe em ${redeDestino}`,
-      "ok",
-      20000
+      "ok", 20000
     );
   } catch (e) {
     console.error("CrossChain SideShift:", e);
@@ -1001,9 +967,6 @@ async function copiarCCDepositAddress() {
   catch { toast("❌ Não foi possível copiar.", "err"); }
 }
 
-// ============================================================
-// POL nativo
-// ============================================================
 function calcularPOLDisponivel() {
   const reserva = parseUnits(RESERVA_GAS_POL, 18);
   return saldos.POL > reserva ? saldos.POL - reserva : 0n;
@@ -1026,8 +989,7 @@ async function enviarPOL() {
     if (valor > disponivel) {
       throw new Error(
         `Saldo insuficiente. Você tem ${fmt(saldos.POL, 18)} POL ` +
-        `(reservando ${RESERVA_GAS_POL} POL para gas). ` +
-        `Disponível: ${fmt(disponivel, 18)} POL.`
+        `(reservando ${RESERVA_GAS_POL} POL para gas). Disponível: ${fmt(disponivel, 18)} POL.`
       );
     }
 
@@ -1037,12 +999,7 @@ async function enviarPOL() {
     if (!confirmar) { isTxBusy = false; return; }
 
     toast(`⏳ Enviando ${fmt(valor, 18, 6)} POL…`, "info");
-
-    const tx = await signer.sendTransaction({
-      to: destino,
-      value: valor,
-      gasLimit: 21000
-    });
+    const tx = await signer.sendTransaction({ to: destino, value: valor, gasLimit: 21000 });
 
     toastTx("📤 POL enviado:", tx.hash, "ok");
     await tx.wait();
@@ -1055,14 +1012,9 @@ async function enviarPOL() {
     console.error("enviarPOL:", e);
     const { msg, tipo } = traduzirErro(e);
     toast(msg, tipo, 8000);
-  } finally {
-    isTxBusy = false;
-  }
+  } finally { isTxBusy = false; }
 }
 
-// ============================================================
-// BTC nativo
-// ============================================================
 function isBtcAddressStrict(a) {
   if (!a) return false;
   const s = a.trim();
@@ -1166,24 +1118,17 @@ async function enviarBTC() {
     const destino   = $("btcDestinoEnvio").value.trim();
     const valorStr  = $("btcValorEnvio").value.trim().replace(",", ".");
 
-    if (!isBtcAddressStrict(destino))
-      throw new Error("Endereço Bitcoin inválido (use bc1…, 1… ou 3…)");
-    if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0)
-      throw new Error("Valor inválido");
+    if (!isBtcAddressStrict(destino)) throw new Error("Endereço Bitcoin inválido (use bc1…, 1… ou 3…)");
+    if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
 
     const sats = Math.round(Number(valorStr) * 1e8);
     if (sats <= 0) throw new Error("Valor muito pequeno");
 
     if (btcSaldoSats > 0 && sats > btcSaldoSats - RESERVA_TAXA_BTC_SATS) {
-      throw new Error(
-        `Saldo insuficiente. Você tem ${(btcSaldoSats / 1e8).toFixed(8)} BTC ` +
-        `(reservando ~${RESERVA_TAXA_BTC_SATS} sats para taxa).`
-      );
+      throw new Error(`Saldo insuficiente. Você tem ${(btcSaldoSats / 1e8).toFixed(8)} BTC (reservando ~${RESERVA_TAXA_BTC_SATS} sats para taxa).`);
     }
 
-    const ok = window.confirm(
-      `Enviar ${valorStr} BTC (${sats} sats) para:\n${destino}\n\n⚠️ Transação irreversível. Continuar?`
-    );
+    const ok = window.confirm(`Enviar ${valorStr} BTC (${sats} sats) para:\n${destino}\n\n⚠️ Transação irreversível. Continuar?`);
     if (!ok) { isTxBusy = false; return; }
 
     toast(`⏳ Solicitando assinatura na ${btcWallet.label}…`, "info");
@@ -1196,9 +1141,7 @@ async function enviarBTC() {
       const r = await btcWallet.provider.sendBitcoin(destino, sats);
       txid = typeof r === "string" ? r : (r?.txid || r?.txhash);
     } else if (btcWallet.type === "leather") {
-      const r = await btcWallet.provider.request("sendTransfer", {
-        recipients: [{ address: destino, amount: sats }]
-      });
+      const r = await btcWallet.provider.request("sendTransfer", { recipients: [{ address: destino, amount: sats }] });
       txid = r?.result?.txid || r?.txid;
     }
 
@@ -1214,9 +1157,7 @@ async function enviarBTC() {
     console.error("enviarBTC:", e);
     if (e.code === 4001 || /reject|cancel|denied/i.test(e.message || "")) toast("Envio cancelado.", "warn");
     else toast("❌ " + (e.message || "Erro desconhecido"), "err", 8000);
-  } finally {
-    isTxBusy = false;
-  }
+  } finally { isTxBusy = false; }
 }
 
 async function maxBTCEnvio() {
@@ -1231,18 +1172,11 @@ function atualizarStatusCarteiraBTC() {
   const btn = $("btnConectarBTC");
   if (!btn) return;
   const det = !!(window.unisat || window.okxwallet?.bitcoin || window.LeatherProvider);
-  if (btcWallet) {
-    btn.textContent = "🔌 Reconectar BTC";
-  } else if (det) {
-    btn.textContent = "🔌 Conectar carteira BTC";
-  } else {
-    btn.textContent = "🔌 Instalar carteira BTC";
-  }
+  if (btcWallet) btn.textContent = "🔌 Reconectar BTC";
+  else if (det) btn.textContent = "🔌 Conectar carteira BTC";
+  else btn.textContent = "🔌 Instalar carteira BTC";
 }
 
-// ============================================================
-// Saldos e UI
-// ============================================================
 function preencherSeletores() {
   const tokensPolygon = TOKENS.filter(t => !t.somenteEth && !t.somenteBsc);
   const opts = tokensPolygon.map(t => `<option value="${t.address}">${t.symbol} — ${t.name}</option>`).join("");
@@ -1276,10 +1210,7 @@ async function carregarSaldos() {
       }
     }
 
-    await Promise.all([
-      carregarSaldosEthereum(),
-      carregarSaldosBSC()
-    ]);
+    await Promise.all([carregarSaldosEthereum(), carregarSaldosBSC()]);
 
     renderizarSaldos();
     atualizarHintCC();
@@ -1295,30 +1226,17 @@ async function carregarSaldosEthereum() {
 
   if (!ethProvider) {
     const ok = await conectarRPCEth();
-    if (!ok) {
-      console.warn("⚠️ Não foi possível conectar à rede Ethereum — pulando saldos ETH");
-      return;
-    }
+    if (!ok) { console.warn("⚠️ Não foi possível conectar à rede Ethereum — pulando saldos ETH"); return; }
   }
 
-  try {
-    saldos["ETH_NATIVO"] = BigInt((await ethProvider.getBalance(userAddress)).toString());
-  } catch (e) {
-    console.warn("Falha ao ler ETH nativo:", e.message);
-    saldos["ETH_NATIVO"] = 0n;
-  }
+  try { saldos["ETH_NATIVO"] = BigInt((await ethProvider.getBalance(userAddress)).toString()); }
+  catch (e) { console.warn("Falha ao ler ETH nativo:", e.message); saldos["ETH_NATIVO"] = 0n; }
 
   for (const t of tokensEth) {
     try {
-      const res = await ethProvider.call({
-        to: t.address,
-        data: "0x" + S.ERC20.balanceOf + encAddr(userAddress)
-      });
+      const res = await ethProvider.call({ to: t.address, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress) });
       saldos[t.address] = decUint(res.slice(2));
-    } catch (e) {
-      console.warn(`Falha ao ler ${t.symbol} na Ethereum:`, e.message);
-      saldos[t.address] = 0n;
-    }
+    } catch (e) { console.warn(`Falha ao ler ${t.symbol} na Ethereum:`, e.message); saldos[t.address] = 0n; }
   }
 }
 
@@ -1328,36 +1246,20 @@ async function carregarSaldosBSC() {
 
   if (!bscProvider) {
     const ok = await conectarRPCBSC();
-    if (!ok) {
-      console.warn("⚠️ Não foi possível conectar à BSC — pulando saldos BSC");
-      return;
-    }
+    if (!ok) { console.warn("⚠️ Não foi possível conectar à BSC — pulando saldos BSC"); return; }
   }
 
-  try {
-    saldos["BNB_NATIVO"] = BigInt((await bscProvider.getBalance(userAddress)).toString());
-  } catch (e) {
-    console.warn("Falha ao ler BNB nativo:", e.message);
-    saldos["BNB_NATIVO"] = 0n;
-  }
+  try { saldos["BNB_NATIVO"] = BigInt((await bscProvider.getBalance(userAddress)).toString()); }
+  catch (e) { console.warn("Falha ao ler BNB nativo:", e.message); saldos["BNB_NATIVO"] = 0n; }
 
   for (const t of tokensBsc) {
     try {
-      const res = await bscProvider.call({
-        to: t.address,
-        data: "0x" + S.ERC20.balanceOf + encAddr(userAddress)
-      });
+      const res = await bscProvider.call({ to: t.address, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress) });
       saldos[t.address] = decUint(res.slice(2));
-    } catch (e) {
-      console.warn(`Falha ao ler ${t.symbol} na BSC:`, e.message);
-      saldos[t.address] = 0n;
-    }
+    } catch (e) { console.warn(`Falha ao ler ${t.symbol} na BSC:`, e.message); saldos[t.address] = 0n; }
   }
 }
 
-// ============================================================
-// CARD DE SALDO COM RODAPÉ "ENDEREÇO BRN" (MARROM)
-// ============================================================
 function renderizarSaldos() {
   const container = $("balances");
   if (!container) return;
@@ -1392,7 +1294,6 @@ function renderizarSaldos() {
     container.appendChild(div);
   };
 
-  // ---------- POLYGON ----------
   add("POL (Polygon)", saldos.POL, 18);
   TOKENS.forEach(t => {
     if (t.somenteEth || t.somenteBsc) return;
@@ -1401,7 +1302,6 @@ function renderizarSaldos() {
     add(`${t.symbol} (${rede})`, valor, t.decimals, { tokenAddr: t.address });
   });
 
-  // ---------- ETHEREUM ----------
   const tokensEth = TOKENS.filter(t => t.somenteEth);
   if (tokensEth.length > 0) {
     const sep = document.createElement("div");
@@ -1413,9 +1313,7 @@ function renderizarSaldos() {
     header.textContent = "⛓️ Saldos na rede Ethereum (somente leitura)";
     container.appendChild(header);
 
-    if (saldos.ETH_NATIVO !== undefined) {
-      add("ETH (Ethereum)", saldos.ETH_NATIVO, 18);
-    }
+    if (saldos.ETH_NATIVO !== undefined) add("ETH (Ethereum)", saldos.ETH_NATIVO, 18);
 
     tokensEth.forEach(t => {
       const valor = saldos[t.address] || 0n;
@@ -1423,7 +1321,6 @@ function renderizarSaldos() {
     });
   }
 
-  // ---------- BSC / BNB CHAIN ----------
   const tokensBsc = TOKENS.filter(t => t.somenteBsc);
   if (tokensBsc.length > 0) {
     const sep = document.createElement("div");
@@ -1435,9 +1332,7 @@ function renderizarSaldos() {
     header.textContent = "🟡 Saldos na BSC / BNB Chain (somente leitura)";
     container.appendChild(header);
 
-    if (saldos.BNB_NATIVO !== undefined) {
-      add("BNB (BSC)", saldos.BNB_NATIVO, 18);
-    }
+    if (saldos.BNB_NATIVO !== undefined) add("BNB (BSC)", saldos.BNB_NATIVO, 18);
 
     tokensBsc.forEach(t => {
       const valor = saldos[t.address] || 0n;
@@ -1445,7 +1340,6 @@ function renderizarSaldos() {
     });
   }
 
-  // ---------- Hints ----------
   document.querySelectorAll("[data-hint]").forEach(el => {
     const attr = el.getAttribute("data-hint") || "";
     const partes = attr.split(":");
@@ -1478,20 +1372,14 @@ function renderizarSaldos() {
       const sym  = btn.getAttribute("data-symbol") || "token";
 
       const copiar = async (texto) => {
-        try {
-          await navigator.clipboard.writeText(texto);
-          return true;
-        } catch {
+        try { await navigator.clipboard.writeText(texto); return true; }
+        catch {
           const ta = document.createElement("textarea");
-          ta.value = texto;
-          ta.style.position = "fixed";
-          ta.style.opacity = "0";
-          document.body.appendChild(ta);
-          ta.select();
+          ta.value = texto; ta.style.position = "fixed"; ta.style.opacity = "0";
+          document.body.appendChild(ta); ta.select();
           let ok = false;
           try { ok = document.execCommand("copy"); } catch {}
-          ta.remove();
-          return ok;
+          ta.remove(); return ok;
         }
       };
 
@@ -1499,9 +1387,7 @@ function renderizarSaldos() {
       if (ok) {
         const nomeLimpo = sym.replace(/\s*\((Polygon|Ethereum|BSC)\)$/, "");
         toast(`✅ Contrato do ${nomeLimpo} copiado!`, "ok", 7000);
-      } else {
-        toast("❌ Não foi possível copiar.", "err");
-      }
+      } else toast("❌ Não foi possível copiar.", "err");
     });
   });
 
@@ -1509,35 +1395,22 @@ function renderizarSaldos() {
     el.addEventListener("click", async (e) => {
       e.stopPropagation();
       const endereco = el.getAttribute("data-copy");
-      if (!endereco || endereco === "— Não conectada —") {
-        toast("⚠️ Conecte a carteira primeiro.", "warn");
-        return;
-      }
+      if (!endereco || endereco === "— Não conectada —") { toast("⚠️ Conecte a carteira primeiro.", "warn"); return; }
       try {
         await navigator.clipboard.writeText(endereco);
         toast(`✅ Endereço BRN copiado!`, "ok", 5000);
       } catch {
         const ta = document.createElement("textarea");
-        ta.value = endereco;
-        ta.style.position = "fixed";
-        ta.style.opacity = "0";
-        document.body.appendChild(ta);
-        ta.select();
-        try {
-          document.execCommand("copy");
-          toast(`✅ Endereço BRN copiado!`, "ok", 5000);
-        } catch {
-          toast("❌ Não foi possível copiar.", "err");
-        }
+        ta.value = endereco; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); toast(`✅ Endereço BRN copiado!`, "ok", 5000); }
+        catch { toast("❌ Não foi possível copiar.", "err"); }
         ta.remove();
       }
     });
   });
 }
 
-// ============================================================
-// Modal "Carteiras Aceitas"
-// ============================================================
 function abrirModalCarteiras() {
   const modal = $("modalCarteiras");
   if (!modal) return;
@@ -1609,8 +1482,7 @@ function renderizarModalCarteiras() {
     WALLETS_BTC_CATALOG.forEach(w => {
       let ok = false;
       try { ok = w.check(); } catch {}
-      if (ok) detectadasBtc.push(w);
-      else outrasBtc.push(w);
+      if (ok) detectadasBtc.push(w); else outrasBtc.push(w);
     });
 
     detectadasBtc.forEach(w => {
@@ -1643,9 +1515,6 @@ function renderizarModalCarteiras() {
   }
 }
 
-// ============================================================
-// Conexão de carteira
-// ============================================================
 async function conectarCarteira(rdnsForcado) {
   const carteiras = listarCarteirasDisponiveis();
 
@@ -1658,31 +1527,20 @@ async function conectarCarteira(rdnsForcado) {
 
   if (rdnsForcado) {
     escolhida = carteiras.find(c => c.rdns === rdnsForcado);
-    if (!escolhida) {
-      toast("❌ Carteira não detectada pelo EIP-6963.", "err");
-      return;
-    }
+    if (!escolhida) { toast("❌ Carteira não detectada pelo EIP-6963.", "err"); return; }
   } else if (carteiras.length === 1) {
     escolhida = carteiras[0];
   } else {
     const nomes = carteiras.map((c, i) => `${i + 1}. ${c.name}`).join("\n");
-    const escolha = window.prompt(
-      `Múltiplas carteiras detectadas:\n\n${nomes}\n\nDigite o número da carteira que deseja usar:`
-    );
+    const escolha = window.prompt(`Múltiplas carteiras detectadas:\n\n${nomes}\n\nDigite o número da carteira que deseja usar:`);
     if (!escolha) return;
     const idx = parseInt(escolha) - 1;
-    if (isNaN(idx) || idx < 0 || idx >= carteiras.length) {
-      toast("❌ Escolha inválida.", "warn");
-      return;
-    }
+    if (isNaN(idx) || idx < 0 || idx >= carteiras.length) { toast("❌ Escolha inválida.", "warn"); return; }
     escolhida = carteiras[idx];
   }
 
   const providerEscolhido = obterProviderPorRdns(escolhida.rdns);
-  if (!providerEscolhido) {
-    toast("❌ Carteira não encontrada.", "err");
-    return;
-  }
+  if (!providerEscolhido) { toast("❌ Carteira não encontrada.", "err"); return; }
 
   toast(`🔌 Conectando à ${escolhida.name}…`, "info");
 
@@ -1701,10 +1559,7 @@ async function conectarCarteira(rdnsForcado) {
         await provider.send("wallet_switchEthereumChain", [{ chainId: "0x89" }]);
         await new Promise(r => setTimeout(r, 500));
         rede = await provider.getNetwork();
-        if (rede.chainId !== POLYGON_CHAIN_ID) {
-          toast("❌ Selecione manualmente a rede Polygon na carteira", "err", 8000);
-          return;
-        }
+        if (rede.chainId !== POLYGON_CHAIN_ID) { toast("❌ Selecione manualmente a rede Polygon na carteira", "err", 8000); return; }
       } catch {
         toast("❌ Selecione manualmente a rede Polygon na carteira", "err", 8000);
         return;
@@ -1744,9 +1599,6 @@ function desconectarCarteira() {
   atualizarStatusCarteiras();
 }
 
-// ============================================================
-// Compartilhar endereço
-// ============================================================
 function abrirPainelCompartilhar() {
   if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
 
@@ -1758,14 +1610,9 @@ function abrirPainelCompartilhar() {
   const texto = `Meu endereço BRN na Polygon: ${userAddress}`;
   const textoEnc = encodeURIComponent(texto);
 
-  const wa = $("btnShareWhatsApp");
-  if (wa) wa.href = `https://wa.me/?text=${textoEnc}`;
-
-  const tg = $("btnShareTelegram");
-  if (tg) tg.href = `https://t.me/share/url?url=${encodeURIComponent(userAddress)}&text=${encodeURIComponent("Meu endereço BRN:")}`;
-
-  const ps = $("btnSharePolygonScan");
-  if (ps) ps.href = `https://polygonscan.com/address/${userAddress}`;
+  const wa = $("btnShareWhatsApp"); if (wa) wa.href = `https://wa.me/?text=${textoEnc}`;
+  const tg = $("btnShareTelegram"); if (tg) tg.href = `https://t.me/share/url?url=${encodeURIComponent(userAddress)}&text=${encodeURIComponent("Meu endereço BRN:")}`;
+  const ps = $("btnSharePolygonScan"); if (ps) ps.href = `https://polygonscan.com/address/${userAddress}`;
 
   const nat = $("btnShareNative");
   if (nat) {
@@ -1774,16 +1621,11 @@ function abrirPainelCompartilhar() {
       nat.parentNode.replaceChild(novo, nat);
       novo.addEventListener("click", async (ev) => {
         ev.preventDefault();
-        try {
-          await navigator.share({ title: "Meu Endereço BRN", text: texto });
-        } catch (err) {
-          if (err.name !== "AbortError") console.warn("Share cancelado:", err.message);
-        }
+        try { await navigator.share({ title: "Meu Endereço BRN", text: texto }); }
+        catch (err) { if (err.name !== "AbortError") console.warn("Share cancelado:", err.message); }
       });
       novo.style.display = "";
-    } else {
-      nat.style.display = "none";
-    }
+    } else nat.style.display = "none";
   }
 
   painel.style.display = "block";
@@ -1797,29 +1639,17 @@ function fecharPainelCompartilhar() {
 
 async function copiarEndereco() {
   if (!userAddress) return;
-  try {
-    await navigator.clipboard.writeText(userAddress);
-    toast("✅ Endereço copiado!", "ok");
-  } catch {
+  try { await navigator.clipboard.writeText(userAddress); toast("✅ Endereço copiado!", "ok"); }
+  catch {
     const ta = document.createElement("textarea");
-    ta.value = userAddress;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.select();
-    try {
-      document.execCommand("copy");
-      toast("✅ Endereço copiado!", "ok");
-    } catch {
-      toast("❌ Não foi possível copiar.", "err");
-    }
+    ta.value = userAddress; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); toast("✅ Endereço copiado!", "ok"); }
+    catch { toast("❌ Não foi possível copiar.", "err"); }
     ta.remove();
   }
 }
 
-// ============================================================
-// Mural
-// ============================================================
 async function carregarOrdens() {
   if (loading || !rpcProvider || !S) return;
   loading = true;
@@ -1831,10 +1661,7 @@ async function carregarOrdens() {
     if (counter) counter.textContent = "⏳ Consultando…";
     if (container) container.innerHTML = '<div class="state"><div class="spinner"></div><p>Carregando ordens…</p></div>';
 
-    const listaRes = await chamarRPCComFailover(p => p.call({
-      to: ESCROW_FACTORY,
-      data: "0x" + S.Factory.todasOrdens
-    }));
+    const listaRes = await chamarRPCComFailover(p => p.call({ to: ESCROW_FACTORY, data: "0x" + S.Factory.todasOrdens }));
     const enderecos = decodificarListaEnderecos(listaRes);
     const total = enderecos.length;
 
@@ -1849,14 +1676,10 @@ async function carregarOrdens() {
     const ordens = [];
     await Promise.all(enderecos.map(async (endereco, i) => {
       try {
-        const dadosRes = await chamarRPCComFailover(p => p.call({
-          to: endereco,
-          data: "0x" + S.Escrow.obterDados
-        }));
+        const dadosRes = await chamarRPCComFailover(p => p.call({ to: endereco, data: "0x" + S.Escrow.obterDados }));
         const d = decodificarOrdem(dadosRes);
         ordens.push({
-          indice: i,
-          endereco,
+          indice: i, endereco,
           criador: d.criador,
           tokenOferecido: d.tokenOferecido,
           valorOferecido: d.valorOferecido,
@@ -1879,9 +1702,7 @@ async function carregarOrdens() {
   } catch (e) {
     if (container) container.innerHTML = `<div class="empty">❌ Erro: ${e.message}</div>`;
     console.error("Erro ao carregar ordens:", e);
-  } finally {
-    loading = false;
-  }
+  } finally { loading = false; }
 }
 
 function aplicarFiltros() {
@@ -1899,10 +1720,7 @@ function aplicarFiltros() {
 function renderizarOrdens(lista) {
   const container = $("orders");
   if (!container) return;
-  if (!lista.length) {
-    container.innerHTML = '<div class="empty">🔍 Nenhuma ordem encontrada.</div>';
-    return;
-  }
+  if (!lista.length) { container.innerHTML = '<div class="empty">🔍 Nenhuma ordem encontrada.</div>'; return; }
   container.innerHTML = "";
   lista.sort((a, b) => b.indice - a.indice);
 
@@ -1960,9 +1778,6 @@ function renderizarOrdens(lista) {
   });
 }
 
-// ============================================================
-// Criar / executar / cancelar ordem
-// ============================================================
 async function criarOrdem() {
   if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
@@ -1989,14 +1804,12 @@ async function criarOrdem() {
     const deVal = parseUnits(deStr, deToken.decimals);
 
     const saldo = decUint((await chamarRPCComFailover(p => p.call({
-      to: ofAddr,
-      data: "0x" + S.ERC20.balanceOf + encAddr(userAddress)
+      to: ofAddr, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress)
     }))).slice(2));
     if (saldo < ofVal) throw new Error(`Saldo insuficiente de ${ofToken.symbol}`);
 
     const allowance = decUint((await chamarRPCComFailover(p => p.call({
-      to: ofAddr,
-      data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(ESCROW_FACTORY)
+      to: ofAddr, data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(ESCROW_FACTORY)
     }))).slice(2));
 
     if (allowance < ofVal) {
@@ -2012,17 +1825,9 @@ async function criarOrdem() {
     }
 
     toast("⏳ Criando ordem…", "info");
-    const data = "0x" + S.Factory.criarOrdem
-      + encAddr(ofAddr)
-      + encAddr(deAddr)
-      + encUint(ofVal)
-      + encUint(deVal);
+    const data = "0x" + S.Factory.criarOrdem + encAddr(ofAddr) + encAddr(deAddr) + encUint(ofVal) + encUint(deVal);
 
-    const tx = await signer.sendTransaction({
-      to: ESCROW_FACTORY,
-      data,
-      gasLimit: 900000
-    });
+    const tx = await signer.sendTransaction({ to: ESCROW_FACTORY, data, gasLimit: 900000 });
     toastTx("📤 Ordem criada:", tx.hash, "ok");
     await tx.wait();
     toast("✅ Ordem criada com sucesso!", "ok", 6000);
@@ -2035,9 +1840,7 @@ async function criarOrdem() {
     console.error("criarOrdem:", e);
     const { msg, tipo } = traduzirErro(e);
     toast(msg, tipo, 8000);
-  } finally {
-    isTxBusy = false;
-  }
+  } finally { isTxBusy = false; }
 }
 
 async function executarOrdem(escrowAddr) {
@@ -2048,8 +1851,7 @@ async function executarOrdem(escrowAddr) {
     const d = decodificarOrdem(dadosRes);
 
     const allowance = decUint((await chamarRPCComFailover(p => p.call({
-      to: d.tokenDesejado,
-      data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(escrowAddr)
+      to: d.tokenDesejado, data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(escrowAddr)
     }))).slice(2));
 
     if (allowance < d.valorDesejado) {
@@ -2066,11 +1868,7 @@ async function executarOrdem(escrowAddr) {
     }
 
     toast("⏳ Executando…", "info");
-    const tx = await signer.sendTransaction({
-      to: escrowAddr,
-      data: "0x" + S.Escrow.executar,
-      gasLimit: 300000
-    });
+    const tx = await signer.sendTransaction({ to: escrowAddr, data: "0x" + S.Escrow.executar, gasLimit: 300000 });
     toastTx("📤 Transação:", tx.hash, "ok");
     await tx.wait();
     toast("✅ Ordem executada!", "ok", 6000);
@@ -2080,9 +1878,7 @@ async function executarOrdem(escrowAddr) {
     console.error("executarOrdem:", e);
     const { msg, tipo } = traduzirErro(e);
     toast(msg, tipo, 8000);
-  } finally {
-    isTxBusy = false;
-  }
+  } finally { isTxBusy = false; }
 }
 
 async function cancelarOrdem(escrowAddr) {
@@ -2090,11 +1886,7 @@ async function cancelarOrdem(escrowAddr) {
   isTxBusy = true;
   try {
     toast("⏳ Cancelando…", "info");
-    const tx = await signer.sendTransaction({
-      to: escrowAddr,
-      data: "0x" + S.Escrow.cancelar,
-      gasLimit: 200000
-    });
+    const tx = await signer.sendTransaction({ to: escrowAddr, data: "0x" + S.Escrow.cancelar, gasLimit: 200000 });
     toastTx("📤 Transação:", tx.hash, "ok");
     await tx.wait();
     toast("✅ Ordem cancelada!", "ok", 6000);
@@ -2104,14 +1896,9 @@ async function cancelarOrdem(escrowAddr) {
     console.error("cancelarOrdem:", e);
     const { msg, tipo } = traduzirErro(e);
     toast(msg, tipo, 8000);
-  } finally {
-    isTxBusy = false;
-  }
+  } finally { isTxBusy = false; }
 }
 
-// ============================================================
-// Enviar token ERC-20
-// ============================================================
 async function enviarToken() {
   if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
@@ -2148,14 +1935,9 @@ async function enviarToken() {
     console.error("enviarToken:", e);
     const { msg, tipo } = traduzirErro(e);
     toast(msg, tipo, 8000);
-  } finally {
-    isTxBusy = false;
-  }
+  } finally { isTxBusy = false; }
 }
 
-// ============================================================
-// Wrap / unwrap POL
-// ============================================================
 async function wrapPOL() {
   if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
@@ -2165,17 +1947,10 @@ async function wrapPOL() {
     if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
     const valor = parseUnits(valorStr, 18);
 
-    if (valor > saldos.POL) {
-      throw new Error(`Saldo insuficiente. Você tem ${fmt(saldos.POL, 18)} POL.`);
-    }
+    if (valor > saldos.POL) throw new Error(`Saldo insuficiente. Você tem ${fmt(saldos.POL, 18)} POL.`);
 
     toast(`⏳ Convertendo ${fmt(valor, 18, 4)} POL → WPOL…`, "info");
-    const tx = await signer.sendTransaction({
-      to: wpol.address,
-      data: "0x" + S.WPOL.deposit,
-      value: valor,
-      gasLimit: 100000
-    });
+    const tx = await signer.sendTransaction({ to: wpol.address, data: "0x" + S.WPOL.deposit, value: valor, gasLimit: 100000 });
     toastTx("📤 Transação enviada:", tx.hash, "ok");
     await tx.wait();
     toast("✅ POL convertido em WPOL!", "ok", 6000);
@@ -2185,9 +1960,7 @@ async function wrapPOL() {
     console.error("wrapPOL:", e);
     const { msg, tipo } = traduzirErro(e);
     toast(msg, tipo, 8000);
-  } finally {
-    isTxBusy = false;
-  }
+  } finally { isTxBusy = false; }
 }
 
 async function unwrapWPOL() {
@@ -2200,16 +1973,10 @@ async function unwrapWPOL() {
     const valor = parseUnits(valorStr, 18);
 
     const saldoWPOL = saldos[wpol.address] || 0n;
-    if (valor > saldoWPOL) {
-      throw new Error(`Saldo insuficiente. Você tem ${fmt(saldoWPOL, 18)} WPOL.`);
-    }
+    if (valor > saldoWPOL) throw new Error(`Saldo insuficiente. Você tem ${fmt(saldoWPOL, 18)} WPOL.`);
 
     toast(`⏳ Convertendo ${fmt(valor, 18, 4)} WPOL → POL…`, "info");
-    const tx = await signer.sendTransaction({
-      to: wpol.address,
-      data: "0x" + S.WPOL.withdraw + encUint(valor),
-      gasLimit: 100000
-    });
+    const tx = await signer.sendTransaction({ to: wpol.address, data: "0x" + S.WPOL.withdraw + encUint(valor), gasLimit: 100000 });
     toastTx("📤 Transação enviada:", tx.hash, "ok");
     await tx.wait();
     toast("✅ WPOL convertido em POL!", "ok", 6000);
@@ -2219,14 +1986,9 @@ async function unwrapWPOL() {
     console.error("unwrapWPOL:", e);
     const { msg, tipo } = traduzirErro(e);
     toast(msg, tipo, 8000);
-  } finally {
-    isTxBusy = false;
-  }
+  } finally { isTxBusy = false; }
 }
 
-// ============================================================
-// Configuração de abas / filtros / max / botões
-// ============================================================
 function configurarAbas() {
   document.querySelectorAll(".tabs button").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -2242,11 +2004,7 @@ function configurarAbas() {
         setTimeout(atualizarStatusCarteiraBTC, 100);
         if (btcWallet) setTimeout(atualizarSaldoBTCEnvio, 200);
       }
-
-      if (aba === "crosschain") {
-        setTimeout(atualizarHintCC, 100);
-      }
-
+      if (aba === "crosschain") setTimeout(atualizarHintCC, 100);
       setTimeout(renderizarSaldos, 50);
     });
   });
@@ -2319,11 +2077,8 @@ function configurarMax() {
   const m6 = $("btnMaxPOLEnvio");
   if (m6) m6.addEventListener("click", () => {
     const disponivel = calcularPOLDisponivel();
-    if (disponivel > 0n) {
-      $("valorPOLEnvio").value = ethers.utils.formatUnits(disponivel, 18);
-    } else {
-      toast("Saldo insuficiente (reserva de gas).", "warn");
-    }
+    if (disponivel > 0n) $("valorPOLEnvio").value = ethers.utils.formatUnits(disponivel, 18);
+    else toast("Saldo insuficiente (reserva de gas).", "warn");
   });
 
   const m7 = $("btnMaxBTCEnvio");
@@ -2335,9 +2090,7 @@ function configurarMax() {
     const origem = SIDESHIFT_MAP[origemKey] || SYMBIOSIS_MAP[origemKey];
     if (!origem) return;
     const token = TOKENS.find(t => t.symbol === origem.tokenSymbol);
-    if (token && saldos[token.address] > 0n) {
-      $("ccValor").value = ethers.utils.formatUnits(saldos[token.address], token.decimals);
-    }
+    if (token && saldos[token.address] > 0n) $("ccValor").value = ethers.utils.formatUnits(saldos[token.address], token.decimals);
   });
 }
 
@@ -2363,7 +2116,6 @@ function configurarBotoes() {
   const dbBTC = $("btnDesconectarBTC");  if (dbBTC) dbBTC.addEventListener("click", desconectarCarteiraBTC);
   const ebBTC = $("btnEnviarBTC");       if (ebBTC) ebBTC.addEventListener("click", enviarBTC);
 
-  // ✅ v6.20: DOIS botões para cross-chain SHIB
   const ccBtn   = $("btnCriarCC");        if (ccBtn)   ccBtn.addEventListener("click", criarOrdemCrossChain);
   const ccAbrir = $("btnAbrirSymbiosis"); if (ccAbrir) ccAbrir.addEventListener("click", abrirSymbiosisSwap);
   const ccCopy  = $("btnCopyCCDeposit");  if (ccCopy)  ccCopy.addEventListener("click", copiarCCDepositAddress);
@@ -2414,13 +2166,8 @@ function iniciarAutoRefresh() {
 
 function configurarEventosWallet() {
   if (eventosWalletConfigurados) return;
-
-  const prov = walletEscolhidaRdns
-    ? obterProviderPorRdns(walletEscolhidaRdns)
-    : window.ethereum;
-
+  const prov = walletEscolhidaRdns ? obterProviderPorRdns(walletEscolhidaRdns) : window.ethereum;
   if (!prov || !prov.on) return;
-
   eventosWalletConfigurados = true;
 
   prov.on("accountsChanged", (contas) => {
@@ -2438,9 +2185,6 @@ function configurarEventosWallet() {
   prov.on("chainChanged", () => window.location.reload());
 }
 
-// ============================================================
-// init
-// ============================================================
 async function init() {
   console.log("🚀 BRN Exchange v6.20 — inicializando…");
 
@@ -2468,10 +2212,7 @@ async function init() {
   }
 
   try {
-    const [okPoly] = await Promise.all([
-      atualizarStatusRede(),
-      verificarStatusRedeBitcoin()
-    ]);
+    const [okPoly] = await Promise.all([atualizarStatusRede(), verificarStatusRedeBitcoin()]);
 
     conectarRPCEth().catch(() => {});
     conectarRPCBSC().catch(() => {});
