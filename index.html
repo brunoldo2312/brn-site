@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BRN -Mural de Ordens P2P</title>
+    <title>BRN — Mural de Ordens P2P</title>
 
     <!-- ✅ FILTRO DE CONSOLE: remove avisos da MetaMask ANTES de qualquer script rodar -->
     <script>
@@ -366,16 +366,19 @@
             <div class="card">
                 <h2>🌉 Bridge Cross-Chain (SideShift)</h2>
                 <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">
-                    Converta stablecoins entre redes. Exemplo: <strong>USDT Polygon → USDT Ethereum</strong>.
-                    A cotação e custódia são feitas pela <a href="https://sideshift.ai" target="_blank" rel="noopener">SideShift.ai</a>
-                    (não-custodial). Você recebe o token direto na rede de destino.
+                    Converta <strong>SHIB, USDT e USDC</strong> entre as redes <strong>Polygon ↔ Ethereum ↔ BSC (BNB Chain)</strong>.
+                    Exemplo: <em>SHIB Polygon → SHIB Ethereum</em> ou <em>USDT Polygon → USDT BSC</em>.
+                    A cotação e custódia são feitas pela
+                    <a href="https://sideshift.ai" target="_blank" rel="noopener">SideShift.ai</a> (não-custodial).
+                    Você recebe o token direto na rede de destino.
                 </p>
 
                 <div class="input-group">
-                    <label>Token de origem (rede Polygon):</label>
+                    <label>Token de origem:</label>
                     <select id="ccTokenOrigem">
                         <option value="usdt-polygon">USDT (Polygon)</option>
                         <option value="usdc-polygon">USDC (Polygon)</option>
+                        <option value="shib-polygon">SHIB (Polygon)</option>
                     </select>
                     <small id="ccSaldoHint" class="dim" style="display:block; margin-top:4px;">Saldo: —</small>
                 </div>
@@ -385,7 +388,14 @@
                     <select id="ccTokenDestino">
                         <option value="usdt-ethereum">USDT (Ethereum)</option>
                         <option value="usdc-ethereum">USDC (Ethereum)</option>
+                        <option value="shib-ethereum">SHIB (Ethereum)</option>
+                        <option value="usdt-bsc">USDT (BSC / BNB Chain)</option>
+                        <option value="shib-bsc">SHIB (BSC / BNB Chain)</option>
                     </select>
+                    <small class="dim" style="display:block; margin-top:4px;">
+                        ⚠️ O par origem/destino precisa ser do mesmo token (ex: SHIB → SHIB).
+                        Origem e destino não podem estar na mesma rede.
+                    </small>
                 </div>
 
                 <div class="input-group">
@@ -398,9 +408,10 @@
 
                 <div class="input-group">
                     <label>Endereço de destino (na rede de destino):</label>
-                    <input type="text" id="ccDestino" placeholder="0x... (endereço Ethereum)">
+                    <input type="text" id="ccDestino" placeholder="0x... (endereço EVM)">
                     <small class="dim" style="display:block; margin-top:4px;">
                         ⚠️ Confira duas vezes. Enviar para endereço errado = fundos perdidos.
+                        O mesmo endereço 0x funciona em Polygon, Ethereum e BSC.
                     </small>
                 </div>
 
@@ -421,8 +432,14 @@
                 </div>
 
                 <p class="source-note">
-                    ⚠️ A SideShift cobra uma taxa (~0.5% a 2%). O processo leva de 5 a 30 minutos após a confirmação do depósito.
-                    Você envia o token da Polygon para o endereço de depósito exibido, e a SideShift envia o valor convertido para o seu endereço Ethereum.
+                    ⚠️ <strong>Passo a passo após criar a ordem:</strong>
+                    <br>1) Abra a MetaMask → troque para a rede de origem;
+                    <br>2) Envie o token para o endereço de depósito exibido;
+                    <br>3) Aguarde 5-30 min → você recebe o token na rede de destino.
+                    <br><br>
+                    ⚠️ Você precisa ter o gas nativo da rede de origem
+                    (<strong>POL</strong> na Polygon, <strong>ETH</strong> na Ethereum, <strong>BNB</strong> na BSC).
+                    A SideShift cobra uma taxa (~0.5% a 2%).
                 </p>
             </div>
         </div>
@@ -512,6 +529,6 @@
     <div id="toasts" class="toast-container"></div>
 
     <!-- ==================== SCRIPTS ==================== -->
-    <script src="app.js?v=6.12"></script>
+    <script src="app.js?v=6.13"></script>
 </body>
 </html>
