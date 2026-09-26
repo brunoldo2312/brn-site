@@ -14,11 +14,13 @@
 </head>
 <body>
     <div class="container">
+        <!-- ==================== HEADER ==================== -->
         <header>
             <div class="header-left">
                 <h1>🔷 BRN</h1>
                 <p>Ecossistema Descentralizado de Troca de Ativos P2P</p>
             </div>
+
             <div class="net-status">
                 <div id="netDot" class="dot off"></div>
                 <span id="netText">Polygon: Desconectado ❌</span>
@@ -37,6 +39,7 @@
             </div>
         </header>
 
+        <!-- ==================== BARRA DA CARTEIRA ==================== -->
         <div class="wallet-bar">
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                 <button id="btnConnect" class="btn btn-primary">🔌 Conectar Carteira</button>
@@ -49,6 +52,7 @@
             </div>
         </div>
 
+        <!-- ==================== PAINEL DE COMPARTILHAMENTO ==================== -->
         <div id="sharePanel" class="share-panel" style="display: none;">
             <div class="share-head">
                 <h3>📤 Seu Endereço BRN (Polygon)</h3>
@@ -69,6 +73,7 @@
             </div>
         </div>
 
+        <!-- ==================== SALDOS (TOPO) ==================== -->
         <div class="card">
             <h2>💼 Saldos da sua Carteira</h2>
             <div id="balances" class="balances">
@@ -76,6 +81,7 @@
             </div>
         </div>
 
+        <!-- ==================== ABAS ==================== -->
         <div class="tabs">
             <button data-tab="mural" class="active">📋 Mural de Ordens</button>
             <button data-tab="criar">💰 Criar Ordem</button>
@@ -86,6 +92,7 @@
             <button data-tab="crosschain">🌉 Bridge Cross-Chain</button>
         </div>
 
+        <!-- ==================== PAINEL: MURAL ==================== -->
         <div id="panel-mural" class="panel">
             <div class="card">
                 <h2>📋 Livro de Ofertas Ativas</h2>
@@ -114,6 +121,7 @@
             </div>
         </div>
 
+        <!-- ==================== PAINEL: CRIAR ORDEM ==================== -->
         <div id="panel-criar" class="panel" hidden>
             <div class="card">
                 <h2>➕ Criar Nova Ordem de Troca</h2>
@@ -143,6 +151,7 @@
             </div>
         </div>
 
+        <!-- ==================== PAINEL: ENVIAR TOKENS ==================== -->
         <div id="panel-enviar" class="panel" hidden>
             <div class="card">
                 <h2>📤 Enviar Ativos Direto (Transferência)</h2>
@@ -166,12 +175,20 @@
             </div>
         </div>
 
+        <!-- ==================== PAINEL: ENVIAR POL ==================== -->
         <div id="panel-enviarpol" class="panel" hidden>
             <div class="card">
                 <h2>💎 Enviar POL (nativo Polygon)</h2>
+                <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">
+                    Envie POL diretamente para qualquer endereço EVM na rede Polygon.
+                    O POL é a moeda nativa usada para pagar gas.
+                </p>
                 <div class="input-group">
                     <label>Endereço de destino:</label>
                     <input type="text" id="destinoPOL" placeholder="0x...">
+                    <small class="dim" style="display:block; margin-top:4px;">
+                        ⚠️ Confira duas vezes. Transação irreversível.
+                    </small>
                 </div>
                 <div class="input-group">
                     <label>Valor a enviar:</label>
@@ -181,12 +198,18 @@
                     </div>
                     <small class="dim" style="display:block; margin-top:4px;">
                         Disponível: <span data-hint="saldoPOLDisponivel">0.00</span> POL
+                        <br>
+                        <span style="opacity:0.7;">(reserva 0.05 POL para gas automaticamente)</span>
                     </small>
                 </div>
                 <button id="btnEnviarPOL" class="btn btn-btc" style="width:100%; margin-top:12px;">💎 Enviar POL</button>
+                <p class="source-note">
+                    ⚠️ Você precisa ter saldo de POL suficiente para pagar a taxa de gas. Uma reserva de 0.05 POL é mantida automaticamente.
+                </p>
             </div>
         </div>
 
+        <!-- ==================== PAINEL: POL ↔ WPOL ==================== -->
         <div id="panel-swap" class="panel" hidden>
             <div class="trade-forms">
                 <div class="form-card">
@@ -214,9 +237,11 @@
             </div>
         </div>
 
+        <!-- ==================== PAINEL: BITCOIN ==================== -->
         <div id="panel-bitcoin" class="panel" hidden>
             <div class="card">
                 <h2>🟠 Consultar Saldo em Conta Bitcoin</h2>
+                <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">Consulte saldos reais e atualizados de carteiras na rede nativa do Bitcoin.</p>
                 <div class="row">
                     <input type="text" id="btcAddressInput" placeholder="Digite o endereço Bitcoin...">
                     <button id="btnConsultarBTC" class="btn btn-btc">₿ Buscar Dados</button>
@@ -225,8 +250,15 @@
                     <div class="t">Saldo Líquido Confirmado</div>
                     <div id="btcBalanceValue" class="v">— BTC</div>
                 </div>
+
                 <hr style="margin: 24px 0; border-color: var(--border);">
+
                 <h3>🔄 Converter WBTC (Polygon) → BTC nativo</h3>
+                <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">
+                    Cotação e custódia feitas pela <a href="https://sideshift.ai" target="_blank" rel="noopener">SideShift.ai</a>
+                    (não-custodial). Você recebe BTC direto na sua carteira Bitcoin.
+                </p>
+
                 <div class="input-group">
                     <label>Quantidade de WBTC:</label>
                     <div class="row">
@@ -235,22 +267,39 @@
                     </div>
                     <small id="hintWbtcBridge" class="dim" style="display:block; margin-top:4px;">Saldo: —</small>
                 </div>
+
                 <div class="input-group">
                     <label>Seu endereço Bitcoin (destino):</label>
                     <input type="text" id="btcDestinoBridge" placeholder="bc1... / 1... / 3...">
+                    <small class="dim" style="display:block; margin-top:4px;">
+                        ⚠️ Confira duas vezes. Enviar para endereço errado = fundos perdidos.
+                    </small>
                 </div>
-                <button id="btnAbrirBridge" class="btn btn-btc" style="width:100%; margin-top:12px;">🟠 Criar ordem de troca</button>
+
+                <button id="btnAbrirBridge" class="btn btn-btc" style="width:100%; margin-top:12px;">
+                    🟠 Criar ordem de troca
+                </button>
+
                 <div id="bridge-result" style="display:none; margin-top:16px; padding:14px; background:rgba(247,147,26,0.08); border:1px solid var(--btc); border-radius:8px;">
-                    <p style="margin-bottom:8px;">Envie <strong id="bridge-deposit-amount">—</strong> WBTC para:</p>
+                    <p style="margin-bottom:8px;">
+                        Envie <strong id="bridge-deposit-amount">—</strong> WBTC para:
+                    </p>
                     <code id="bridge-deposit-address" style="display:block; word-break:break-all; background:var(--bg); padding:10px; border-radius:5px; font-size:0.85rem;">—</code>
                     <p class="dim" style="font-size:0.8rem; margin-top:8px;">
-                        Você receberá <strong id="bridge-settle-amount">—</strong> BTC em ~10-30 min.
+                        Você receberá <strong id="bridge-settle-amount">—</strong> BTC em ~10-30 min após a confirmação.
                         Ordem expira em <span id="bridge-expires">—</span>.
                     </p>
                     <button id="btnCopyDeposit" class="btn btn-sm" style="margin-top:8px;">📋 Copiar endereço</button>
                 </div>
+
                 <hr style="margin: 24px 0; border-color: var(--border);">
+
                 <h3>📤 Enviar BTC (rede nativa)</h3>
+                <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">
+                    Conecte uma carteira Bitcoin (UniSat, OKX Wallet, Leather) e envie BTC direto para qualquer endereço.
+                    A carteira assina — sua chave privada nunca sai dela.
+                </p>
+
                 <div class="input-group">
                     <label>Carteira Bitcoin:</label>
                     <div class="row">
@@ -259,10 +308,15 @@
                     </div>
                     <small id="btcWalletStatus" class="dim" style="display:block; margin-top:6px;">Não conectada</small>
                 </div>
+
                 <div class="input-group">
                     <label>Endereço Bitcoin de destino:</label>
                     <input type="text" id="btcDestinoEnvio" placeholder="bc1... / 1... / 3...">
+                    <small class="dim" style="display:block; margin-top:4px;">
+                        ⚠️ Confira duas vezes. Transação irreversível.
+                    </small>
                 </div>
+
                 <div class="input-group">
                     <label>Valor em BTC:</label>
                     <div class="row">
@@ -273,21 +327,36 @@
                         Disponível: <span id="btcSaldoDisponivel">—</span>
                     </small>
                 </div>
-                <button id="btnEnviarBTC" class="btn btn-btc" style="width:100%; margin-top:12px;">🟠 Enviar BTC</button>
+
+                <button id="btnEnviarBTC" class="btn btn-btc" style="width:100%; margin-top:12px;">
+                    🟠 Enviar BTC
+                </button>
+
+                <p class="source-note">
+                    ⚠️ Transações Bitcoin são irreversíveis. Reserva automática de ~2000 sats mantida para taxa de rede.
+                </p>
             </div>
         </div>
 
+        <!-- ==================== PAINEL: CROSS-CHAIN ==================== -->
         <div id="panel-crosschain" class="panel" hidden>
             <div class="card">
                 <h2>🌉 Bridge Cross-Chain (SideShift)</h2>
+                <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">
+                    Converta stablecoins entre redes. Exemplo: <strong>USDT Polygon → USDT Ethereum</strong>.
+                    A cotação e custódia são feitas pela <a href="https://sideshift.ai" target="_blank" rel="noopener">SideShift.ai</a>
+                    (não-custodial). Você recebe o token direto na rede de destino.
+                </p>
+
                 <div class="input-group">
-                    <label>Token de origem (Polygon):</label>
+                    <label>Token de origem (rede Polygon):</label>
                     <select id="ccTokenOrigem">
                         <option value="usdt-polygon">USDT (Polygon)</option>
                         <option value="usdc-polygon">USDC (Polygon)</option>
                     </select>
                     <small id="ccSaldoHint" class="dim" style="display:block; margin-top:4px;">Saldo: —</small>
                 </div>
+
                 <div class="input-group">
                     <label>Token de destino:</label>
                     <select id="ccTokenDestino">
@@ -295,6 +364,7 @@
                         <option value="usdc-ethereum">USDC (Ethereum)</option>
                     </select>
                 </div>
+
                 <div class="input-group">
                     <label>Quantidade:</label>
                     <div class="row">
@@ -302,25 +372,40 @@
                         <button id="btnMaxCC" class="btn btn-sm">MAX</button>
                     </div>
                 </div>
+
                 <div class="input-group">
-                    <label>Endereço de destino:</label>
+                    <label>Endereço de destino (na rede de destino):</label>
                     <input type="text" id="ccDestino" placeholder="0x... (endereço Ethereum)">
+                    <small class="dim" style="display:block; margin-top:4px;">
+                        ⚠️ Confira duas vezes. Enviar para endereço errado = fundos perdidos.
+                    </small>
                 </div>
-                <button id="btnCriarCC" class="btn btn-btc" style="width:100%; margin-top:12px;">🌉 Criar ordem de bridge</button>
+
+                <button id="btnCriarCC" class="btn btn-btc" style="width:100%; margin-top:12px;">
+                    🌉 Criar ordem de bridge
+                </button>
+
                 <div id="cc-result" style="display:none; margin-top:16px; padding:14px; background:rgba(247,147,26,0.08); border:1px solid var(--btc); border-radius:8px;">
-                    <p style="margin-bottom:8px;">Envie <strong id="cc-deposit-amount">—</strong> <span id="cc-deposit-token">—</span> para:</p>
+                    <p style="margin-bottom:8px;">
+                        Envie <strong id="cc-deposit-amount">—</strong> <span id="cc-deposit-token">—</span> para:
+                    </p>
                     <code id="cc-deposit-address" style="display:block; word-break:break-all; background:var(--bg); padding:10px; border-radius:5px; font-size:0.85rem;">—</code>
                     <p class="dim" style="font-size:0.8rem; margin-top:8px;">
-                        Você receberá <strong id="cc-settle-amount">—</strong> <span id="cc-settle-token">—</span> em ~5-30 min.
+                        Você receberá <strong id="cc-settle-amount">—</strong> <span id="cc-settle-token">—</span> em ~5-30 min após a confirmação.
                         Ordem expira em <span id="cc-expires">—</span>.
                     </p>
                     <button id="btnCopyCCDeposit" class="btn btn-sm" style="margin-top:8px;">📋 Copiar endereço</button>
                 </div>
+
+                <p class="source-note">
+                    ⚠️ A SideShift cobra uma taxa (~0.5% a 2%). O processo leva de 5 a 30 minutos após a confirmação do depósito.
+                    Você envia o token da Polygon para o endereço de depósito exibido, e a SideShift envia o valor convertido para o seu endereço Ethereum.
+                </p>
             </div>
         </div>
     </div>
 
-    <!-- ==================== MODAL: CARTEIRAS E EXCHANGES ==================== -->
+    <!-- ==================== MODAL: CARTEIRAS E EXCHANGES ACEITAS ==================== -->
     <div id="modalCarteiras" class="modal-overlay" style="display: none;">
         <div class="modal-content">
             <div class="modal-head">
@@ -378,8 +463,10 @@
         </div>
     </div>
 
+    <!-- ==================== TOASTS ==================== -->
     <div id="toasts" class="toast-container"></div>
 
-    <script src="app.js?v=6.5"></script>
+    <!-- ==================== SCRIPTS ==================== -->
+    <script src="app.js?v=6.9"></script>
 </body>
 </html>
