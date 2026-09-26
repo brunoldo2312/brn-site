@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BRN Exchange — Mural de Ordens P2P</title>
+    <title>BRN -Mural de Ordens P2P</title>
 
     <!-- ✅ FILTRO DE CONSOLE: remove avisos da MetaMask ANTES de qualquer script rodar -->
     <script>
@@ -64,10 +64,12 @@
         <div class="wallet-bar">
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                 <button id="btnConnect" class="btn btn-primary">🔌 Conectar Carteira</button>
+                <button id="btnMinhasRedes" class="btn btn-sm">🌐 Minhas Redes</button>
                 <button id="btnCarteirasAceitas" class="btn btn-sm">ℹ️ Carteiras Aceitas</button>
             </div>
             <div id="walletInfo" class="wallet-info" style="display: none;">
                 <span>Conectado: <code id="addr">—</code></span>
+                <span id="redeBadge" style="display:none; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; white-space: nowrap;"></span>
                 <button id="btnShareAddr" class="btn btn-sm btn-ok">📤 Compartilhar Endereço</button>
                 <button id="btnDisconnect" class="btn btn-sm btn-err">Desconectar</button>
             </div>
@@ -426,6 +428,28 @@
         </div>
     </div>
 
+    <!-- ==================== MODAL: VERIFICADOR DE REDES ==================== -->
+    <div id="modalRedes" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-head">
+                <h2>🌐 Verificador de Redes</h2>
+                <button id="btnFecharModalRedes" class="btn btn-sm">✕ Fechar</button>
+            </div>
+
+            <div id="modalRedesConteudo">
+                <p class="dim" style="padding: 20px; text-align: center;">Carregando…</p>
+            </div>
+
+            <div class="modal-footer">
+                <p class="dim" style="font-size: 0.8rem;">
+                    ⚠️ <strong>Importante:</strong> O mesmo endereço EVM (0x...) funciona em Polygon, BSC e Ethereum.
+                    Porém, os saldos são <strong>separados por rede</strong>. Solana tem endereço diferente.
+                </p>
+                <button id="btnFecharModalRedes2" class="btn btn-primary">Entendi</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ==================== MODAL: CARTEIRAS E EXCHANGES ACEITAS ==================== -->
     <div id="modalCarteiras" class="modal-overlay" style="display: none;">
         <div class="modal-content">
@@ -488,6 +512,6 @@
     <div id="toasts" class="toast-container"></div>
 
     <!-- ==================== SCRIPTS ==================== -->
-    <script src="app.js?v=6.9"></script>
+    <script src="app.js?v=6.12"></script>
 </body>
 </html>
