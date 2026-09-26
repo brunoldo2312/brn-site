@@ -1,10 +1,12 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.9
-// ✅ CORREÇÃO: endereços em minúsculo (fix "bad address checksum")
-// ✅ CORREÇÃO: RPC Polygon sem 401 (removido polygon-rpc.com)
-// ✅ CORREÇÃO: RPC Ethereum sem CORS (removido eth.llamarpc.com)
-// ✅ CORREÇÃO: filtro de console para avisos da MetaMask
-// ✅ Rodapé "ENDEREÇO BRN" no card de cada token (marrom)
+// APP.JS — BRN Exchange | Versão 6.10
+// ✅ NOVO: endereço reduzido no rodapé dos cards (0x1234…abcd)
+// ✅ NOVO: clicar no rodapé copia o endereço completo
+// ✅ Endereços em minúsculo (fix "bad address checksum")
+// ✅ RPC Polygon sem 401 (removido polygon-rpc.com)
+// ✅ RPC Ethereum sem CORS (removido eth.llamarpc.com)
+// ✅ Filtro de console para avisos da MetaMask
+// ✅ Rodapé "ENDEREÇO BRN" marrom no card de cada token
 // ✅ Leitura de saldos na rede Ethereum (USDT-ETH, ETH nativo)
 // ✅ Modal "Carteiras Aceitas" com detecção dinâmica (EIP-6963)
 // ✅ Brave Wallet + Pelagus no catálogo
@@ -35,7 +37,6 @@ const BLOCKSTREAM_API = "https://blockstream.info/api";
 const RESERVA_GAS_POL = "0.05";
 const RESERVA_TAXA_BTC_SATS = 2000;
 
-// ✅ v6.9: endereços em minúsculo (ethers não valida checksum)
 const TOKENS = [
   { symbol: "BRN",        name: "BRN Token",             address: "0xdbc1c747b1d4c27113f65a4620b8feac74e2a210", decimals: 18 },
   { symbol: "USDC",       name: "USD Coin (nativo)",     address: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", decimals: 6  },
@@ -56,7 +57,6 @@ const SIDESHIFT_MAP = {
   "usdc-ethereum": { coin: "usdc", network: "ethereum" }
 };
 
-// ✅ v6.9: RPCs Polygon sem 401
 const RPC_LIST = [
   "https://polygon.publicnode.com",
   "https://polygon.drpc.org",
@@ -64,7 +64,6 @@ const RPC_LIST = [
   "https://polygon-bor-rpc.publicnode.com"
 ];
 
-// ✅ v6.9: RPCs Ethereum sem CORS
 const ETH_RPC_LIST = [
   "https://ethereum.publicnode.com",
   "https://eth.drpc.org",
@@ -1001,6 +1000,7 @@ async function carregarSaldosEthereum() {
 
 // ============================================================
 // CARD DE SALDO COM RODAPÉ "ENDEREÇO BRN" (MARROM)
+// ✅ v6.10: endereço reduzido no rodapé + clique copia
 // ============================================================
 function renderizarSaldos() {
   const container = $("balances");
@@ -1017,11 +1017,15 @@ function renderizarSaldos() {
       ? `<button class="btn-copy-token" data-copy="${tokenAddr}" data-symbol="${simbolo}" title="Copiar endereço do contrato">📋</button>`
       : "";
 
-    const enderecoBrn = userAddress || "— Não conectada —";
+    // ✅ Endereço completo (para título e cópia)
+    const enderecoCompleto = userAddress || "— Não conectada —";
+    // ✅ Endereço reduzido (para exibir no rodapé)
+    const enderecoCurto = userAddress ? short(userAddress) : "— Não conectada —";
+
     const rodape = `
-      <div class="bal-endereco" title="${enderecoBrn}">
+      <div class="bal-endereco" data-copy="${enderecoCompleto}" title="Clique para copiar: ${enderecoCompleto}">
         <span class="bal-endereco-label">ENDEREÇO BRN:</span>
-        <span class="bal-endereco-valor">${enderecoBrn}</span>
+        <span class="bal-endereco-valor">${enderecoCurto}</span>
       </div>
     `;
 
@@ -1034,6 +1038,7 @@ function renderizarSaldos() {
     container.appendChild(div);
   };
 
+  // ---------- POLYGON ----------
   add("POL (Polygon)", saldos.POL, 18);
   TOKENS.forEach(t => {
     if (t.somenteEth) return;
@@ -1042,6 +1047,7 @@ function renderizarSaldos() {
     add(`${t.symbol} (${rede})`, valor, t.decimals, { tokenAddr: t.address });
   });
 
+  // ---------- ETHEREUM ----------
   const tokensEth = TOKENS.filter(t => t.somenteEth);
   if (tokensEth.length > 0) {
     const sep = document.createElement("div");
@@ -1063,6 +1069,7 @@ function renderizarSaldos() {
     });
   }
 
+  // ---------- Hints ----------
   document.querySelectorAll("[data-hint]").forEach(el => {
     const attr = el.getAttribute("data-hint") || "";
     const partes = attr.split(":");
@@ -1088,6 +1095,7 @@ function renderizarSaldos() {
 
   atualizarHintWbtc();
 
+  // ---------- Listener: copiar contrato ----------
   container.querySelectorAll(".btn-copy-token").forEach(btn => {
     btn.addEventListener("click", async (e) => {
       e.stopPropagation();
@@ -1118,6 +1126,36 @@ function renderizarSaldos() {
         toast(`✅ Contrato do ${nomeLimpo} copiado! Cole na MetaMask → "Importar tokens".`, "ok", 7000);
       } else {
         toast("❌ Não foi possível copiar.", "err");
+      }
+    });
+  });
+
+  // ✅ v6.10: clicar no ENDEREÇO BRN copia ele
+  container.querySelectorAll(".bal-endereco").forEach(el => {
+    el.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const endereco = el.getAttribute("data-copy");
+      if (!endereco || endereco === "— Não conectada —") {
+        toast("⚠️ Conecte a carteira primeiro.", "warn");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(endereco);
+        toast(`✅ Endereço BRN copiado!`, "ok", 5000);
+      } catch {
+        const ta = document.createElement("textarea");
+        ta.value = endereco;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand("copy");
+          toast(`✅ Endereço BRN copiado!`, "ok", 5000);
+        } catch {
+          toast("❌ Não foi possível copiar.", "err");
+        }
+        ta.remove();
       }
     });
   });
@@ -2029,15 +2067,7 @@ function configurarEventosWallet() {
 // init
 // ============================================================
 async function init() {
-  console.log("🚀 BRN Exchange v6.9 — inicializando…");
-
-  // ✅ v6.9: filtra avisos barulhentos da MetaMask que NÃO são do nosso código
-  const _warnOriginal = console.warn.bind(console);
-  console.warn = (...args) => {
-    const msg = String(args[0] || "");
-    if (msg.includes("ObjectMultiplex") || msg.includes("MaxListenersExceeded")) return;
-    _warnOriginal(...args);
-  };
+  console.log("🚀 BRN Exchange v6.10 — inicializando…");
 
   inicializarDescobertaCarteiras();
 
