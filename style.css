@@ -1,11 +1,15 @@
 /* ============================================================
    STYLE.CSS — BRN Exchange
-   Versão: 6.12 | Data: 2026-09-26
+   Versão: 6.13 | Data: 2026-09-26
    ✅ Base v5.5 (btns, share-panel, bridge, dots)
    ✅ v6.10: botão 📋 copiar contrato
    ✅ v6.10: rodapé "ENDEREÇO BRN" marrom no card de saldo
    ✅ v6.12: modal "Carteiras Aceitas" (overlay, cards, grids)
    ✅ v6.12: modal "Verificador de Redes" (redes-grid, rede-card)
+   ✅ v6.13: FIX #btcSaldoDisponivel (era #btcSaldoDis:ponivel)
+   ✅ v6.13: FIX regra :disabled dos botões BTC (CSS malformado)
+   ✅ v6.13: FIX word-break (era word bottom-break)
+   ✅ v6.13: painel Cross-Chain enriquecido (selects, box passos, warns)
    ============================================================ */
 
 :root {
@@ -19,6 +23,9 @@
     --text-muted: #8b949e;
     --danger: #da3633;
     --btc: #f7931a;
+    --eth: #627eea;
+    --bsc: #f0b90b;
+    --polygon: #8247e5;
     --radius: 8px;
     --shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
@@ -307,6 +314,21 @@ select { cursor: pointer; }
 
 .row input { flex: 1; min-width: 0; }
 .row select { flex: 1; min-width: 0; }
+
+/* ==================== ✅ v6.13: Cross-Chain selects destacados ==================== */
+#ccTokenOrigem,
+#ccTokenDestino {
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    border-left: 3px solid var(--accent);
+}
+
+#ccTokenOrigem option,
+#ccTokenDestino option {
+    background: var(--bg);
+    color: var(--text);
+    padding: 6px;
+}
 
 /* ==================== SALDOS (GRID PRINCIPAL) ==================== */
 .balances {
@@ -636,6 +658,59 @@ select { cursor: pointer; }
     line-height: 1.5;
 }
 
+/* ==================== ✅ v6.13: BOX DE PASSOS (Cross-Chain) ==================== */
+.steps-box {
+    background: rgba(88, 166, 255, 0.06);
+    border: 1px solid rgba(88, 166, 255, 0.25);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-top: 14px;
+    font-size: 0.82rem;
+    line-height: 1.6;
+}
+
+.steps-box strong {
+    color: #58a6ff;
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.85rem;
+}
+
+.steps-box ol {
+    padding-left: 20px;
+    margin: 0;
+}
+
+.steps-box li {
+    margin: 4px 0;
+    color: var(--text-muted);
+}
+
+.steps-box .gas-warn {
+    display: block;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+    color: #d29922;
+    font-weight: 500;
+}
+
+/* ==================== ✅ v6.13: BADGES DE REDE ==================== */
+.rede-badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 8px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    margin-left: 4px;
+}
+
+.rede-badge.polygon { background: rgba(130, 71, 229, 0.2); color: #a97fee; }
+.rede-badge.ethereum { background: rgba(98, 126, 234, 0.2); color: #8fa5f0; }
+.rede-badge.bsc { background: rgba(240, 185, 11, 0.2); color: var(--bsc); }
+
 /* ==================== ESTADOS ==================== */
 .empty {
     text-align: center;
@@ -691,6 +766,7 @@ select { cursor: pointer; }
     pointer-events: auto;
     font-size: 0.9rem;
     word-break: break-word;
+    white-space: pre-line;
 }
 
 @keyframes slideIn {
@@ -870,22 +946,33 @@ select { cursor: pointer; }
 
 #bridge-result strong { color: var(--btc); }
 
-/* ==================== ENVIO DE BTC ==================== */
+/* ==================== ✅ v6.13: RESULT CROSS-CHAIN ==================== */
+#cc-result { animation: fadeIn 0.25s ease; }
+
+#cc-result code {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+    letter-spacing: 0.3px;
+}
+
+#cc-result strong { color: var(--btc); }
+
+/* ==================== ✅ v6.13: FIX — ENVIO DE BTC ==================== */
 #btcWalletStatus {
     font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
     color: var(--btc);
     font-size: 0.8rem;
-    word bottom-break: break-all;
+    word-break: break-all; /* ✅ FIX v6.13: era "word bottom-break" */
 }
 
-#btcSaldoDis:ponivel {
-    font-weight:  600;
-    color: var(--btc0);
+/* ✅ FIX v6.13: seletor correto (era "#btcSaldoDis:ponivel") */
+#btcSaldoDisponivel {
+    font-weight: 600;
+    color: var(--btc);
 }
 
-#btnEnviarBTC:disabled;
-,
-#btnConectarBTC:disabled    {
+/* ✅ FIX v6.13: regra unificada (antes estava malformada com ";" e ",") */
+#btnEnviarBTC:disabled,
+#btnConectarBTC:disabled {
     opacity: 0.6;
     cursor: not-allowed;
 }
@@ -974,7 +1061,8 @@ hr {
    ============================================================ */
 .modal-overlay {
     position: fixed;
-    top: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.75);
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
     z-index: 2000;
@@ -1306,4 +1394,15 @@ hr {
     .rede-icon { font-size: 1.5rem; }
     .rede-nome { font-size: 0.8rem; }
     .rede-status { font-size: 0.65rem; }
+
+    /* v6.13: Cross-Chain em mobile */
+    #ccTokenOrigem,
+    #ccTokenDestino {
+        font-size: 0.9rem;
+    }
+
+    .steps-box {
+        font-size: 0.78rem;
+        padding: 10px 12px;
+    }
 }
