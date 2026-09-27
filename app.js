@@ -1,5 +1,10 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.24
+// APP.JS — BRN Exchange | Versão 6.24.2
+// ✅ v6.24.2: NEW — botão "Minhas Redes" funcional (modal dinâmico)
+// ✅ v6.24.2: NEW — redeBadge mostra a rede atual da carteira
+// ✅ v6.24.2: FIX — ESC fecha os dois modais (carteiras + redes)
+// ✅ v6.24.1: NEW — verificarIDsHTML() no init()
+// ✅ v6.24.1: FIX — URLs CEXSwap relativas (/api/cexswap/...)
 // ✅ v6.24: FIX — CEXSwap URLs separadas (prices vs markets)
 // ✅ v6.24: FIX — carregarSaldos não aborta se POL falhar
 // ✅ v6.24: FIX — precoUsd trata USDC.e / USDT.e e aliases
@@ -27,10 +32,8 @@ const SYMBIOSIS_API_URL = "https://brn-site.vercel.app/api/symbiosis";
 const SYMBIOSIS_APP_URL = "https://app.symbiosis.finance/swap";
 const BLOCKSTREAM_API   = "https://blockstream.info/api";
 
-// ✅ v6.24: CEXSwap com endpoints separados
-// ⚠️ Ajuste os paths abaixo conforme o backend proxy real.
-// Se o backend usa /api/cexswap?type=prices, troque para querystring.
-const CEXSWAP_API_BASE    = "https://brn-site.vercel.app/api/cexswap";
+// ✅ v6.24.1: CEXSwap — URLs RELATIVAS (funciona em qualquer host onde o proxy estiver deployado)
+const CEXSWAP_API_BASE    = "/api/cexswap";
 const CEXSWAP_PRICES_URL  = `${CEXSWAP_API_BASE}/prices`;
 const CEXSWAP_MARKETS_URL = `${CEXSWAP_API_BASE}/markets`;
 
@@ -148,6 +151,39 @@ function construirSeletores() {
     }
   };
   console.log("✅ Seletores ABI calculados:", S);
+}
+
+// ============================================================
+// ✅ v6.24.1: Verificador de IDs do HTML
+// ✅ v6.24.2: inclui IDs do modal de redes
+// ============================================================
+function verificarIDsHTML() {
+  const idsEssenciais = [
+    "netDot", "netText",
+    "btcDot", "btcText",
+    "toasts",
+    "btnConnect", "btnDisconnect",
+    "walletInfo", "addr",
+    "balances", "orders", "counter",
+    // ✅ v6.24.2
+    "btnMinhasRedes", "modalRedes", "modalRedesConteudo",
+    "btnFecharModalRedes", "btnFecharModalRedes2"
+  ];
+
+  const faltando = idsEssenciais.filter(id => !document.getElementById(id));
+
+  if (faltando.length > 0) {
+    console.warn("❌ FALTANDO NO HTML:", faltando.join(", "));
+    console.log("👉 Adicione os elementos com os IDs acima no seu index.html.");
+  } else {
+    console.log(`✅ JS/CSS v6.24.2: Todos os ${idsEssenciais.length} IDs essenciais existem no HTML.`);
+  }
+
+  console.log("🔗 Endpoints CEXSwap configurados:");
+  console.log("  • Prices URL :", CEXSWAP_PRICES_URL);
+  console.log("  • Markets URL:", CEXSWAP_MARKETS_URL);
+
+  return faltando;
 }
 
 let provider = null;
@@ -311,10 +347,6 @@ function recriarProviderAposTroca() {
 // ✅ v6.24: INTEGRAÇÃO CEXSWAP (URLs separadas + aliases)
 // ============================================================
 
-/**
- * Busca preços em USD da CEXSwap.
- * Resultado armazenado em `precosCexSwap` (objeto { SYMBOL: preco }).
- */
 async function buscarPrecosCexSwap() {
   try {
     const r = await fetchTimeout(CEXSWAP_PRICES_URL, 8000);
@@ -350,10 +382,6 @@ async function buscarPrecosCexSwap() {
   }
 }
 
-/**
- * Busca resumo do mercado 24h da CEXSwap.
- * Resultado armazenado em `mercadoCexSwap` (array).
- */
 async function buscarResumoMercado() {
   try {
     const r = await fetchTimeout(CEXSWAP_MARKETS_URL, 8000);
@@ -376,11 +404,6 @@ async function buscarResumoMercado() {
   }
 }
 
-/**
- * ✅ v6.24: retorna o preço em USD de um símbolo.
- * Remove sufixos de rede (-BSC, -ETH) e ".e" (USDC.e/USDT.e),
- * e aplica aliases (WPOL→POL, WETH→ETH, WBTC→BTC).
- */
 function precoUsd(symbol) {
   if (!symbol) return null;
   const base = symbol.toUpperCase()
@@ -391,9 +414,6 @@ function precoUsd(symbol) {
   return precosCexSwap[sym] ?? precosCexSwap[symbol.toUpperCase()] ?? null;
 }
 
-/**
- * ✅ v6.24: retorna a variação % 24h de um símbolo (mercadoCexSwap).
- */
 function variacao24h(symbol) {
   if (!symbol || !mercadoCexSwap.length) return null;
   const base = symbol.toUpperCase()
@@ -410,9 +430,6 @@ function variacao24h(symbol) {
   return isNaN(v) ? null : v;
 }
 
-/**
- * Helper: formata preço em USD para exibição (ex: "$0,0523").
- */
 function fmtUsd(valor) {
   if (valor == null || isNaN(valor)) return "—";
   if (valor >= 1) return `$${valor.toFixed(4)}`;
@@ -590,7 +607,10 @@ function nomeComRede(tok) {
   return `${tok.symbol} (${rede})`;
 }
 
-function atualizarStatusCarteiras() {
+// ============================================================
+// ✅ v6.24.2: atualizarStatusCarteiras agora é async (para ler chainId)
+// ============================================================
+async function atualizarStatusCarteiras() {
   const ed = $("evmWalletDot");
   const et = $("evmWalletText");
   if (ed && et) {
@@ -600,9 +620,30 @@ function atualizarStatusCarteiras() {
         ? (Array.from(announcedProviders.values()).find(e => e.info.rdns === walletEscolhidaRdns)?.info.name || "Carteira")
         : "Carteira";
       et.textContent = `${nome}: ${short(userAddress)}`;
+
+      // ✅ v6.24.2: preenche o badge com a rede atual
+      const badge = $("redeBadge");
+      if (badge && provider) {
+        try {
+          const rede = await provider.getNetwork();
+          const nomes = { 1: "Ethereum", 56: "BSC", 137: "Polygon" };
+          const cores = { 1: "#627eea", 56: "#f0b90b", 137: "#8247e5" };
+          const nomeRede = nomes[rede.chainId] || `Chain ${rede.chainId}`;
+          const cor = cores[rede.chainId] || "#666";
+          badge.textContent = nomeRede;
+          badge.style.background = cor + "22";
+          badge.style.color = cor;
+          badge.style.border = `1px solid ${cor}`;
+          badge.style.display = "inline-block";
+        } catch {
+          badge.style.display = "none";
+        }
+      }
     } else {
       ed.className = "dot off";
       et.textContent = "Carteira EVM: Desconectada";
+      const badge = $("redeBadge");
+      if (badge) badge.style.display = "none";
     }
   }
   const bd = $("btcWalletDot");
@@ -762,7 +803,6 @@ async function consultarSaldoBTC() {
   }
 }
 
-// ✅ v6.24: função única (antes havia isBtcAddress + isBtcAddressStrict)
 function isBtcAddress(a) {
   if (!a) return false;
   const s = a.trim();
@@ -1422,7 +1462,6 @@ function preencherSeletores() {
   if (fp) fp.innerHTML = '<option value="">Pede: Todos</option>' + filtroOpts;
 }
 
-// ✅ v6.24: carregarSaldos não aborta mais se POL falhar
 async function carregarSaldos() {
   if (!rpcProvider || !userAddress || !S) return;
   const t0 = Date.now();
@@ -1498,7 +1537,6 @@ async function carregarSaldosBSC() {
   }
 }
 
-// ✅ v6.24: preço + variação 24h nos cards
 function renderizarSaldos() {
   const container = $("balances");
   if (!container) return;
@@ -1517,7 +1555,6 @@ function renderizarSaldos() {
     const enderecoCompleto = userAddress || "— Não conectada —";
     const enderecoCurto = userAddress ? short(userAddress) : "— Não conectada —";
 
-    // ✅ v6.24: preço em USD + variação 24h
     let precoHtml = "";
     if (mostrarPreco) {
       const symBase = simbolo.split(" ")[0].replace(/-(BSC|ETH)$/, "");
@@ -1663,6 +1700,99 @@ function renderizarSaldos() {
       }
     });
   });
+}
+
+// ============================================================
+// ✅ v6.24.2: MODAL "MINHAS REDES" (botão btnMinhasRedes)
+// ============================================================
+function abrirModalRedes() {
+  const modal = $("modalRedes");
+  const conteudo = $("modalRedesConteudo");
+  if (!modal || !conteudo) {
+    toast("⚠️ Modal de redes não encontrado no HTML.", "warn");
+    return;
+  }
+
+  const redes = [
+    {
+      nome: "Polygon",
+      icon: "🟣",
+      chainId: POLYGON_CHAIN_ID,
+      gas: "POL",
+      ativa: !!rpcProvider,
+      detalhe: rpcProvider ? "RPC conectado" : "Sem conexão"
+    },
+    {
+      nome: "Ethereum",
+      icon: "🔷",
+      chainId: ETH_CHAIN_ID,
+      gas: "ETH",
+      ativa: !!ethProvider,
+      detalhe: ethProvider ? "RPC conectado" : "Sem conexão"
+    },
+    {
+      nome: "BSC / BNB Chain",
+      icon: "🟡",
+      chainId: BSC_CHAIN_ID,
+      gas: "BNB",
+      ativa: !!bscProvider,
+      detalhe: bscProvider ? "RPC conectado" : "Sem conexão"
+    },
+    {
+      nome: "Bitcoin",
+      icon: "🟠",
+      chainId: null,
+      gas: "BTC",
+      ativa: btcApiSincronizada,
+      detalhe: btcApiSincronizada ? "Blockstream API" : "API offline"
+    }
+  ];
+
+  conteudo.innerHTML = `
+    <div class="redes-grid">
+      ${redes.map(r => `
+        <div class="rede-card ${r.ativa ? "ativa" : ""}">
+          <span class="rede-icon">${r.icon}</span>
+          <span class="rede-nome">${r.nome}</span>
+          <span class="rede-status ${r.ativa ? "ok" : "off"}">
+            ${r.ativa ? "✅ Online" : "❌ Offline"}
+          </span>
+          <span class="dim" style="font-size: 0.72rem; margin-top: 4px;">${r.detalhe}</span>
+          <span class="dim" style="font-size: 0.68rem; opacity: 0.7;">
+            Gas: ${r.gas}${r.chainId ? ` · Chain ${r.chainId}` : ""}
+          </span>
+        </div>
+      `).join("")}
+    </div>
+
+    ${userAddress ? `
+      <h3 class="modal-section-title" style="margin-top: 20px;">🔌 Sua carteira conectada</h3>
+      <p class="dim" style="font-size: 0.85rem; line-height: 1.6;">
+        <strong>Carteira:</strong> ${walletEscolhidaRdns
+          ? (Array.from(announcedProviders.values()).find(e => e.info.rdns === walletEscolhidaRdns)?.info.name || "—")
+          : "—"}<br>
+        <strong>Endereço:</strong> <code>${userAddress}</code><br>
+        <span style="opacity: 0.7; font-size: 0.78rem;">
+          💡 O mesmo endereço 0x funciona em Polygon, Ethereum e BSC.
+          Os saldos são separados por rede.
+        </span>
+      </p>
+    ` : `
+      <p class="dim" style="margin-top: 20px; text-align: center; font-size: 0.85rem;">
+        🔌 Conecte uma carteira para ver detalhes da sua conta.
+      </p>
+    `}
+  `;
+
+  modal.style.display = "flex";
+  document.body.style.overflow = "hidden";
+}
+
+function fecharModalRedes() {
+  const modal = $("modalRedes");
+  if (!modal) return;
+  modal.style.display = "none";
+  document.body.style.overflow = "";
 }
 
 function abrirModalCarteiras() {
@@ -2400,15 +2530,31 @@ function configurarBotoes() {
   const bc2 = $("btnFecharModalCarteiras");    if (bc2) bc2.addEventListener("click", fecharModalCarteiras);
   const bc3 = $("btnFecharModalCarteiras2");   if (bc3) bc3.addEventListener("click", fecharModalCarteiras);
 
+  // ✅ v6.24.2: botão "Minhas Redes" + modal
+  const mr1 = $("btnMinhasRedes");       if (mr1) mr1.addEventListener("click", abrirModalRedes);
+  const mr2 = $("btnFecharModalRedes");  if (mr2) mr2.addEventListener("click", fecharModalRedes);
+  const mr3 = $("btnFecharModalRedes2"); if (mr3) mr3.addEventListener("click", fecharModalRedes);
+
+  // Fecha modais ao clicar fora
   const modalCart = $("modalCarteiras");
   if (modalCart) {
     modalCart.addEventListener("click", (e) => {
       if (e.target === modalCart) fecharModalCarteiras();
     });
   }
+  const modalRedesEl = $("modalRedes");
+  if (modalRedesEl) {
+    modalRedesEl.addEventListener("click", (e) => {
+      if (e.target === modalRedesEl) fecharModalRedes();
+    });
+  }
 
+  // ✅ v6.24.2: ESC fecha os dois modais
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") fecharModalCarteiras();
+    if (e.key === "Escape") {
+      fecharModalCarteiras();
+      fecharModalRedes();
+    }
   });
 
   ["selOferece", "selDeseja", "selTokenEnvio"].forEach(id => {
@@ -2437,7 +2583,6 @@ function iniciarAutoRefresh() {
     if (document.visibilityState === 'visible') {
       if (!loading) carregarOrdens();
       if (userAddress) carregarSaldos();
-      // ✅ v6.23/v6.24: atualiza preços + markets da CEXSwap a cada 60s
       buscarPrecosCexSwap().then(() => renderizarSaldos()).catch(() => {});
       buscarResumoMercado().catch(() => {});
     }
@@ -2466,7 +2611,9 @@ function configurarEventosWallet() {
 }
 
 async function init() {
-  console.log("🚀 BRN Exchange v6.24 — inicializando…");
+  console.log("🚀 BRN Exchange v6.24.2 — inicializando…");
+
+  verificarIDsHTML();
 
   inicializarDescobertaCarteiras();
 
@@ -2491,7 +2638,6 @@ async function init() {
     toast("⚠️ Erro na configuração da UI: " + e.message, "warn", 10000);
   }
 
-  // ✅ v6.23/v6.24: busca preços e markets da CEXSwap em paralelo (não bloqueante)
   buscarPrecosCexSwap().then(() => renderizarSaldos()).catch(() => {});
   buscarResumoMercado().catch(() => {});
 
