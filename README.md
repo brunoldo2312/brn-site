@@ -1,5 +1,75 @@
+🌉 Guia Completo — Como Usar Pontes (Bridges)
+📌 O Que é uma Ponte?
 
-# 🚀 BRN Exchange
+Uma ponte (bridge) é uma ferramenta que permite mover seus tokens de uma blockchain para outra. Pense nas blockchains como ilhas separadas — cada uma tem suas próprias regras e moedas. A ponte é a estrada que conecta essas ilhas.
+
+Como funciona?
+
+1. Você envia seus tokens para um contrato da ponte na rede de origem
+
+2. Os tokens ficam bloqueados (guardados em segurança)
+
+3. A ponte cria/mint uma quantidade equivalente de tokens na rede de destino
+
+4. Quando quiser voltar, você queima os tokens na rede de destino e a ponte libera os originais
+🔗 Principais Pontes Disponíveis
+Ponte Redes Conectadas Site Oficial Tempo Médio 
+Polygon Bridge ↔ Ethereum ⇄ Polygon portal.polygon.technology 7–8 min (Ethereum→Polygon) / 30min–3h (volta) 
+Arbitrum Bridge Ethereum ⇄ Arbitrum bridge.arbitrum.io ~10 min 
+Base Bridge Ethereum ⇄ Base bridge.base.org ~10 min 
+Hop Protocol Ethereum ⇄ Polygon/Arbitrum/Optimism hop.exchange Mais rápido 
+Across Protocol Ethereum ⇄ L2s across.to Mais rápido 
+
+📖 Passo a Passo — Usando a Polygon Bridge
+
+Esta é a ponte oficial e mais usada para mover ativos entre Ethereum e Polygon (onde opera o BRN Exchange).
+
+✅ Enviar da Ethereum → Polygon
+
+Passo 1 — Acesse a Ponte
+
+• Entre no site oficial: portal.polygon.technology/bridge
+
+• ⚠️ Confira sempre o endereço — golpes usam sites parecidos!
+
+Passo 2 — Conecte sua Carteira
+
+• Clique em "Connect Wallet" no canto superior direito
+
+• Selecione MetaMask e autorize a conexão
+
+• Verifique se está na rede Ethereum Mainnet
+
+Passo 3 — Escolha o Token e Quantidade
+
+• Confirme que a seta está: Ethereum → Polygon PoS
+
+• Selecione o token que deseja mover (ex: ETH, USDC, etc.)
+
+• Digite o valor
+
+• ⚠️ Verifique que você tem ETH suficiente para as taxas de gás da rede Ethereum
+
+Passo 4 — Aprove e Confirme
+
+• Na primeira vez com um token específico, clique em "Approve" — autoriza a ponte a usar seus tokens
+
+• Depois clique em "Bridge"
+
+• Confirme a transação no MetaMask
+
+• ⏳ Aguarde — geralmente leva 7 a 8 minutos
+
+Passo 5 — Receba na Polygon
+
+• Troque a rede da sua carteira para Polygon Mainnet
+
+• Seus tokens aparecerão automaticamente após a confirmação
+🔄 Voltar da Polygon → Ethereum
+
+Passo 1
+
+# 🚀 BRN 
 
 > Ecossistema descentralizado de troca de criptoativos na rede Polygon — P2P sem servidor central, com garantia de escrow.
 
