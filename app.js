@@ -1,68 +1,104 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.24.2
+// APP.JS — BRN Exchange | Versão 6.24.3
+// ✅ v6.24.3: FIX — listeners de wallet removidos ao desconectar (_unsubWallet)
+// ✅ v6.24.3: FIX — chainChanged recria provider sem reload
+// ✅ v6.24.3: FIX — buscarPrecosCexSwap limpa preços fantasmas
+// ✅ v6.24.3: FIX — trocarRede() early-return se já está na chain
+// ✅ v6.24.3: FIX — amountOut validado antes de BigInt()
+// ✅ v6.24.3: FIX — atualizarStatusCarteiraBTC usa innerHTML
+// ✅ v6.24.3: NEW — modal "Minhas Redes" gerado do array REDES
+// ✅ v6.24.3: NEW — array REDES integrado (14 redes EVM)
+// ✅ v6.24.3: NEW — constantes NOME_REDE, GAS_REDE, COR_REDE
+// ✅ v6.24.3: NEW — verificarIDsHTML cobre 29 IDs
+// ✅ v6.24.3: CHORE — auto-refresh revalida Bitcoin a cada 5 ciclos
+// ✅ v6.24.3: CHORE — removida chamada duplicada no init()
 // ✅ v6.24.2: NEW — botão "Minhas Redes" funcional (modal dinâmico)
 // ✅ v6.24.2: NEW — redeBadge mostra a rede atual da carteira
 // ✅ v6.24.2: FIX — ESC fecha os dois modais (carteiras + redes)
 // ✅ v6.24.1: NEW — verificarIDsHTML() no init()
 // ✅ v6.24.1: FIX — URLs CEXSwap relativas (/api/cexswap/...)
-// ✅ v6.24: FIX — CEXSwap URLs separadas (prices vs markets)
-// ✅ v6.24: FIX — carregarSaldos não aborta se POL falhar
-// ✅ v6.24: FIX — precoUsd trata USDC.e / USDT.e e aliases
-// ✅ v6.24: NEW — variação 24h (mercadoCexSwap) nos cards de saldo
-// ✅ v6.24: FIX — isBtcAddress consolidada (removida duplicata)
-// ✅ v6.23: Integração CEXSwap (prices + markets summary)
-// ✅ v6.22: FIX — trocarRede() usa provider da carteira conectada
-// ✅ v6.22: FIX — recriação de provider pós-troca usa walletEscolhidaRdns
-// ✅ v6.21: Modais customizados (substituem window.confirm)
-// ✅ v6.21: Gas dinâmico (evita falhas de transação)
-// ✅ v6.21: Troca automática de rede no Cross-Chain
-// ✅ v6.21: Auto-refresh respeita visibilidade da aba
-// ✅ v6.20: DOIS BOTÕES para SHIB cross-chain
-// ✅ v6.18: Failover automático entre RPCs Polygon
+// ✅ v6.24:   FIX — CEXSwap URLs separadas (prices vs markets)
+// ✅ v6.24:   FIX — carregarSaldos não aborta se POL falhar
+// ✅ v6.24:   FIX — precoUsd trata USDC.e / USDT.e e aliases
+// ✅ v6.24:   NEW — variação 24h (mercadoCexSwap) nos cards
+// ✅ v6.24:   FIX — isBtcAddress consolidada
+// ✅ v6.23:   Integração CEXSwap (prices + markets summary)
+// ✅ v6.22:   FIX — trocarRede() usa provider da carteira conectada
+// ✅ v6.21:   Modais customizados · Gas dinâmico · Troca auto de rede
+// ✅ v6.20:   DOIS BOTÕES para SHIB cross-chain
+// ✅ v6.18:   Failover automático entre RPCs Polygon
 // ============================================================
 
-const ESCROW_FACTORY = "0x5c305acff5cdfaee90276c2acea4aa841f7062d8";
+const ESCROW_FACTORY   = "0x5c305acff5cdfaee90276c2acea4aa841f7062d8";
 const POLYGON_CHAIN_ID = 137;
-const BSC_CHAIN_ID = 56;
-const ETH_CHAIN_ID = 1;
-const REFRESH_MS = 60000;
+const BSC_CHAIN_ID     = 56;
+const ETH_CHAIN_ID     = 1;
+const REFRESH_MS       = 60000;
 
 const SIDESHIFT_API_URL = "https://brn-site.vercel.app/api/sideshift";
 const SYMBIOSIS_API_URL = "https://brn-site.vercel.app/api/symbiosis";
 const SYMBIOSIS_APP_URL = "https://app.symbiosis.finance/swap";
 const BLOCKSTREAM_API   = "https://blockstream.info/api";
 
-// ✅ v6.24.1: CEXSwap — URLs RELATIVAS (funciona em qualquer host onde o proxy estiver deployado)
 const CEXSWAP_API_BASE    = "/api/cexswap";
-const CEXSWAP_PRICES_URL  = `${CEXSWAP_API_BASE}/prices`;
-const CEXSWAP_MARKETS_URL = `${CEXSWAP_API_BASE}/markets`;
+const CEXSWAP_PRICES_URL  = CEXSWAP_API_BASE + "/prices";
+const CEXSWAP_MARKETS_URL = CEXSWAP_API_BASE + "/markets";
 
-const RESERVA_GAS_POL = "0.05";
+const RESERVA_GAS_POL       = "0.05";
 const RESERVA_TAXA_BTC_SATS = 2000;
 
-const TOKENS = [
-  // ===== POLYGON =====
-  { symbol: "BRN",        name: "BRN Token",             address: "0xdbc1c747b1d4c27113f65a4620b8feac74e2a210", decimals: 18 },
-  { symbol: "USDC",       name: "USD Coin (nativo)",     address: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", decimals: 6  },
-  { symbol: "USDC.e",     name: "USD Coin (bridged)",    address: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174", decimals: 6  },
-  { symbol: "USDT",       name: "Tether USD (nativo)",   address: "0xc2132d05d31c914a87c6611c10748aeb04b58e8a", decimals: 6  },
-  { symbol: "USDT.e",     name: "Tether USD (bridged)",  address: "0x9417669fbf23357d2774e9d4234219952d36a1e5", decimals: 6  },
-  { symbol: "SHIB",       name: "Shiba Inu",             address: "0x6f8a06447ff6fcf75d803135a7de15ce88c1d4ec", decimals: 18 },
-  { symbol: "WPOL",       name: "Wrapped POL",           address: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270", decimals: 18 },
-  { symbol: "WBTC",       name: "Wrapped BTC",           address: "0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6", decimals: 8  },
-  { symbol: "WETH",       name: "Wrapped Ether",         address: "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619", decimals: 18 },
+// ============================================================
+// CONSTANTES DE REDE
+// ============================================================
+const NOME_REDE       = { polygon: "Polygon", ethereum: "Ethereum", bsc: "BSC / BNB Chain" };
+const NOME_REDE_CURTO = { 1: "Ethereum", 56: "BSC", 137: "Polygon" };
+const COR_REDE        = { 1: "#627eea", 56: "#f0b90b", 137: "#8247e5" };
+const GAS_REDE        = { polygon: "POL", ethereum: "ETH", bsc: "BNB" };
 
-  // ===== ETHEREUM (somente leitura) =====
-  { symbol: "USDT-ETH",   name: "Tether USD (Ethereum)", address: "0xdac17f958d2ee523a2206206994597c13d831ec7", decimals: 6,  somenteEth: true, rede: "Ethereum" },
-  { symbol: "USDC-ETH",   name: "USD Coin (Ethereum)",   address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", decimals: 6,  somenteEth: true, rede: "Ethereum" },
-  { symbol: "SHIB-ETH",   name: "Shiba Inu (Ethereum)",  address: "0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce", decimals: 18, somenteEth: true, rede: "Ethereum" },
-
-  // ===== BSC / BNB Chain (somente leitura) =====
-  { symbol: "SHIB-BSC",   name: "SHIBA INU (BSC)",       address: "0x2859e4544c4bb03966803b044a93563bd2d0dd4d", decimals: 18, somenteBsc: true, rede: "BSC" },
-  { symbol: "USDT-BSC",   name: "Tether USD (BSC)",      address: "0x55d398326f99059ff775485246999027b3197955", decimals: 18, somenteBsc: true, rede: "BSC" },
-  { symbol: "USDC-BSC",   name: "USD Coin (BSC)",        address: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", decimals: 18, somenteBsc: true, rede: "BSC" }
+// ============================================================
+// REDES BLOCKCHAIN SUPORTADAS (14 EVM)
+// ============================================================
+const REDES = [
+  { id: 1,        nome: "Ethereum Mainnet",       simbolo: "ETH",  rpc: "https://eth.llamarpc.com",                       explorador: "https://etherscan.io",            cor: "#627EEA" },
+  { id: 56,       nome: "BNB Chain",              simbolo: "BNB",  rpc: "https://bsc-dataseed.binance.org",               explorador: "https://bscscan.com",             cor: "#F3BA2F" },
+  { id: 137,      nome: "Polygon",                simbolo: "POL",  rpc: "https://polygon-rpc.com",                        explorador: "https://polygonscan.com",         cor: "#8247E5" },
+  { id: 42161,    nome: "Arbitrum One",           simbolo: "ETH",  rpc: "https://arb1.arbitrum.io/rpc",                   explorador: "https://arbiscan.io",             cor: "#28A0F0" },
+  { id: 10,       nome: "Optimism",               simbolo: "ETH",  rpc: "https://mainnet.optimism.io",                    explorador: "https://optimistic.etherscan.io", cor: "#FF0420" },
+  { id: 8453,     nome: "Base",                   simbolo: "ETH",  rpc: "https://mainnet.base.org",                       explorador: "https://basescan.org",            cor: "#0052FF" },
+  { id: 43114,    nome: "Avalanche",              simbolo: "AVAX", rpc: "https://api.avax.network/ext/bc/C/rpc",          explorador: "https://snowtrace.io",            cor: "#E84142" },
+  { id: 250,      nome: "Fantom",                 simbolo: "FTM",  rpc: "https://rpc.ftm.tools",                          explorador: "https://ftmscan.com",             cor: "#1969FF" },
+  { id: 1284,     nome: "Moonbeam",               simbolo: "GLMR", rpc: "https://rpc.api.moonbeam.network",               explorador: "https://moonscan.io",             cor: "#D4EF5C" },
+  { id: 100,      nome: "Gnosis Chain",           simbolo: "xDAI", rpc: "https://rpc.gnosischain.com",                    explorador: "https://gnosisscan.io",           cor: "#04795C" },
+  { id: 42220,    nome: "Celo",                   simbolo: "CELO", rpc: "https://forno.celo.org",                         explorador: "https://celoscan.io",             cor: "#FCFF52" },
+  { id: 11155111, nome: "Sepolia (Testnet)",      simbolo: "ETH",  rpc: "https://rpc.sepolia.org",                        explorador: "https://sepolia.etherscan.io",    cor: "#CDD0D8", testnet: true },
+  { id: 97,       nome: "BNB Testnet",            simbolo: "tBNB", rpc: "https://data-seed-prebsc-1-s1.binance.org:8545", explorador: "https://testnet.bscscan.com",     cor: "#F3BA2F", testnet: true },
+  { id: 80002,    nome: "Polygon Amoy (Testnet)", simbolo: "tPOL", rpc: "https://rpc-amoy.polygon.technology",            explorador: "https://amoy.polygonscan.com",    cor: "#8247E5", testnet: true },
 ];
 
+// ============================================================
+// CATÁLOGO DE TOKENS
+// ============================================================
+const TOKENS = [
+  { symbol: "BRN",    name: "BRN Token",            address: "0xdbc1c747b1d4c27113f65a4620b8feac74e2a210", decimals: 18 },
+  { symbol: "USDC",   name: "USD Coin (nativo)",    address: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", decimals: 6  },
+  { symbol: "USDC.e", name: "USD Coin (bridged)",   address: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174", decimals: 6  },
+  { symbol: "USDT",   name: "Tether USD (nativo)",  address: "0xc2132d05d31c914a87c6611c10748aeb04b58e8a", decimals: 6  },
+  { symbol: "USDT.e", name: "Tether USD (bridged)", address: "0x9417669fbf23357d2774e9d4234219952d36a1e5", decimals: 6  },
+  { symbol: "SHIB",   name: "Shiba Inu",            address: "0x6f8a06447ff6fcf75d803135a7de15ce88c1d4ec", decimals: 18 },
+  { symbol: "WPOL",   name: "Wrapped POL",          address: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270", decimals: 18 },
+  { symbol: "WBTC",   name: "Wrapped BTC",          address: "0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6", decimals: 8  },
+  { symbol: "WETH",   name: "Wrapped Ether",        address: "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619", decimals: 18 },
+  { symbol: "USDT-ETH", name: "Tether USD (Ethereum)", address: "0xdac17f958d2ee523a2206206994597c13d831ec7", decimals: 6,  somenteEth: true, rede: "Ethereum" },
+  { symbol: "USDC-ETH", name: "USD Coin (Ethereum)",   address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", decimals: 6,  somenteEth: true, rede: "Ethereum" },
+  { symbol: "SHIB-ETH", name: "Shiba Inu (Ethereum)",  address: "0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce", decimals: 18, somenteEth: true, rede: "Ethereum" },
+  { symbol: "SHIB-BSC", name: "SHIBA INU (BSC)",       address: "0x2859e4544c4bb03966803b044a93563bd2d0dd4d", decimals: 18, somenteBsc: true, rede: "BSC" },
+  { symbol: "USDT-BSC", name: "Tether USD (BSC)",      address: "0x55d398326f99059ff775485246999027b3197955", decimals: 18, somenteBsc: true, rede: "BSC" },
+  { symbol: "USDC-BSC", name: "USD Coin (BSC)",        address: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", decimals: 18, somenteBsc: true, rede: "BSC" },
+];
+
+// ============================================================
+// MAPAS DE BRIDGE
+// ============================================================
 const SIDESHIFT_MAP = {
   "usdt-polygon":  { coin: "usdt", network: "polygon",  tokenSymbol: "USDT" },
   "usdc-polygon":  { coin: "usdc", network: "polygon",  tokenSymbol: "USDC" },
@@ -70,26 +106,29 @@ const SIDESHIFT_MAP = {
   "usdt-ethereum": { coin: "usdt", network: "ethereum", tokenSymbol: "USDT-ETH" },
   "usdc-ethereum": { coin: "usdc", network: "ethereum", tokenSymbol: "USDC-ETH" },
   "shib-ethereum": { coin: "shib", network: "ethereum", tokenSymbol: "SHIB-ETH" },
-  "usdt-bsc":      { coin: "usdt", network: "bsc",      tokenSymbol: "USDT-BSC" }
+  "usdt-bsc":      { coin: "usdt", network: "bsc",      tokenSymbol: "USDT-BSC" },
 };
 
 const SYMBIOSIS_MAP = {
   "shib-bsc":     { coin: "shib", network: "bsc",     tokenSymbol: "SHIB-BSC", chainId: BSC_CHAIN_ID,     chainName: "BNB" },
-  "shib-polygon": { coin: "shib", network: "polygon", tokenSymbol: "SHIB",     chainId: POLYGON_CHAIN_ID, chainName: "Polygon" }
+  "shib-polygon": { coin: "shib", network: "polygon", tokenSymbol: "SHIB",     chainId: POLYGON_CHAIN_ID, chainName: "Polygon" },
 };
 
+// ============================================================
+// RPC LISTS
+// ============================================================
 const RPC_LIST = [
   "https://polygon.publicnode.com",
   "https://1rpc.io/matic",
   "https://polygon-bor-rpc.publicnode.com",
-  "https://rpc.ankr.com/polygon"
+  "https://rpc.ankr.com/polygon",
 ];
 
 const ETH_RPC_LIST = [
   "https://ethereum.publicnode.com",
   "https://eth.drpc.org",
   "https://1rpc.io/eth",
-  "https://eth-mainnet.public.blastapi.io"
+  "https://eth-mainnet.public.blastapi.io",
 ];
 
 const BSC_RPC_LIST = [
@@ -97,95 +136,38 @@ const BSC_RPC_LIST = [
   "https://bsc-dataseed2.binance.org",
   "https://bsc.publicnode.com",
   "https://bsc-rpc.publicnode.com",
-  "https://1rpc.io/bnb"
+  "https://1rpc.io/bnb",
 ];
 
+// ============================================================
+// CATÁLOGOS DE CARTEIRAS
+// ============================================================
 const WALLETS_EVM_CATALOG = [
-  { name: "MetaMask",        icon: "🦊", rdns: "io.metamask",          install: "https://metamask.io/download/" },
-  { name: "Rabby",           icon: "🐰", rdns: "io.rabby",             install: "https://rabby.io/" },
-  { name: "Coinbase Wallet", icon: "🔵", rdns: "com.coinbase.wallet",  install: "https://www.coinbase.com/wallet/downloads" },
-  { name: "Trust Wallet",    icon: "🛡️", rdns: "com.trustwallet.app", install: "https://trustwallet.com/browser-extension" },
-  { name: "OKX Wallet",      icon: "⬛", rdns: "com.okex.wallet",      install: "https://www.okx.com/web3" },
-  { name: "Phantom",         icon: "🦎", rdns: "app.phantom",          install: "https://phantom.app/download" },
-  { name: "Brave Wallet",    icon: "🦁", rdns: "com.brave.wallet",     install: "https://brave.com/wallet/" },
+  { name: "MetaMask",        icon: "🦊", rdns: "io.metamask",             install: "https://metamask.io/download/" },
+  { name: "Rabby",           icon: "🐰", rdns: "io.rabby",                install: "https://rabby.io/" },
+  { name: "Coinbase Wallet", icon: "🔵", rdns: "com.coinbase.wallet",     install: "https://www.coinbase.com/wallet/downloads" },
+  { name: "Trust Wallet",    icon: "🛡️", rdns: "com.trustwallet.app",     install: "https://trustwallet.com/browser-extension" },
+  { name: "OKX Wallet",      icon: "⬛", rdns: "com.okex.wallet",         install: "https://www.okx.com/web3" },
+  { name: "Phantom",         icon: "🦎", rdns: "app.phantom",             install: "https://phantom.app/download" },
+  { name: "Brave Wallet",    icon: "🦁", rdns: "com.brave.wallet",        install: "https://brave.com/wallet/" },
   { name: "Pelagus",         icon: "🔶", rdns: "io.pelaguswallet.wallet", install: "https://pelaguswallet.io/" },
-  { name: "Bitget Wallet",   icon: "🔷", rdns: "com.bitget.wallet",    install: "https://web3.bitget.com/wallet" },
-  { name: "Rainbow",         icon: "🌈", rdns: "me.rainbow",           install: "https://rainbow.me/download" },
-  { name: "Ledger",          icon: "🔒", rdns: "com.ledger",           install: "https://www.ledger.com/ledger-live" }
+  { name: "Bitget Wallet",   icon: "🔷", rdns: "com.bitget.wallet",       install: "https://web3.bitget.com/wallet" },
+  { name: "Rainbow",         icon: "🌈", rdns: "me.rainbow",              install: "https://rainbow.me/download" },
+  { name: "Ledger",          icon: "🔒", rdns: "com.ledger",              install: "https://www.ledger.com/ledger-live" },
 ];
 
 const WALLETS_BTC_CATALOG = [
-  { name: "UniSat",      icon: "🟠", key: "unisat",    check: () => !!window.unisat,                                 install: "https://unisat.io/download" },
-  { name: "OKX Bitcoin", icon: "⬛", key: "okxbtc",    check: () => !!(window.okxwallet?.bitcoin),                   install: "https://www.okx.com/web3" },
-  { name: "Leather",     icon: "🧳", key: "leather",   check: () => !!window.LeatherProvider,                        install: "https://leather.io/install-extension" },
+  { name: "UniSat",      icon: "🟠", key: "unisat",    check: () => !!window.unisat,                                     install: "https://unisat.io/download" },
+  { name: "OKX Bitcoin", icon: "⬛", key: "okxbtc",    check: () => !!(window.okxwallet && window.okxwallet.bitcoin),   install: "https://www.okx.com/web3" },
+  { name: "Leather",     icon: "🧳", key: "leather",   check: () => !!window.LeatherProvider,                            install: "https://leather.io/install-extension" },
   { name: "Xverse",      icon: "✨", key: "xverse",    check: () => !!(window.XverseProviders || window.BitcoinProvider), install: "https://www.xverse.app/download" },
-  { name: "Magic Eden",  icon: "🪄", key: "magiceden", check: () => !!(window.magicEden?.bitcoin),                   install: "https://wallet.magiceden.io/" }
+  { name: "Magic Eden",  icon: "🪄", key: "magiceden", check: () => !!(window.magicEden && window.magicEden.bitcoin),    install: "https://wallet.magiceden.io/" },
 ];
 
+// ============================================================
+// ESTADO GLOBAL
+// ============================================================
 let S = null;
-
-function construirSeletores() {
-  if (typeof ethers === "undefined" || !ethers.utils) {
-    throw new Error("ethers.js não carregou — verifique o <script> do CDN");
-  }
-  const sel = a => ethers.utils.id(a).slice(2, 10);
-  S = {
-    Factory: {
-      criarOrdem:  sel("criarNovoContratoEscrow(address,address,uint256,uint256)"),
-      todasOrdens: sel("obterContratosGerados()")
-    },
-    Escrow: {
-      obterDados: sel("obterDados()"),
-      executar:   sel("executarTroca()"),
-      cancelar:   sel("cancelar()")
-    },
-    ERC20: {
-      balanceOf: sel("balanceOf(address)"),
-      allowance: sel("allowance(address,address)"),
-      approve:   sel("approve(address,uint256)"),
-      transfer:  sel("transfer(address,uint256)")
-    },
-    WPOL: {
-      deposit:  sel("deposit()"),
-      withdraw: sel("withdraw(uint256)")
-    }
-  };
-  console.log("✅ Seletores ABI calculados:", S);
-}
-
-// ============================================================
-// ✅ v6.24.1: Verificador de IDs do HTML
-// ✅ v6.24.2: inclui IDs do modal de redes
-// ============================================================
-function verificarIDsHTML() {
-  const idsEssenciais = [
-    "netDot", "netText",
-    "btcDot", "btcText",
-    "toasts",
-    "btnConnect", "btnDisconnect",
-    "walletInfo", "addr",
-    "balances", "orders", "counter",
-    // ✅ v6.24.2
-    "btnMinhasRedes", "modalRedes", "modalRedesConteudo",
-    "btnFecharModalRedes", "btnFecharModalRedes2"
-  ];
-
-  const faltando = idsEssenciais.filter(id => !document.getElementById(id));
-
-  if (faltando.length > 0) {
-    console.warn("❌ FALTANDO NO HTML:", faltando.join(", "));
-    console.log("👉 Adicione os elementos com os IDs acima no seu index.html.");
-  } else {
-    console.log(`✅ JS/CSS v6.24.2: Todos os ${idsEssenciais.length} IDs essenciais existem no HTML.`);
-  }
-
-  console.log("🔗 Endpoints CEXSwap configurados:");
-  console.log("  • Prices URL :", CEXSWAP_PRICES_URL);
-  console.log("  • Markets URL:", CEXSWAP_MARKETS_URL);
-
-  return faltando;
-}
-
 let provider = null;
 let signer = null;
 let userAddress = null;
@@ -199,23 +181,96 @@ let saldos = { POL: 0n };
 let filtroAtivo = { status: "ativas", oferece: "", pede: "", minhas: false };
 let btcApiSincronizada = false;
 let refreshTimer = null;
-
 let btcWallet = null;
 let btcSaldoSats = 0;
 let walletEscolhidaRdns = null;
 let eventosWalletConfigurados = false;
-
+let _unsubWallet = null;
+let _ciclosRefresh = 0;
 let rpcFallbacks = [];
+let precosCexSwap = {};
+let mercadoCexSwap = [];
 
-// ✅ v6.23: Caches de dados da CEXSwap
-let precosCexSwap = {};     // { "BRN": 0.05, "USDT": 1.0, ... }
-let mercadoCexSwap = [];    // [ { pair: "WRKZ-DOGE", last: 0.1, priceChangePercent: 2.3, ... }, ... ]
+const announcedProviders = new Map();
 
 const $ = id => document.getElementById(id);
 const isAddr = a => /^0x[a-fA-F0-9]{40}$/i.test(a || "");
 const short = a => isAddr(a) ? a.slice(0, 6) + "…" + a.slice(-4) : "—";
 const mesmoAddr = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
+// ============================================================
+// SELETORES ABI
+// ============================================================
+function construirSeletores() {
+  if (typeof ethers === "undefined" || !ethers.utils) {
+    throw new Error("ethers.js não carregou — verifique o <script> do CDN");
+  }
+  const sel = a => ethers.utils.id(a).slice(2, 10);
+  S = {
+    Factory: {
+      criarOrdem:  sel("criarNovoContratoEscrow(address,address,uint256,uint256)"),
+      todasOrdens: sel("obterContratosGerados()"),
+    },
+    Escrow: {
+      obterDados: sel("obterDados()"),
+      executar:   sel("executarTroca()"),
+      cancelar:   sel("cancelar()"),
+    },
+    ERC20: {
+      balanceOf: sel("balanceOf(address)"),
+      allowance: sel("allowance(address,address)"),
+      approve:   sel("approve(address,uint256)"),
+      transfer:  sel("transfer(address,uint256)"),
+    },
+    WPOL: {
+      deposit:  sel("deposit()"),
+      withdraw: sel("withdraw(uint256)"),
+    },
+  };
+  console.log("✅ Seletores ABI calculados:", S);
+}
+
+// ============================================================
+// VERIFICADOR DE IDs
+// ============================================================
+function verificarIDsHTML() {
+  const idsEssenciais = [
+    "netDot", "netText",
+    "btcDot", "btcText",
+    "toasts",
+    "btnConnect", "btnDisconnect",
+    "walletInfo", "addr",
+    "balances", "orders", "counter",
+    "btnMinhasRedes", "modalRedes", "modalRedesConteudo",
+    "btnFecharModalRedes", "btnFecharModalRedes2",
+    "redeBadge",
+    "evmWalletDot", "evmWalletText",
+    "btcWalletDot", "btcWalletText",
+    "modalCarteiras",
+    "modalEvmDetectadas", "modalEvmOutras", "modalBtc",
+    "modalConfirmacao", "modalConfirmTitulo", "modalConfirmMensagem",
+    "btnConfirmSim", "btnConfirmNao",
+  ];
+
+  const faltando = idsEssenciais.filter(id => !document.getElementById(id));
+
+  if (faltando.length > 0) {
+    console.warn("❌ FALTANDO NO HTML:", faltando.join(", "));
+    console.log("👉 Adicione os elementos com os IDs acima no seu index.html.");
+  } else {
+    console.log(`✅ JS/CSS v6.24.3: Todos os ${idsEssenciais.length} IDs essenciais existem no HTML.`);
+  }
+
+  console.log("🔗 Endpoints CEXSwap configurados:");
+  console.log("  • Prices URL :", CEXSWAP_PRICES_URL);
+  console.log("  • Markets URL:", CEXSWAP_MARKETS_URL);
+
+  return faltando;
+}
+
+// ============================================================
+// UTILITÁRIOS
+// ============================================================
 function parseUnits(valor, decimals) {
   return BigInt(ethers.utils.parseUnits(valor, decimals).toString());
 }
@@ -261,9 +316,8 @@ function toastBtcTx(txid) {
 }
 
 // ============================================================
-// ✅ v6.21: FUNÇÕES AUXILIARES DE UX E SEGURANÇA
+// UX / SEGURANÇA
 // ============================================================
-
 function confirmarAcao(titulo, mensagem) {
   return new Promise((resolve) => {
     const modal = document.getElementById("modalConfirmacao");
@@ -307,12 +361,21 @@ async function estimarGas(txParams) {
 }
 
 async function trocarRede(chainId) {
-  const prov = provider?.provider || (walletEscolhidaRdns ? obterProviderPorRdns(walletEscolhidaRdns) : null) || window.ethereum;
+  const prov = (provider && provider.provider)
+    || (walletEscolhidaRdns ? obterProviderPorRdns(walletEscolhidaRdns) : null)
+    || window.ethereum;
   if (!prov || !prov.request) {
     toast("❌ Carteira não suporta troca de rede.", "err");
     return false;
   }
+
   const hexChainId = "0x" + chainId.toString(16);
+
+  try {
+    const atual = await prov.request({ method: "eth_chainId" });
+    if (String(atual).toLowerCase() === hexChainId.toLowerCase()) return true;
+  } catch { /* segue */ }
+
   try {
     await prov.request({
       method: 'wallet_switchEthereumChain',
@@ -321,8 +384,7 @@ async function trocarRede(chainId) {
     toast("✅ Rede alterada com sucesso!", "ok");
     return true;
   } catch (switchError) {
-    const nomes = { 1: "Ethereum", 56: "BSC (BNB Chain)", 137: "Polygon" };
-    const nomeRede = nomes[chainId] || `Chain ${chainId}`;
+    const nomeRede = NOME_REDE_CURTO[chainId] || `Chain ${chainId}`;
     if (switchError.code === 4902) {
       toast(`❌ A rede ${nomeRede} não está na sua carteira. Adicione manualmente.`, "warn", 10000);
     } else {
@@ -344,35 +406,41 @@ function recriarProviderAposTroca() {
 }
 
 // ============================================================
-// ✅ v6.24: INTEGRAÇÃO CEXSWAP (URLs separadas + aliases)
+// CEXSwap
 // ============================================================
-
 async function buscarPrecosCexSwap() {
   try {
     const r = await fetchTimeout(CEXSWAP_PRICES_URL, 8000);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
 
-    if (data?.success && data?.data) {
+    const novos = {};
+
+    if (data && data.success && data.data) {
       if (Array.isArray(data.data)) {
         data.data.forEach(item => {
           const sym = (item.symbol || item.code || "").toUpperCase();
           const preco = Number(item.price || item.priceUsd || item.usd || 0);
-          if (sym && preco > 0) precosCexSwap[sym] = preco;
+          if (sym && preco > 0) novos[sym] = preco;
         });
       } else if (typeof data.data === "object") {
         Object.entries(data.data).forEach(([sym, preco]) => {
           const p = Number(preco);
-          if (sym && p > 0) precosCexSwap[sym.toUpperCase()] = p;
+          if (sym && p > 0) novos[sym.toUpperCase()] = p;
         });
       }
     } else if (Array.isArray(data)) {
       data.forEach(item => {
         const sym = (item.symbol || item.code || "").toUpperCase();
         const preco = Number(item.price || item.priceUsd || item.usd || 0);
-        if (sym && preco > 0) precosCexSwap[sym] = preco;
+        if (sym && preco > 0) novos[sym] = preco;
       });
     }
+
+    for (const k of Object.keys(precosCexSwap)) {
+      if (!(k in novos)) delete precosCexSwap[k];
+    }
+    Object.assign(precosCexSwap, novos);
 
     console.log(`✅ CEXSwap: ${Object.keys(precosCexSwap).length} preços carregados.`);
     return precosCexSwap;
@@ -389,10 +457,10 @@ async function buscarResumoMercado() {
     const data = await r.json();
 
     let lista = [];
-    if (data?.success && Array.isArray(data?.data)) lista = data.data;
+    if (data && data.success && Array.isArray(data.data)) lista = data.data;
     else if (Array.isArray(data)) lista = data;
-    else if (data?.success && typeof data?.data === "object") {
-      lista = Object.entries(data.data).map(([pair, info]) => ({ pair, ...info }));
+    else if (data && data.success && typeof data.data === "object") {
+      lista = Object.entries(data.data).map(([pair, info]) => Object.assign({ pair }, info));
     }
 
     mercadoCexSwap = lista;
@@ -411,7 +479,9 @@ function precoUsd(symbol) {
     .replace(/\.E$/, "");
   const aliases = { "WPOL": "POL", "WETH": "ETH", "WBTC": "BTC" };
   const sym = aliases[base] || base;
-  return precosCexSwap[sym] ?? precosCexSwap[symbol.toUpperCase()] ?? null;
+  if (precosCexSwap[sym] != null) return precosCexSwap[sym];
+  if (precosCexSwap[symbol.toUpperCase()] != null) return precosCexSwap[symbol.toUpperCase()];
+  return null;
 }
 
 function variacao24h(symbol) {
@@ -426,7 +496,10 @@ function variacao24h(symbol) {
     return pair === sym || pair.startsWith(sym + "-") || pair.startsWith(sym + "/");
   });
   if (!m) return null;
-  const v = Number(m.priceChangePercent ?? m.change24h ?? m.change ?? NaN);
+  const raw = (m.priceChangePercent != null) ? m.priceChangePercent
+            : (m.change24h != null) ? m.change24h
+            : m.change;
+  const v = Number(raw);
   return isNaN(v) ? null : v;
 }
 
@@ -439,13 +512,14 @@ function fmtUsd(valor) {
 }
 
 // ============================================================
-
-const announcedProviders = new Map();
-
+// DESCOBERTA DE CARTEIRAS (EIP-6963)
+// ============================================================
 function inicializarDescobertaCarteiras() {
   const onAnnounce = (event) => {
     try {
-      const { info, provider: prov } = event.detail || {};
+      const d = event.detail || {};
+      const info = d.info;
+      const prov = d.provider;
       if (!info || !prov) return;
       if (!announcedProviders.has(info.uuid)) {
         announcedProviders.set(info.uuid, { info, provider: prov });
@@ -462,7 +536,7 @@ function inicializarDescobertaCarteiras() {
         console.log("⚠️ EIP-6963 não respondeu. Usando fallback window.ethereum.");
         announcedProviders.set("fallback", {
           info: { name: "Carteira EVM Detectada", rdns: "fallback", uuid: "fallback" },
-          provider: window.ethereum
+          provider: window.ethereum,
         });
       }
       atualizarStatusCarteiras();
@@ -476,7 +550,7 @@ function listarCarteirasDisponiveis() {
   return Array.from(announcedProviders.values()).map(e => ({
     name: e.info.name,
     rdns: e.info.rdns,
-    uuid: e.info.uuid
+    uuid: e.info.uuid,
   }));
 }
 
@@ -507,14 +581,15 @@ function carteiraEvmDetectada(rdns) {
 
 function traduzirErro(e) {
   if (!e) return { msg: "Erro desconhecido.", tipo: "err" };
+  const m = e.message || "";
   if (e.code === 4001 || e.code === "ACTION_REJECTED") return { msg: "Operação cancelada na carteira.", tipo: "warn" };
-  if (e.code === "INSUFFICIENT_FUNDS" || /insufficient funds/i.test(e.message || "")) return { msg: "Saldo insuficiente para pagar o gas. Adicione POL à sua carteira.", tipo: "err" };
-  if (/nonce too low|nonce has already been used/i.test(e.message || "")) return { msg: "Sincronização pendente. Espere a tx anterior confirmar e tente de novo.", tipo: "warn" };
-  if (/out of gas|gas required exceeds allowance|intrinsic gas too low/i.test(e.message || "")) return { msg: "Gas insuficiente. Aumente o gasLimit ou tente novamente.", tipo: "err" };
-  if (/chainId|network changed|wrong network/i.test(e.message || "")) return { msg: "Rede incorreta. Troque para Polygon Mainnet.", tipo: "err" };
-  if (/could not detect network|timeout|failed to fetch|network error/i.test(e.message || "")) return { msg: "Falha de conexão com a rede. Tente novamente.", tipo: "err" };
-  if (/execution reverted|revert/i.test(e.message || "")) return { msg: "Contrato recusou a operação. Verifique saldo e allowance.", tipo: "err" };
-  const limpa = (e.message || "").replace(/^Error:\s*/i, "").replace(/\(action=.*?\)/i, "").replace(/\(error=.*?\)/i, "").trim();
+  if (e.code === "INSUFFICIENT_FUNDS" || /insufficient funds/i.test(m)) return { msg: "Saldo insuficiente para pagar o gas.", tipo: "err" };
+  if (/nonce too low|nonce has already been used/i.test(m)) return { msg: "Sincronização pendente. Espere a tx anterior.", tipo: "warn" };
+  if (/out of gas|gas required exceeds allowance|intrinsic gas too low/i.test(m)) return { msg: "Gas insuficiente.", tipo: "err" };
+  if (/chainId|network changed|wrong network/i.test(m)) return { msg: "Rede incorreta. Troque para Polygon.", tipo: "err" };
+  if (/could not detect network|timeout|failed to fetch|network error/i.test(m)) return { msg: "Falha de conexão.", tipo: "err" };
+  if (/execution reverted|revert/i.test(m)) return { msg: "Contrato recusou a operação.", tipo: "err" };
+  const limpa = m.replace(/^Error:\s*/i, "").replace(/\(action=.*?\)/i, "").replace(/\(error=.*?\)/i, "").trim();
   return { msg: limpa || "Erro desconhecido.", tipo: "err" };
 }
 
@@ -525,6 +600,9 @@ async function fetchTimeout(url, ms = 8000) {
   finally { clearTimeout(t); }
 }
 
+// ============================================================
+// ENCODING / DECODING ABI
+// ============================================================
 function encAddr(addr) {
   if (!isAddr(addr)) throw new Error("Endereço inválido: " + addr);
   return addr.toLowerCase().slice(2).padStart(64, "0");
@@ -570,7 +648,7 @@ function decodificarOrdem(hex) {
     valorOferecido: decUint(p[3]),
     valorDesejado:  decUint(p[4]),
     executado:      p[5] ? decBool(p[5]) : false,
-    cancelado:      p[6] ? decBool(p[6]) : false
+    cancelado:      p[6] ? decBool(p[6]) : false,
   };
 }
 
@@ -596,7 +674,7 @@ function tokenPorEndereco(endereco) {
     name: "Token não cadastrado",
     address: endereco,
     decimals: 18,
-    desconhecido: true
+    desconhecido: true,
   };
 }
 
@@ -608,28 +686,27 @@ function nomeComRede(tok) {
 }
 
 // ============================================================
-// ✅ v6.24.2: atualizarStatusCarteiras agora é async (para ler chainId)
+// STATUS DE CARTEIRAS
 // ============================================================
 async function atualizarStatusCarteiras() {
   const ed = $("evmWalletDot");
   const et = $("evmWalletText");
+  const badge = $("redeBadge");
+
   if (ed && et) {
     if (userAddress) {
       ed.className = "dot";
       const nome = walletEscolhidaRdns
-        ? (Array.from(announcedProviders.values()).find(e => e.info.rdns === walletEscolhidaRdns)?.info.name || "Carteira")
+        ? (Array.from(announcedProviders.values())
+            .find(e => e.info.rdns === walletEscolhidaRdns)?.info.name || "Carteira")
         : "Carteira";
       et.textContent = `${nome}: ${short(userAddress)}`;
 
-      // ✅ v6.24.2: preenche o badge com a rede atual
-      const badge = $("redeBadge");
       if (badge && provider) {
         try {
           const rede = await provider.getNetwork();
-          const nomes = { 1: "Ethereum", 56: "BSC", 137: "Polygon" };
-          const cores = { 1: "#627eea", 56: "#f0b90b", 137: "#8247e5" };
-          const nomeRede = nomes[rede.chainId] || `Chain ${rede.chainId}`;
-          const cor = cores[rede.chainId] || "#666";
+          const nomeRede = NOME_REDE_CURTO[rede.chainId] || `Chain ${rede.chainId}`;
+          const cor = COR_REDE[rede.chainId] || "#666";
           badge.textContent = nomeRede;
           badge.style.background = cor + "22";
           badge.style.color = cor;
@@ -642,10 +719,10 @@ async function atualizarStatusCarteiras() {
     } else {
       ed.className = "dot off";
       et.textContent = "Carteira EVM: Desconectada";
-      const badge = $("redeBadge");
       if (badge) badge.style.display = "none";
     }
   }
+
   const bd = $("btcWalletDot");
   const bt = $("btcWalletText");
   if (bd && bt) {
@@ -660,11 +737,14 @@ async function atualizarStatusCarteiras() {
   }
 }
 
-async function testarRPC(url) {
+// ============================================================
+// RPC
+// ============================================================
+async function testarRPC(url, expectedChainId) {
   try {
     const p = new ethers.providers.JsonRpcProvider({ url, timeout: 15000 });
     const rede = await p.getNetwork();
-    if (rede.chainId === POLYGON_CHAIN_ID) return p;
+    if (rede.chainId === expectedChainId) return p;
   } catch {}
   return null;
 }
@@ -672,7 +752,7 @@ async function testarRPC(url) {
 async function conectarRPC() {
   const validos = [];
   for (const url of RPC_LIST) {
-    const p = await testarRPC(url);
+    const p = await testarRPC(url, POLYGON_CHAIN_ID);
     if (p) validos.push({ url, p });
   }
   if (validos.length === 0) return false;
@@ -698,20 +778,11 @@ async function chamarRPCComFailover(fn) {
   throw new Error("Todos os RPCs falharam");
 }
 
-async function testarRPCEth(url) {
-  try {
-    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 15000 });
-    const rede = await p.getNetwork();
-    if (rede.chainId === 1) return p;
-  } catch {}
-  return null;
-}
-
 async function conectarRPCEth() {
   if (ethProvider) return true;
   const validos = [];
   for (const url of ETH_RPC_LIST) {
-    const p = await testarRPCEth(url);
+    const p = await testarRPC(url, ETH_CHAIN_ID);
     if (p) validos.push({ url, p });
   }
   if (validos.length === 0) {
@@ -723,20 +794,11 @@ async function conectarRPCEth() {
   return true;
 }
 
-async function testarRPCBSC(url) {
-  try {
-    const p = new ethers.providers.JsonRpcProvider({ url, timeout: 15000 });
-    const rede = await p.getNetwork();
-    if (rede.chainId === BSC_CHAIN_ID) return p;
-  } catch {}
-  return null;
-}
-
 async function conectarRPCBSC() {
   if (bscProvider) return true;
   const validos = [];
   for (const url of BSC_RPC_LIST) {
-    const p = await testarRPCBSC(url);
+    const p = await testarRPC(url, BSC_CHAIN_ID);
     if (p) validos.push({ url, p });
   }
   if (validos.length === 0) {
@@ -779,6 +841,9 @@ async function verificarStatusRedeBitcoin() {
   }
 }
 
+// ============================================================
+// BITCOIN — consulta
+// ============================================================
 async function consultarSaldoBTC() {
   const input = $("btcAddressInput"), card = $("btcResult"), valEl = $("btcBalanceValue");
   if (!input || !valEl) return;
@@ -818,6 +883,9 @@ function atualizarHintWbtc() {
   hint.textContent = `Saldo: ${fmt(saldo, wbtc.decimals)} WBTC`;
 }
 
+// ============================================================
+// SIDESHIFT — WBTC → BTC
+// ============================================================
 async function criarOrdemSideShift() {
   if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
 
@@ -855,8 +923,8 @@ async function criarOrdemSideShift() {
         settleCoin:     "btc",
         settleNetwork:  "bitcoin",
         depositAmount:  valorStr,
-        settleAddress:  btcDestino
-      })
+        settleAddress:  btcDestino,
+      }),
     });
 
     const rawText = await response.text();
@@ -887,6 +955,9 @@ async function copiarDepositAddress() {
   catch { toast("❌ Não foi possível copiar.", "err"); }
 }
 
+// ============================================================
+// CROSS-CHAIN
+// ============================================================
 async function atualizarHintCC() {
   const sel = $("ccTokenOrigem");
   const hint = $("ccSaldoHint");
@@ -897,8 +968,7 @@ async function atualizarHintCC() {
   const token = TOKENS.find(t => t.symbol === origem.tokenSymbol);
   if (!token) { hint.textContent = "Saldo: —"; return; }
   const saldo = saldos[token.address] || 0n;
-  const nomeRede = { polygon: "Polygon", ethereum: "Ethereum", bsc: "BSC" };
-  const redeLabel = nomeRede[origem.network] || origem.network;
+  const redeLabel = NOME_REDE[origem.network] || origem.network;
   const simboloLimpo = token.symbol.replace(/-(BSC|ETH)$/, "");
   hint.textContent = `Saldo na ${redeLabel}: ${fmt(saldo, token.decimals)} ${simboloLimpo}`;
 }
@@ -923,9 +993,9 @@ async function abrirSymbiosisSwap() {
     return;
   }
 
-  const gasNativo = origem.network === "bsc" ? "BNB" : "POL";
-  const redeOrigemLabel = origem.network === "bsc" ? "BSC / BNB Chain" : "Polygon";
-  const redeDestinoLabel = destino.network === "polygon" ? "Polygon" : "BSC / BNB Chain";
+  const gasNativo = GAS_REDE[origem.network] || "POL";
+  const redeOrigemLabel = NOME_REDE[origem.network] || origem.network;
+  const redeDestinoLabel = NOME_REDE[destino.network] || destino.network;
 
   const confirmar = await confirmarAcao(
     "🌐 Cross-Chain SHIB (nova aba)",
@@ -1011,16 +1081,15 @@ async function criarOrdemCrossChain() {
     const saldoOrigem = saldos[tokenOrigem.address] || 0n;
     const valorWei = parseUnits(valorStr, tokenOrigem.decimals);
     if (saldoOrigem < valorWei) {
-      const nomeRede = { polygon: "Polygon", bsc: "BSC" };
-      const redeLabel = nomeRede[origem.network] || origem.network;
+      const redeLabel = NOME_REDE[origem.network] || origem.network;
       const simboloLimpo = tokenOrigem.symbol.replace(/-(BSC|ETH)$/, "");
       toast(`❌ Saldo insuficiente na ${redeLabel}. Você tem ${fmt(saldoOrigem, tokenOrigem.decimals)} ${simboloLimpo}.`, "err", 9000);
       return;
     }
 
-    const gasNativo = origem.network === "bsc" ? "BNB" : "POL";
-    const redeOrigemLabel = origem.network === "bsc" ? "BSC / BNB Chain" : "Polygon";
-    const redeDestinoLabel = destino.network === "polygon" ? "Polygon" : "BSC / BNB Chain";
+    const gasNativo = GAS_REDE[origem.network] || "POL";
+    const redeOrigemLabel = NOME_REDE[origem.network] || origem.network;
+    const redeDestinoLabel = NOME_REDE[destino.network] || destino.network;
 
     const confirmar = await confirmarAcao(
       "🚀 Cross-Chain SHIB (Symbiosis)",
@@ -1039,8 +1108,7 @@ async function criarOrdemCrossChain() {
     const redeAtual = await provider.getNetwork();
     const chainEsperada = origem.chainId;
     if (redeAtual.chainId !== chainEsperada) {
-      const nomeRedeAlvo = origem.network === "bsc" ? "BSC (BNB Chain)" : "Polygon";
-      toast(`⚠️ Trocando para ${nomeRedeAlvo}...`, "info");
+      toast(`⚠️ Trocando para ${redeOrigemLabel}...`, "info");
       const trocou = await trocarRede(chainEsperada);
       if (!trocou) return;
       await new Promise(r => setTimeout(r, 800));
@@ -1065,8 +1133,8 @@ async function criarOrdemCrossChain() {
           toDecimals:   tokenDestino.decimals,
           amount:       valorWei.toString(),
           recipient:    destinoAddr,
-          slippage:     300
-        })
+          slippage:     300,
+        }),
       });
 
       const data = await resp.json();
@@ -1078,7 +1146,7 @@ async function criarOrdemCrossChain() {
         const chainProv = origem.network === "bsc" ? bscProvider : rpcProvider;
         const res = await chainProv.call({
           to: tokenOrigem.address,
-          data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(approveTo)
+          data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(approveTo),
         });
         allowance = decUint(res.slice(2));
       } catch (e) {
@@ -1089,10 +1157,10 @@ async function criarOrdemCrossChain() {
         toast(`⏳ Aprovando SHIB…`, "info");
         const txParams = {
           to: tokenOrigem.address,
-          data: "0x" + S.ERC20.approve + encAddr(approveTo) + encUint(valorWei)
+          data: "0x" + S.ERC20.approve + encAddr(approveTo) + encUint(valorWei),
         };
         const gasEstimado = await estimarGas(txParams);
-        const txA = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 100000 });
+        const txA = await signer.sendTransaction(Object.assign({}, txParams, { gasLimit: gasEstimado || 100000 }));
         toastTx("📤 Aprovação:", txA.hash, "ok");
         await txA.wait();
         toast("✅ Aprovado!", "ok");
@@ -1102,10 +1170,10 @@ async function criarOrdemCrossChain() {
       const txParams = {
         to: data.tx.to,
         data: data.tx.data,
-        value: data.tx.value || "0x0"
+        value: data.tx.value || "0x0",
       };
       const gasEstimado = await estimarGas(txParams);
-      const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 900000 });
+      const tx = await signer.sendTransaction(Object.assign({}, txParams, { gasLimit: gasEstimado || 900000 }));
 
       toastTx("📤 Transação Symbiosis:", tx.hash, "ok");
       await tx.wait();
@@ -1115,7 +1183,17 @@ async function criarOrdemCrossChain() {
       $("cc-deposit-amount").textContent = valorStr;
       $("cc-deposit-token").textContent = `SHIB (${redeOrigemLabel})`;
       $("cc-deposit-address").textContent = data.tx.to;
-      $("cc-settle-amount").textContent = data.amountOut ? fmt(BigInt(data.amountOut), 18) : "~" + valorStr;
+
+      let amountOutTxt = "~" + valorStr;
+      if (data.amountOut != null) {
+        try {
+          const limpo = String(data.amountOut).split(".")[0];
+          amountOutTxt = fmt(BigInt(limpo), 18);
+        } catch {
+          console.warn("amountOut inválido:", data.amountOut);
+        }
+      }
+      $("cc-settle-amount").textContent = amountOutTxt;
       $("cc-settle-token").textContent = `SHIB (${redeDestinoLabel})`;
       $("cc-expires").textContent = "~15 min";
 
@@ -1146,17 +1224,15 @@ async function criarOrdemCrossChain() {
   const saldoOrigem = saldos[tokenOrigem.address] || 0n;
   const valorWei = parseUnits(valorStr, tokenOrigem.decimals);
   if (saldoOrigem < valorWei) {
-    const nomeRede = { polygon: "Polygon", ethereum: "Ethereum", bsc: "BSC" };
-    const redeLabel = nomeRede[origem.network] || origem.network;
+    const redeLabel = NOME_REDE[origem.network] || origem.network;
     const simboloLimpo = tokenOrigem.symbol.replace(/-(BSC|ETH)$/, "");
     toast(`❌ Saldo insuficiente na ${redeLabel}. Você tem ${fmt(saldoOrigem, tokenOrigem.decimals)} ${simboloLimpo}.`, "err", 9000);
     return;
   }
 
-  const nomeRede = { polygon: "Polygon", ethereum: "Ethereum", bsc: "BSC / BNB Chain" };
-  const redeOrigem = nomeRede[origem.network] || origem.network;
-  const redeDestino = nomeRede[destino.network] || destino.network;
-  const gasNativo = origem.network === "bsc" ? "BNB" : (origem.network === "ethereum" ? "ETH" : "POL");
+  const redeOrigem = NOME_REDE[origem.network] || origem.network;
+  const redeDestino = NOME_REDE[destino.network] || destino.network;
+  const gasNativo = GAS_REDE[origem.network] || "POL";
 
   const confirmar = await confirmarAcao(
     "🌉 Bridge Cross-Chain (SideShift)",
@@ -1196,8 +1272,8 @@ async function criarOrdemCrossChain() {
         settleCoin:     destino.coin,
         settleNetwork:  destino.network,
         depositAmount:  valorStr,
-        settleAddress:  destinoAddr
-      })
+        settleAddress:  destinoAddr,
+      }),
     });
 
     const rawText = await response.text();
@@ -1236,6 +1312,9 @@ async function copiarCCDepositAddress() {
   catch { toast("❌ Não foi possível copiar.", "err"); }
 }
 
+// ============================================================
+// POL — envio nativo
+// ============================================================
 function calcularPOLDisponivel() {
   const reserva = parseUnits(RESERVA_GAS_POL, 18);
   return saldos.POL > reserva ? saldos.POL - reserva : 0n;
@@ -1272,7 +1351,7 @@ async function enviarPOL() {
 
     const txParams = { to: destino, value: valor };
     const gasEstimado = await estimarGas(txParams);
-    const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 21000 });
+    const tx = await signer.sendTransaction(Object.assign({}, txParams, { gasLimit: gasEstimado || 21000 }));
 
     toastTx("📤 POL enviado:", tx.hash, "ok");
     await tx.wait();
@@ -1288,10 +1367,13 @@ async function enviarPOL() {
   } finally { isTxBusy = false; }
 }
 
+// ============================================================
+// BITCOIN — carteira e envio
+// ============================================================
 async function detectarCarteiraBTC() {
-  if (window.unisat)             return { type: "unisat",  provider: window.unisat, label: "UniSat" };
-  if (window.okxwallet?.bitcoin) return { type: "okx",     provider: window.okxwallet.bitcoin, label: "OKX Wallet" };
-  if (window.LeatherProvider)    return { type: "leather", provider: window.LeatherProvider, label: "Leather" };
+  if (window.unisat) return { type: "unisat", provider: window.unisat, label: "UniSat" };
+  if (window.okxwallet && window.okxwallet.bitcoin) return { type: "okx", provider: window.okxwallet.bitcoin, label: "OKX Wallet" };
+  if (window.LeatherProvider) return { type: "leather", provider: window.LeatherProvider, label: "Leather" };
   return null;
 }
 
@@ -1315,7 +1397,7 @@ async function conectarCarteiraBTC() {
       publicKey = r.publicKey;
     } else if (det.type === "leather") {
       const r = await det.provider.request("getAddresses");
-      const lista = r?.result?.addresses || [];
+      const lista = (r && r.result && r.result.addresses) || [];
       const pref = lista.find(a => a.type === "p2wpkh" || a.type === "p2tr") || lista[0];
       if (!pref) throw new Error("Nenhum endereço retornado");
       address = pref.address;
@@ -1324,12 +1406,12 @@ async function conectarCarteiraBTC() {
 
     if (!address) throw new Error("Carteira não retornou endereço");
 
-    btcWallet = { ...det, address, publicKey };
+    btcWallet = Object.assign({}, det, { address, publicKey });
 
     const st = $("btcWalletStatus");
     if (st) st.textContent = `✅ ${det.label}: ${address.slice(0, 10)}…${address.slice(-6)}`;
-    const bc = $("btnConectarBTC");   if (bc) bc.style.display = "none";
-    const bd = $("btnDesconectarBTC");if (bd) bd.style.display = "";
+    const bc = $("btnConectarBTC");    if (bc) bc.style.display = "none";
+    const bd = $("btnDesconectarBTC"); if (bd) bd.style.display = "";
 
     toast(`✅ ${det.label} conectada!`, "ok");
     await atualizarSaldoBTCEnvio();
@@ -1409,10 +1491,10 @@ async function enviarBTC() {
       txid = await btcWallet.provider.sendBitcoin(destino, sats);
     } else if (btcWallet.type === "okx") {
       const r = await btcWallet.provider.sendBitcoin(destino, sats);
-      txid = typeof r === "string" ? r : (r?.txid || r?.txhash);
+      txid = typeof r === "string" ? r : (r && (r.txid || r.txhash));
     } else if (btcWallet.type === "leather") {
       const r = await btcWallet.provider.request("sendTransfer", { recipients: [{ address: destino, amount: sats }] });
-      txid = r?.result?.txid || r?.txid;
+      txid = (r && r.result && r.result.txid) || (r && r.txid);
     }
 
     if (!txid) throw new Error("A carteira não retornou o txid");
@@ -1441,12 +1523,15 @@ async function maxBTCEnvio() {
 function atualizarStatusCarteiraBTC() {
   const btn = $("btnConectarBTC");
   if (!btn) return;
-  const det = !!(window.unisat || window.okxwallet?.bitcoin || window.LeatherProvider);
-  if (btcWallet) btn.textContent = "🔌 Reconectar BTC";
-  else if (det) btn.textContent = "🔌 Conectar carteira BTC";
-  else btn.textContent = "🔌 Instalar carteira BTC";
+  const det = !!(window.unisat || (window.okxwallet && window.okxwallet.bitcoin) || window.LeatherProvider);
+  btn.innerHTML = btcWallet ? "🔌 Reconectar BTC"
+                : det       ? "🔌 Conectar carteira BTC"
+                :             "🔌 Instalar carteira BTC";
 }
 
+// ============================================================
+// PREENCHER SELETORES
+// ============================================================
 function preencherSeletores() {
   const tokensPolygon = TOKENS.filter(t => !t.somenteEth && !t.somenteBsc);
   const opts = tokensPolygon.map(t => `<option value="${t.address}">${t.symbol} — ${t.name}</option>`).join("");
@@ -1462,6 +1547,9 @@ function preencherSeletores() {
   if (fp) fp.innerHTML = '<option value="">Pede: Todos</option>' + filtroOpts;
 }
 
+// ============================================================
+// SALDOS
+// ============================================================
 async function carregarSaldos() {
   if (!rpcProvider || !userAddress || !S) return;
   const t0 = Date.now();
@@ -1478,7 +1566,7 @@ async function carregarSaldos() {
     if (t.somenteEth || t.somenteBsc) { saldos[t.address] = 0n; continue; }
     try {
       const res = await chamarRPCComFailover(p => p.call({
-        to: t.address, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress)
+        to: t.address, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress),
       }));
       saldos[t.address] = decUint(res.slice(2));
     } catch (e) {
@@ -1506,8 +1594,8 @@ async function carregarSaldosEthereum() {
     if (!ok) { console.warn("⚠️ Não foi possível conectar à rede Ethereum — pulando saldos ETH"); return; }
   }
 
-  try { saldos["ETH_NATIVO"] = BigInt((await ethProvider.getBalance(userAddress)).toString()); }
-  catch (e) { console.warn("Falha ao ler ETH nativo:", e.message); saldos["ETH_NATIVO"] = 0n; }
+  try { saldos.ETH_NATIVO = BigInt((await ethProvider.getBalance(userAddress)).toString()); }
+  catch (e) { console.warn("Falha ao ler ETH nativo:", e.message); saldos.ETH_NATIVO = 0n; }
 
   for (const t of tokensEth) {
     try {
@@ -1526,8 +1614,8 @@ async function carregarSaldosBSC() {
     if (!ok) { console.warn("⚠️ Não foi possível conectar à BSC — pulando saldos BSC"); return; }
   }
 
-  try { saldos["BNB_NATIVO"] = BigInt((await bscProvider.getBalance(userAddress)).toString()); }
-  catch (e) { console.warn("Falha ao ler BNB nativo:", e.message); saldos["BNB_NATIVO"] = 0n; }
+  try { saldos.BNB_NATIVO = BigInt((await bscProvider.getBalance(userAddress)).toString()); }
+  catch (e) { console.warn("Falha ao ler BNB nativo:", e.message); saldos.BNB_NATIVO = 0n; }
 
   for (const t of tokensBsc) {
     try {
@@ -1542,8 +1630,11 @@ function renderizarSaldos() {
   if (!container) return;
   container.innerHTML = "";
 
-  const add = (simbolo, valor, decimais, opts = {}) => {
-    const { aviso = null, tokenAddr = null, mostrarPreco = false } = opts;
+  const add = (simbolo, valor, decimais, opts) => {
+    opts = opts || {};
+    const aviso = opts.aviso || null;
+    const tokenAddr = opts.tokenAddr || null;
+    const mostrarPreco = opts.mostrarPreco || false;
     const div = document.createElement("div");
     div.className = "bal";
     const classe = valor === 0n ? "v dim" : "v";
@@ -1703,7 +1794,7 @@ function renderizarSaldos() {
 }
 
 // ============================================================
-// ✅ v6.24.2: MODAL "MINHAS REDES" (botão btnMinhasRedes)
+// MODAL "MINHAS REDES"
 // ============================================================
 function abrirModalRedes() {
   const modal = $("modalRedes");
@@ -1713,64 +1804,70 @@ function abrirModalRedes() {
     return;
   }
 
-  const redes = [
-    {
-      nome: "Polygon",
-      icon: "🟣",
-      chainId: POLYGON_CHAIN_ID,
-      gas: "POL",
-      ativa: !!rpcProvider,
-      detalhe: rpcProvider ? "RPC conectado" : "Sem conexão"
-    },
-    {
-      nome: "Ethereum",
-      icon: "🔷",
-      chainId: ETH_CHAIN_ID,
-      gas: "ETH",
-      ativa: !!ethProvider,
-      detalhe: ethProvider ? "RPC conectado" : "Sem conexão"
-    },
-    {
-      nome: "BSC / BNB Chain",
-      icon: "🟡",
-      chainId: BSC_CHAIN_ID,
-      gas: "BNB",
-      ativa: !!bscProvider,
-      detalhe: bscProvider ? "RPC conectado" : "Sem conexão"
-    },
-    {
-      nome: "Bitcoin",
-      icon: "🟠",
-      chainId: null,
-      gas: "BTC",
-      ativa: btcApiSincronizada,
-      detalhe: btcApiSincronizada ? "Blockstream API" : "API offline"
-    }
+  const ativa = (id) => {
+    if (id === POLYGON_CHAIN_ID) return !!rpcProvider;
+    if (id === ETH_CHAIN_ID)     return !!ethProvider;
+    if (id === BSC_CHAIN_ID)     return !!bscProvider;
+    return false;
+  };
+
+  const lista = (typeof REDES !== "undefined" && Array.isArray(REDES)) ? REDES : [
+    { id: 137, nome: "Polygon",  simbolo: "POL", cor: "#8247E5" },
+    { id: 1,   nome: "Ethereum", simbolo: "ETH", cor: "#627EEA" },
+    { id: 56,  nome: "BSC",      simbolo: "BNB", cor: "#F3BA2F" },
   ];
 
-  conteudo.innerHTML = `
+  const mainnets = lista.filter(r => !r.testnet);
+  const testnets = lista.filter(r =>  r.testnet);
+
+  const renderCard = (r) => {
+    const on = ativa(r.id);
+    const cor = r.cor || "#666";
+    return `
+      <div class="rede-card ${on ? "ativa" : ""}">
+        <span class="rede-icon" style="background:${cor}22;color:${cor};border:1px solid ${cor}">●</span>
+        <span class="rede-nome">${r.nome}</span>
+        <span class="rede-status ${on ? "ok" : "off"}">${on ? "✅ Online" : "❌ Offline"}</span>
+        <span class="dim" style="font-size:.68rem;opacity:.7;">
+          Gas: ${r.simbolo}${r.id ? ` · Chain ${r.id}` : ""}
+        </span>
+      </div>`;
+  };
+
+  const btcCard = `
+    <div class="rede-card ${btcApiSincronizada ? "ativa" : ""}">
+      <span class="rede-icon" style="background:#f7931a22;color:#f7931a;border:1px solid #f7931a">●</span>
+      <span class="rede-nome">Bitcoin (nativo)</span>
+      <span class="rede-status ${btcApiSincronizada ? "ok" : "off"}">${btcApiSincronizada ? "✅ Online" : "❌ Offline"}</span>
+      <span class="dim" style="font-size:.68rem;opacity:.7;">Gas: BTC · Blockstream API</span>
+    </div>`;
+
+  const cardsHtml = `
+    <div class="redes-grupo-titulo">Mainnets</div>
     <div class="redes-grid">
-      ${redes.map(r => `
-        <div class="rede-card ${r.ativa ? "ativa" : ""}">
-          <span class="rede-icon">${r.icon}</span>
-          <span class="rede-nome">${r.nome}</span>
-          <span class="rede-status ${r.ativa ? "ok" : "off"}">
-            ${r.ativa ? "✅ Online" : "❌ Offline"}
-          </span>
-          <span class="dim" style="font-size: 0.72rem; margin-top: 4px;">${r.detalhe}</span>
-          <span class="dim" style="font-size: 0.68rem; opacity: 0.7;">
-            Gas: ${r.gas}${r.chainId ? ` · Chain ${r.chainId}` : ""}
-          </span>
-        </div>
-      `).join("")}
+      ${mainnets.map(renderCard).join("")}
+      ${btcCard}
     </div>
+    ${testnets.length ? `
+      <div class="redes-grupo-titulo" style="margin-top:18px;">Testnets</div>
+      <div class="redes-grid">
+        ${testnets.map(renderCard).join("")}
+      </div>
+    ` : ""}
+  `;
+
+  const nomeCarteira = walletEscolhidaRdns
+    ? (Array.from(announcedProviders.values())
+        .find(e => e.info.rdns === walletEscolhidaRdns)?.info.name || "—")
+    : "—";
+
+  conteudo.innerHTML = `
+    ${cardsHtml}
 
     ${userAddress ? `
-      <h3 class="modal-section-title" style="margin-top: 20px;">🔌 Sua carteira conectada</h3>
+      <h3 class="modal-section-title" style="margin-top: 22px;">🔌 Sua carteira conectada</h3>
       <p class="dim" style="font-size: 0.85rem; line-height: 1.6;">
-        <strong>Carteira:</strong> ${walletEscolhidaRdns
-          ? (Array.from(announcedProviders.values()).find(e => e.info.rdns === walletEscolhidaRdns)?.info.name || "—")
-          : "—"}<br>
+        <strong>Carteira:</strong> ${nomeCarteira}<br>
         <strong>Endereço:</strong> <code>${userAddress}</code><br>
         <span style="opacity: 0.7; font-size: 0.78rem;">
           💡 O mesmo endereço 0x funciona em Polygon, Ethereum e BSC.
@@ -1778,7 +1875,7 @@ function abrirModalRedes() {
         </span>
       </p>
     ` : `
-      <p class="dim" style="margin-top: 20px; text-align: center; font-size: 0.85rem;">
+      <p class="dim" style="margin-top: 22px; text-align: center; font-size: 0.85rem;">
         🔌 Conecte uma carteira para ver detalhes da sua conta.
       </p>
     `}
@@ -1795,6 +1892,9 @@ function fecharModalRedes() {
   document.body.style.overflow = "";
 }
 
+// ============================================================
+// MODAL CARTEIRAS
+// ============================================================
 function abrirModalCarteiras() {
   const modal = $("modalCarteiras");
   if (!modal) return;
@@ -1899,6 +1999,9 @@ function renderizarModalCarteiras() {
   }
 }
 
+// ============================================================
+// CONEXÃO EVM
+// ============================================================
 async function conectarCarteira(rdnsForcado) {
   const carteiras = listarCarteirasDisponiveis();
 
@@ -1915,12 +2018,9 @@ async function conectarCarteira(rdnsForcado) {
   } else if (carteiras.length === 1) {
     escolhida = carteiras[0];
   } else {
-    const nomes = carteiras.map((c, i) => `${i + 1}. ${c.name}`).join("\n");
-    const escolha = window.prompt(`Múltiplas carteiras detectadas:\n\n${nomes}\n\nDigite o número da carteira que deseja usar:`);
-    if (!escolha) return;
-    const idx = parseInt(escolha) - 1;
-    if (isNaN(idx) || idx < 0 || idx >= carteiras.length) { toast("❌ Escolha inválida.", "warn"); return; }
-    escolhida = carteiras[idx];
+    toast("👆 Escolha a carteira no painel.", "info", 4000);
+    abrirModalCarteiras();
+    return;
   }
 
   const providerEscolhido = obterProviderPorRdns(escolhida.rdns);
@@ -1972,6 +2072,8 @@ function desconectarCarteira() {
   userAddress = null;
   walletEscolhidaRdns = null;
   saldos = { POL: 0n };
+
+  if (_unsubWallet) { _unsubWallet(); _unsubWallet = null; }
   eventosWalletConfigurados = false;
 
   if ($("btnConnect")) $("btnConnect").style.display = "block";
@@ -1983,6 +2085,9 @@ function desconectarCarteira() {
   atualizarStatusCarteiras();
 }
 
+// ============================================================
+// COMPARTILHAR ENDEREÇO
+// ============================================================
 function abrirPainelCompartilhar() {
   if (!userAddress) { toast("Conecte a carteira primeiro.", "warn"); return; }
 
@@ -2034,6 +2139,9 @@ async function copiarEndereco() {
   }
 }
 
+// ============================================================
+// ORDENS (escrow)
+// ============================================================
 async function carregarOrdens() {
   if (loading || !rpcProvider || !S) return;
   loading = true;
@@ -2070,7 +2178,7 @@ async function carregarOrdens() {
           tokenDesejado: d.tokenDesejado,
           valorDesejado: d.valorDesejado,
           executado: d.executado,
-          cancelado: d.cancelado
+          cancelado: d.cancelado,
         });
       } catch (e) {
         if (!/missing revert data|call exception|timeout/i.test(e.message || "")) {
@@ -2090,7 +2198,7 @@ async function carregarOrdens() {
 }
 
 function aplicarFiltros() {
-  let filtrado = [...ordersCache];
+  let filtrado = [].concat(ordersCache);
   if (filtroAtivo.status === "ativas") filtrado = filtrado.filter(o => !o.executado && !o.cancelado);
   if (filtroAtivo.status === "executaveis") filtrado = filtrado.filter(o => !o.executado && !o.cancelado && userAddress && !mesmoAddr(o.criador, userAddress));
   if (filtroAtivo.status === "executadas") filtrado = filtrado.filter(o => o.executado);
@@ -2162,6 +2270,9 @@ function renderizarOrdens(lista) {
   });
 }
 
+// ============================================================
+// OPERAÇÕES ESCROW
+// ============================================================
 async function criarOrdem() {
   if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
@@ -2188,22 +2299,22 @@ async function criarOrdem() {
     const deVal = parseUnits(deStr, deToken.decimals);
 
     const saldo = decUint((await chamarRPCComFailover(p => p.call({
-      to: ofAddr, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress)
+      to: ofAddr, data: "0x" + S.ERC20.balanceOf + encAddr(userAddress),
     }))).slice(2));
     if (saldo < ofVal) throw new Error(`Saldo insuficiente de ${ofToken.symbol}`);
 
     const allowance = decUint((await chamarRPCComFailover(p => p.call({
-      to: ofAddr, data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(ESCROW_FACTORY)
+      to: ofAddr, data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(ESCROW_FACTORY),
     }))).slice(2));
 
     if (allowance < ofVal) {
       toast(`⏳ Aprovando ${ofToken.symbol}…`, "info");
       const txParams = {
         to: ofAddr,
-        data: "0x" + S.ERC20.approve + encAddr(ESCROW_FACTORY) + encUint(ofVal)
+        data: "0x" + S.ERC20.approve + encAddr(ESCROW_FACTORY) + encUint(ofVal),
       };
       const gasEstimado = await estimarGas(txParams);
-      const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 100000 });
+      const tx = await signer.sendTransaction(Object.assign({}, txParams, { gasLimit: gasEstimado || 100000 }));
       toastTx("📤 Aprovação:", tx.hash, "ok");
       await tx.wait();
       toast("✅ Aprovado!", "ok");
@@ -2214,7 +2325,7 @@ async function criarOrdem() {
 
     const txParams = { to: ESCROW_FACTORY, data };
     const gasEstimado = await estimarGas(txParams);
-    const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 900000 });
+    const tx = await signer.sendTransaction(Object.assign({}, txParams, { gasLimit: gasEstimado || 900000 }));
 
     toastTx("📤 Ordem criada:", tx.hash, "ok");
     await tx.wait();
@@ -2239,18 +2350,18 @@ async function executarOrdem(escrowAddr) {
     const d = decodificarOrdem(dadosRes);
 
     const allowance = decUint((await chamarRPCComFailover(p => p.call({
-      to: d.tokenDesejado, data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(escrowAddr)
+      to: d.tokenDesejado, data: "0x" + S.ERC20.allowance + encAddr(userAddress) + encAddr(escrowAddr),
     }))).slice(2));
 
     if (allowance < d.valorDesejado) {
       const tok = tokenPorEndereco(d.tokenDesejado);
-      toast(`⏳ Aprovando ${tok?.symbol || "token"}…`, "info");
+      toast(`⏳ Aprovando ${tok && tok.symbol ? tok.symbol : "token"}…`, "info");
       const txParams = {
         to: d.tokenDesejado,
-        data: "0x" + S.ERC20.approve + encAddr(escrowAddr) + encUint(d.valorDesejado)
+        data: "0x" + S.ERC20.approve + encAddr(escrowAddr) + encUint(d.valorDesejado),
       };
       const gasEstimado = await estimarGas(txParams);
-      const txA = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 100000 });
+      const txA = await signer.sendTransaction(Object.assign({}, txParams, { gasLimit: gasEstimado || 100000 }));
       toastTx("📤 Aprovação:", txA.hash, "ok");
       await txA.wait();
       toast("✅ Aprovado!", "ok");
@@ -2259,7 +2370,7 @@ async function executarOrdem(escrowAddr) {
     toast("⏳ Executando…", "info");
     const txParams = { to: escrowAddr, data: "0x" + S.Escrow.executar };
     const gasEstimado = await estimarGas(txParams);
-    const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 300000 });
+    const tx = await signer.sendTransaction(Object.assign({}, txParams, { gasLimit: gasEstimado || 300000 }));
 
     toastTx("📤 Transação:", tx.hash, "ok");
     await tx.wait();
@@ -2280,7 +2391,7 @@ async function cancelarOrdem(escrowAddr) {
     toast("⏳ Cancelando…", "info");
     const txParams = { to: escrowAddr, data: "0x" + S.Escrow.cancelar };
     const gasEstimado = await estimarGas(txParams);
-    const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 200000 });
+    const tx = await signer.sendTransaction(Object.assign({}, txParams, { gasLimit: gasEstimado || 200000 }));
 
     toastTx("📤 Transação:", tx.hash, "ok");
     await tx.wait();
@@ -2294,6 +2405,9 @@ async function cancelarOrdem(escrowAddr) {
   } finally { isTxBusy = false; }
 }
 
+// ============================================================
+// ENVIO DE TOKEN ERC-20
+// ============================================================
 async function enviarToken() {
   if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
@@ -2317,10 +2431,10 @@ async function enviarToken() {
 
     const txParams = {
       to: token.address,
-      data: "0x" + S.ERC20.transfer + encAddr(destino) + encUint(valor)
+      data: "0x" + S.ERC20.transfer + encAddr(destino) + encUint(valor),
     };
     const gasEstimado = await estimarGas(txParams);
-    const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 100000 });
+    const tx = await signer.sendTransaction(Object.assign({}, txParams, { gasLimit: gasEstimado || 100000 }));
 
     toastTx("📤 Transação:", tx.hash, "ok");
     await tx.wait();
@@ -2335,6 +2449,9 @@ async function enviarToken() {
   } finally { isTxBusy = false; }
 }
 
+// ============================================================
+// WRAP / UNWRAP POL
+// ============================================================
 async function wrapPOL() {
   if (!signer || !userAddress || isTxBusy || !S) return;
   isTxBusy = true;
@@ -2350,7 +2467,7 @@ async function wrapPOL() {
 
     const txParams = { to: wpol.address, data: "0x" + S.WPOL.deposit, value: valor };
     const gasEstimado = await estimarGas(txParams);
-    const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 100000 });
+    const tx = await signer.sendTransaction(Object.assign({}, txParams, { gasLimit: gasEstimado || 100000 }));
 
     toastTx("📤 Transação enviada:", tx.hash, "ok");
     await tx.wait();
@@ -2380,7 +2497,7 @@ async function unwrapWPOL() {
 
     const txParams = { to: wpol.address, data: "0x" + S.WPOL.withdraw + encUint(valor) };
     const gasEstimado = await estimarGas(txParams);
-    const tx = await signer.sendTransaction({ ...txParams, gasLimit: gasEstimado || 100000 });
+    const tx = await signer.sendTransaction(Object.assign({}, txParams, { gasLimit: gasEstimado || 100000 }));
 
     toastTx("📤 Transação enviada:", tx.hash, "ok");
     await tx.wait();
@@ -2394,6 +2511,9 @@ async function unwrapWPOL() {
   } finally { isTxBusy = false; }
 }
 
+// ============================================================
+// CONFIGURAÇÃO DE UI
+// ============================================================
 function configurarAbas() {
   document.querySelectorAll(".tabs button").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -2495,7 +2615,7 @@ function configurarMax() {
     const origem = SIDESHIFT_MAP[origemKey] || SYMBIOSIS_MAP[origemKey];
     if (!origem) return;
     const token = TOKENS.find(t => t.symbol === origem.tokenSymbol);
-    if (token && saldos[token.address] > 0n) $("ccValor").value = ethers.utils.formatUnits(saldos[token.address], token.decimals);
+    if (token && (saldos[token.address] || 0n) > 0n) $("ccValor").value = ethers.utils.formatUnits(saldos[token.address], token.decimals);
   });
 }
 
@@ -2517,25 +2637,23 @@ function configurarBotoes() {
 
   const ep = $("btnEnviarPOL");      if (ep) ep.addEventListener("click", enviarPOL);
 
-  const cbBTC = $("btnConectarBTC");     if (cbBTC) cbBTC.addEventListener("click", conectarCarteiraBTC);
-  const dbBTC = $("btnDesconectarBTC");  if (dbBTC) dbBTC.addEventListener("click", desconectarCarteiraBTC);
-  const ebBTC = $("btnEnviarBTC");       if (ebBTC) ebBTC.addEventListener("click", enviarBTC);
+  const cbBTC = $("btnConectarBTC");    if (cbBTC) cbBTC.addEventListener("click", conectarCarteiraBTC);
+  const dbBTC = $("btnDesconectarBTC"); if (dbBTC) dbBTC.addEventListener("click", desconectarCarteiraBTC);
+  const ebBTC = $("btnEnviarBTC");      if (ebBTC) ebBTC.addEventListener("click", enviarBTC);
 
   const ccBtn   = $("btnCriarCC");        if (ccBtn)   ccBtn.addEventListener("click", criarOrdemCrossChain);
   const ccAbrir = $("btnAbrirSymbiosis"); if (ccAbrir) ccAbrir.addEventListener("click", abrirSymbiosisSwap);
   const ccCopy  = $("btnCopyCCDeposit");  if (ccCopy)  ccCopy.addEventListener("click", copiarCCDepositAddress);
   const ccSel   = $("ccTokenOrigem");     if (ccSel)   ccSel.addEventListener("change", atualizarHintCC);
 
-  const bc1 = $("btnCarteirasAceitas");        if (bc1) bc1.addEventListener("click", abrirModalCarteiras);
-  const bc2 = $("btnFecharModalCarteiras");    if (bc2) bc2.addEventListener("click", fecharModalCarteiras);
-  const bc3 = $("btnFecharModalCarteiras2");   if (bc3) bc3.addEventListener("click", fecharModalCarteiras);
+  const bc1 = $("btnCarteirasAceitas");      if (bc1) bc1.addEventListener("click", abrirModalCarteiras);
+  const bc2 = $("btnFecharModalCarteiras");  if (bc2) bc2.addEventListener("click", fecharModalCarteiras);
+  const bc3 = $("btnFecharModalCarteiras2"); if (bc3) bc3.addEventListener("click", fecharModalCarteiras);
 
-  // ✅ v6.24.2: botão "Minhas Redes" + modal
   const mr1 = $("btnMinhasRedes");       if (mr1) mr1.addEventListener("click", abrirModalRedes);
   const mr2 = $("btnFecharModalRedes");  if (mr2) mr2.addEventListener("click", fecharModalRedes);
   const mr3 = $("btnFecharModalRedes2"); if (mr3) mr3.addEventListener("click", fecharModalRedes);
 
-  // Fecha modais ao clicar fora
   const modalCart = $("modalCarteiras");
   if (modalCart) {
     modalCart.addEventListener("click", (e) => {
@@ -2549,7 +2667,6 @@ function configurarBotoes() {
     });
   }
 
-  // ✅ v6.24.2: ESC fecha os dois modais
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       fecharModalCarteiras();
@@ -2577,25 +2694,37 @@ function configurarBotoes() {
   if (btcValEnv) btcValEnv.addEventListener("keydown", e => { if (e.key === "Enter") enviarBTC(); });
 }
 
+// ============================================================
+// AUTO-REFRESH
+// ============================================================
 function iniciarAutoRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = setInterval(() => {
-    if (document.visibilityState === 'visible') {
-      if (!loading) carregarOrdens();
-      if (userAddress) carregarSaldos();
-      buscarPrecosCexSwap().then(() => renderizarSaldos()).catch(() => {});
-      buscarResumoMercado().catch(() => {});
-    }
+    if (document.visibilityState !== "visible") return;
+    _ciclosRefresh++;
+
+    if (!loading) carregarOrdens();
+    if (userAddress) carregarSaldos();
+
+    buscarPrecosCexSwap().then(() => renderizarSaldos()).catch(() => {});
+    buscarResumoMercado().catch(() => {});
+
+    if (_ciclosRefresh % 5 === 0) verificarStatusRedeBitcoin().catch(() => {});
   }, REFRESH_MS);
 }
 
+// ============================================================
+// EVENTOS DE WALLET
+// ============================================================
 function configurarEventosWallet() {
-  if (eventosWalletConfigurados) return;
-  const prov = walletEscolhidaRdns ? obterProviderPorRdns(walletEscolhidaRdns) : window.ethereum;
-  if (!prov || !prov.on) return;
-  eventosWalletConfigurados = true;
+  if (_unsubWallet) { _unsubWallet(); _unsubWallet = null; }
 
-  prov.on("accountsChanged", (contas) => {
+  const prov = walletEscolhidaRdns
+    ? obterProviderPorRdns(walletEscolhidaRdns)
+    : window.ethereum;
+  if (!prov || !prov.on || !prov.removeListener) return;
+
+  const onAcc = (contas) => {
     if (!contas || !contas.length) {
       desconectarCarteira();
     } else {
@@ -2605,16 +2734,44 @@ function configurarEventosWallet() {
       carregarOrdens();
       atualizarStatusCarteiras();
     }
-  });
+  };
 
-  prov.on("chainChanged", () => window.location.reload());
+  const onChain = async () => {
+    try {
+      const p = walletEscolhidaRdns ? obterProviderPorRdns(walletEscolhidaRdns) : window.ethereum;
+      if (!p) return;
+      provider = new ethers.providers.Web3Provider(p);
+      signer = provider.getSigner();
+      const rede = await provider.getNetwork();
+      if (rede.chainId !== POLYGON_CHAIN_ID) {
+        toast(`⚠️ Rede alterada para Chain ${rede.chainId}. Algumas funções ficarão limitadas.`, "warn", 8000);
+      }
+      await carregarSaldos();
+      await carregarOrdens();
+      atualizarStatusCarteiras();
+    } catch (e) {
+      console.warn("chainChanged handler:", e.message);
+    }
+  };
+
+  prov.on("accountsChanged", onAcc);
+  prov.on("chainChanged", onChain);
+
+  _unsubWallet = () => {
+    try { prov.removeListener("accountsChanged", onAcc); } catch {}
+    try { prov.removeListener("chainChanged", onChain); } catch {}
+  };
+
+  eventosWalletConfigurados = true;
 }
 
+// ============================================================
+// INIT
+// ============================================================
 async function init() {
-  console.log("🚀 BRN Exchange v6.24.2 — inicializando…");
+  console.log("🚀 BRN Exchange v6.24.3 — inicializando…");
 
   verificarIDsHTML();
-
   inicializarDescobertaCarteiras();
 
   try {
@@ -2632,7 +2789,7 @@ async function init() {
     configurarMax();
     configurarBotoes();
     atualizarStatusCarteiraBTC();
-    atualizarStatusCarteiras();
+    await atualizarStatusCarteiras();
   } catch (e) {
     console.error("❌ Falha ao configurar UI:", e);
     toast("⚠️ Erro na configuração da UI: " + e.message, "warn", 10000);
@@ -2684,7 +2841,6 @@ async function init() {
         const contas = await window.unisat.getAccounts();
         if (contas && contas.length) await conectarCarteiraBTC();
       }
-      atualizarStatusCarteiras();
     } catch (e) {
       console.warn("Auto-conexão BTC falhou:", e.message);
     }
