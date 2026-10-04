@@ -1,5 +1,13 @@
 // ============================================================
-// APP.JS — BRN Exchange | Versão 6.24.3
+// APP.JS — BRN Exchange | Versão 6.25.0
+// ✅ v6.25.0: NEW — Nível 1 BNB Chain: enviar BNB nativo
+// ✅ v6.25.0: NEW — Enviar tokens BEP-20 (USDT/USDC/SHIB/WBNB)
+// ✅ v6.25.0: NEW — Wrap / Unwrap BNB ↔ WBNB
+// ✅ v6.25.0: NEW — garantirRedeBSC() troca automática de rede
+// ✅ v6.25.0: NEW — Reserva automática de 0.002 BNB para gas
+// ✅ v6.25.0: NEW — toastTxBSC() (link para BSCScan)
+// ✅ v6.25.0: NEW — Aba "🟡 BNB Chain" no index.html
+// ✅ v6.25.0: NEW — WBNB no catálogo de tokens
 // ✅ v6.24.3: FIX — listeners de wallet removidos ao desconectar (_unsubWallet)
 // ✅ v6.24.3: FIX — chainChanged recria provider sem reload
 // ✅ v6.24.3: FIX — buscarPrecosCexSwap limpa preços fantasmas
@@ -9,9 +17,8 @@
 // ✅ v6.24.3: NEW — modal "Minhas Redes" gerado do array REDES
 // ✅ v6.24.3: NEW — array REDES integrado (14 redes EVM)
 // ✅ v6.24.3: NEW — constantes NOME_REDE, GAS_REDE, COR_REDE
-// ✅ v6.24.3: NEW — verificarIDsHTML cobre 29 IDs
+// ✅ v6.24.3: NEW — verificarIDsHTML cobre 31 IDs
 // ✅ v6.24.3: CHORE — auto-refresh revalida Bitcoin a cada 5 ciclos
-// ✅ v6.24.3: CHORE — removida chamada duplicada no init()
 // ✅ v6.24.2: NEW — botão "Minhas Redes" funcional (modal dinâmico)
 // ✅ v6.24.2: NEW — redeBadge mostra a rede atual da carteira
 // ✅ v6.24.2: FIX — ESC fecha os dois modais (carteiras + redes)
@@ -46,10 +53,9 @@ const CEXSWAP_MARKETS_URL = CEXSWAP_API_BASE + "/markets";
 
 const RESERVA_GAS_POL       = "0.05";
 const RESERVA_TAXA_BTC_SATS = 2000;
+const RESERVA_GAS_BNB       = "0.002";
+const WBNB_ADDRESS          = "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c";
 
-// ============================================================
-// CONSTANTES DE REDE
-// ============================================================
 const NOME_REDE       = { polygon: "Polygon", ethereum: "Ethereum", bsc: "BSC / BNB Chain" };
 const NOME_REDE_CURTO = { 1: "Ethereum", 56: "BSC", 137: "Polygon" };
 const COR_REDE        = { 1: "#627eea", 56: "#f0b90b", 137: "#8247e5" };
@@ -79,6 +85,7 @@ const REDES = [
 // CATÁLOGO DE TOKENS
 // ============================================================
 const TOKENS = [
+  // ===== POLYGON =====
   { symbol: "BRN",    name: "BRN Token",            address: "0xdbc1c747b1d4c27113f65a4620b8feac74e2a210", decimals: 18 },
   { symbol: "USDC",   name: "USD Coin (nativo)",    address: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", decimals: 6  },
   { symbol: "USDC.e", name: "USD Coin (bridged)",   address: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174", decimals: 6  },
@@ -88,12 +95,17 @@ const TOKENS = [
   { symbol: "WPOL",   name: "Wrapped POL",          address: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270", decimals: 18 },
   { symbol: "WBTC",   name: "Wrapped BTC",          address: "0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6", decimals: 8  },
   { symbol: "WETH",   name: "Wrapped Ether",        address: "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619", decimals: 18 },
+
+  // ===== ETHEREUM =====
   { symbol: "USDT-ETH", name: "Tether USD (Ethereum)", address: "0xdac17f958d2ee523a2206206994597c13d831ec7", decimals: 6,  somenteEth: true, rede: "Ethereum" },
   { symbol: "USDC-ETH", name: "USD Coin (Ethereum)",   address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", decimals: 6,  somenteEth: true, rede: "Ethereum" },
   { symbol: "SHIB-ETH", name: "Shiba Inu (Ethereum)",  address: "0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce", decimals: 18, somenteEth: true, rede: "Ethereum" },
-  { symbol: "SHIB-BSC", name: "SHIBA INU (BSC)",       address: "0x2859e4544c4bb03966803b044a93563bd2d0dd4d", decimals: 18, somenteBsc: true, rede: "BSC" },
-  { symbol: "USDT-BSC", name: "Tether USD (BSC)",      address: "0x55d398326f99059ff775485246999027b3197955", decimals: 18, somenteBsc: true, rede: "BSC" },
-  { symbol: "USDC-BSC", name: "USD Coin (BSC)",        address: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", decimals: 18, somenteBsc: true, rede: "BSC" },
+
+  // ===== BSC =====
+  { symbol: "SHIB-BSC", name: "SHIBA INU (BSC)",  address: "0x2859e4544c4bb03966803b044a93563bd2d0dd4d", decimals: 18, somenteBsc: true, rede: "BSC" },
+  { symbol: "USDT-BSC", name: "Tether USD (BSC)", address: "0x55d398326f99059ff775485246999027b3197955", decimals: 18, somenteBsc: true, rede: "BSC" },
+  { symbol: "USDC-BSC", name: "USD Coin (BSC)",   address: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", decimals: 18, somenteBsc: true, rede: "BSC" },
+  { symbol: "WBNB",     name: "Wrapped BNB",      address: "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c", decimals: 18, somenteBsc: true, rede: "BSC" },
 ];
 
 // ============================================================
@@ -250,6 +262,12 @@ function verificarIDsHTML() {
     "modalEvmDetectadas", "modalEvmOutras", "modalBtc",
     "modalConfirmacao", "modalConfirmTitulo", "modalConfirmMensagem",
     "btnConfirmSim", "btnConfirmNao",
+    // ✅ v6.25.0: BNB Chain
+    "panel-bnbchain",
+    "destinoBNB", "valorBNBEnvio", "btnMaxBNBEnvio", "btnEnviarBNB",
+    "selTokenBSCEnvio", "destinoBSCEnvio", "valorBSCEnvio", "btnMaxBSCEnvio", "btnEnviarBSC", "hintBSCEnvio",
+    "valorWBNB", "btnMaxWrapBNB", "btnConverterWBNB",
+    "valorBNB", "btnMaxUnwrapBNB", "btnConverterBNB",
   ];
 
   const faltando = idsEssenciais.filter(id => !document.getElementById(id));
@@ -258,7 +276,7 @@ function verificarIDsHTML() {
     console.warn("❌ FALTANDO NO HTML:", faltando.join(", "));
     console.log("👉 Adicione os elementos com os IDs acima no seu index.html.");
   } else {
-    console.log(`✅ JS/CSS v6.24.3: Todos os ${idsEssenciais.length} IDs essenciais existem no HTML.`);
+    console.log(`✅ JS/CSS v6.25.0: Todos os ${idsEssenciais.length} IDs essenciais existem no HTML.`);
   }
 
   console.log("🔗 Endpoints CEXSwap configurados:");
@@ -301,6 +319,17 @@ function toastTx(texto, hash, tipo = "info") {
   const el = document.createElement("div");
   el.className = `toast ${tipo}`;
   el.innerHTML = `${texto} <a href="${link}" target="_blank" rel="noopener">Ver no PolygonScan ↗</a>`;
+  container.appendChild(el);
+  setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, 8000);
+}
+
+function toastTxBSC(texto, hash, tipo = "info") {
+  const link = `https://bscscan.com/tx/${hash}`;
+  const container = $("toasts");
+  if (!container) return;
+  const el = document.createElement("div");
+  el.className = `toast ${tipo}`;
+  el.innerHTML = `${texto} <a href="${link}" target="_blank" rel="noopener">Ver no BSCScan ↗</a>`;
   container.appendChild(el);
   setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, 8000);
 }
@@ -477,7 +506,7 @@ function precoUsd(symbol) {
   const base = symbol.toUpperCase()
     .replace(/-(BSC|ETH)$/, "")
     .replace(/\.E$/, "");
-  const aliases = { "WPOL": "POL", "WETH": "ETH", "WBTC": "BTC" };
+  const aliases = { "WPOL": "POL", "WETH": "ETH", "WBTC": "BTC", "WBNB": "BNB" };
   const sym = aliases[base] || base;
   if (precosCexSwap[sym] != null) return precosCexSwap[sym];
   if (precosCexSwap[symbol.toUpperCase()] != null) return precosCexSwap[symbol.toUpperCase()];
@@ -489,7 +518,7 @@ function variacao24h(symbol) {
   const base = symbol.toUpperCase()
     .replace(/-(BSC|ETH)$/, "")
     .replace(/\.E$/, "");
-  const aliases = { "WPOL": "POL", "WETH": "ETH", "WBTC": "BTC" };
+  const aliases = { "WPOL": "POL", "WETH": "ETH", "WBTC": "BTC", "WBNB": "BNB" };
   const sym = (aliases[base] || base).toUpperCase();
   const m = mercadoCexSwap.find(x => {
     const pair = (x.pair || x.symbol || "").toUpperCase();
@@ -1368,6 +1397,188 @@ async function enviarPOL() {
 }
 
 // ============================================================
+// ✅ v6.25.0: BNB CHAIN (NÍVEL 1)
+// ============================================================
+function calcularBNBDisponivel() {
+  const reserva = parseUnits(RESERVA_GAS_BNB, 18);
+  const saldo = saldos.BNB_NATIVO || 0n;
+  return saldo > reserva ? saldo - reserva : 0n;
+}
+
+async function garantirRedeBSC() {
+  if (!provider || !signer || !userAddress) {
+    toast("Conecte a carteira primeiro.", "warn");
+    return false;
+  }
+  try {
+    const rede = await provider.getNetwork();
+    if (rede.chainId === BSC_CHAIN_ID) return true;
+  } catch {}
+  toast("⚠️ Mudando para BSC (BNB Chain)…", "warn");
+  const ok = await trocarRede(BSC_CHAIN_ID);
+  if (!ok) return false;
+  await new Promise(r => setTimeout(r, 800));
+  return recriarProviderAposTroca();
+}
+
+async function enviarBNB() {
+  if (isTxBusy) return;
+  if (!await garantirRedeBSC()) return;
+  isTxBusy = true;
+  try {
+    const destino = $("destinoBNB").value.trim();
+    const valorStr = $("valorBNBEnvio").value.trim().replace(",", ".");
+
+    if (!isAddr(destino)) throw new Error("Endereço de destino inválido");
+    if (mesmoAddr(destino, userAddress)) throw new Error("Não pode enviar para você mesmo");
+    if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
+
+    const valor = parseUnits(valorStr, 18);
+    const disponivel = calcularBNBDisponivel();
+
+    if (valor > disponivel) {
+      throw new Error(
+        `Saldo insuficiente. Você tem ${fmt(saldos.BNB_NATIVO || 0n, 18)} BNB ` +
+        `(reservando ${RESERVA_GAS_BNB} BNB para gas). Disponível: ${fmt(disponivel, 18)} BNB.`
+      );
+    }
+
+    const ok = await confirmarAcao(
+      "Confirmar envio de BNB",
+      `Enviar ${valorStr} BNB para:\n${destino}\n\n⚠️ Transação irreversível. Continuar?`
+    );
+    if (!ok) { isTxBusy = false; return; }
+
+    toast(`⏳ Enviando ${fmt(valor, 18, 6)} BNB…`, "info");
+
+    const txParams = { to: destino, value: valor };
+    const gasEstimado = await estimarGas(txParams);
+    const tx = await signer.sendTransaction(Object.assign({}, txParams, { gasLimit: gasEstimado || 21000 }));
+
+    toastTxBSC("📤 BNB enviado:", tx.hash, "ok");
+    await tx.wait();
+    toast("✅ BNB enviado com sucesso!", "ok", 6000);
+
+    $("destinoBNB").value = "";
+    $("valorBNBEnvio").value = "";
+    await carregarSaldosBSC();
+    renderizarSaldos();
+  } catch (e) {
+    console.error("enviarBNB:", e);
+    const { msg, tipo } = traduzirErro(e);
+    toast(msg, tipo, 8000);
+  } finally { isTxBusy = false; }
+}
+
+async function enviarTokenBSC() {
+  if (isTxBusy) return;
+  if (!await garantirRedeBSC()) return;
+  isTxBusy = true;
+  try {
+    const tokenAddr = $("selTokenBSCEnvio").value;
+    const destino = $("destinoBSCEnvio").value.trim();
+    const valorStr = $("valorBSCEnvio").value.trim().replace(",", ".");
+    const token = tokenPorEndereco(tokenAddr);
+
+    if (!token) throw new Error("Selecione um token");
+    if (!isAddr(destino)) throw new Error("Endereço inválido");
+    if (mesmoAddr(destino, userAddress)) throw new Error("Não pode enviar para você mesmo");
+    if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
+
+    const valor = parseUnits(valorStr, token.decimals);
+    const saldo = saldos[token.address] || 0n;
+    if (saldo < valor) throw new Error(`Saldo insuficiente de ${token.symbol}`);
+
+    toast(`⏳ Enviando ${fmt(valor, token.decimals, 4)} ${token.symbol}…`, "info");
+
+    const txParams = {
+      to: token.address,
+      data: "0x" + S.ERC20.transfer + encAddr(destino) + encUint(valor),
+    };
+    const gasEstimado = await estimarGas(txParams);
+    const tx = await signer.sendTransaction(Object.assign({}, txParams, { gasLimit: gasEstimado || 100000 }));
+
+    toastTxBSC("📤 Token BSC:", tx.hash, "ok");
+    await tx.wait();
+    toast(`✅ ${token.symbol} enviado na BSC!`, "ok", 6000);
+
+    $("destinoBSCEnvio").value = "";
+    $("valorBSCEnvio").value = "";
+    await carregarSaldosBSC();
+    renderizarSaldos();
+  } catch (e) {
+    console.error("enviarTokenBSC:", e);
+    const { msg, tipo } = traduzirErro(e);
+    toast(msg, tipo, 8000);
+  } finally { isTxBusy = false; }
+}
+
+async function wrapBNB() {
+  if (isTxBusy) return;
+  if (!await garantirRedeBSC()) return;
+  isTxBusy = true;
+  try {
+    const valorStr = $("valorWBNB").value.trim().replace(",", ".");
+    if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
+    const valor = parseUnits(valorStr, 18);
+    const saldoBNB = saldos.BNB_NATIVO || 0n;
+
+    if (valor > saldoBNB) throw new Error(`Saldo insuficiente. Você tem ${fmt(saldoBNB, 18)} BNB.`);
+
+    toast(`⏳ Convertendo ${fmt(valor, 18, 4)} BNB → WBNB…`, "info");
+
+    const txParams = { to: WBNB_ADDRESS, data: "0x" + S.WPOL.deposit, value: valor };
+    const gasEstimado = await estimarGas(txParams);
+    const tx = await signer.sendTransaction(Object.assign({}, txParams, { gasLimit: gasEstimado || 100000 }));
+
+    toastTxBSC("📤 Wrap:", tx.hash, "ok");
+    await tx.wait();
+    toast("✅ BNB convertido em WBNB!", "ok", 6000);
+
+    $("valorWBNB").value = "";
+    await carregarSaldosBSC();
+    renderizarSaldos();
+  } catch (e) {
+    console.error("wrapBNB:", e);
+    const { msg, tipo } = traduzirErro(e);
+    toast(msg, tipo, 8000);
+  } finally { isTxBusy = false; }
+}
+
+async function unwrapWBNB() {
+  if (isTxBusy) return;
+  if (!await garantirRedeBSC()) return;
+  isTxBusy = true;
+  try {
+    const valorStr = $("valorBNB").value.trim().replace(",", ".");
+    if (!valorStr || isNaN(Number(valorStr)) || Number(valorStr) <= 0) throw new Error("Valor inválido");
+    const valor = parseUnits(valorStr, 18);
+
+    const wbnb = TOKENS.find(t => t.symbol === "WBNB");
+    const saldoWBNB = saldos[wbnb.address] || 0n;
+    if (valor > saldoWBNB) throw new Error(`Saldo insuficiente. Você tem ${fmt(saldoWBNB, 18)} WBNB.`);
+
+    toast(`⏳ Convertendo ${fmt(valor, 18, 4)} WBNB → BNB…`, "info");
+
+    const txParams = { to: WBNB_ADDRESS, data: "0x" + S.WPOL.withdraw + encUint(valor) };
+    const gasEstimado = await estimarGas(txParams);
+    const tx = await signer.sendTransaction(Object.assign({}, txParams, { gasLimit: gasEstimado || 100000 }));
+
+    toastTxBSC("📤 Unwrap:", tx.hash, "ok");
+    await tx.wait();
+    toast("✅ WBNB convertido em BNB!", "ok", 6000);
+
+    $("valorBNB").value = "";
+    await carregarSaldosBSC();
+    renderizarSaldos();
+  } catch (e) {
+    console.error("unwrapWBNB:", e);
+    const { msg, tipo } = traduzirErro(e);
+    toast(msg, tipo, 8000);
+  } finally { isTxBusy = false; }
+}
+
+// ============================================================
 // BITCOIN — carteira e envio
 // ============================================================
 async function detectarCarteiraBTC() {
@@ -1545,6 +1756,12 @@ function preencherSeletores() {
   if (fo) fo.innerHTML = '<option value="">Oferece: Todos</option>' + filtroOpts;
   const fp = $("filtroPede");
   if (fp) fp.innerHTML = '<option value="">Pede: Todos</option>' + filtroOpts;
+
+  // ✅ v6.25.0: seletor de tokens BSC
+  const tokensBsc = TOKENS.filter(t => t.somenteBsc);
+  const optsBsc = tokensBsc.map(t => `<option value="${t.address}">${t.symbol} — ${t.name}</option>`).join("");
+  const selBsc = $("selTokenBSCEnvio");
+  if (selBsc) selBsc.innerHTML = optsBsc;
 }
 
 // ============================================================
@@ -1732,6 +1949,13 @@ function renderizarSaldos() {
     if (tipo === "saldoWPOL") {
       const wpol = TOKENS.find(t => t.symbol === "WPOL");
       el.textContent = wpol ? fmt(saldos[wpol.address] || 0n, 18) : "0";
+    }
+    // ✅ v6.25.0: hints BNB Chain
+    if (tipo === "saldoBNB") el.textContent = fmt(saldos.BNB_NATIVO || 0n, 18);
+    if (tipo === "saldoBNBDisponivel") el.textContent = fmt(calcularBNBDisponivel(), 18);
+    if (tipo === "saldoWBNB") {
+      const wbnb = TOKENS.find(t => t.symbol === "WBNB");
+      el.textContent = wbnb ? fmt(saldos[wbnb.address] || 0n, 18) : "0";
     }
     if (tipo === "saldo" && ref) {
       const s = $(ref);
@@ -2406,7 +2630,7 @@ async function cancelarOrdem(escrowAddr) {
 }
 
 // ============================================================
-// ENVIO DE TOKEN ERC-20
+// ENVIO DE TOKEN ERC-20 (Polygon)
 // ============================================================
 async function enviarToken() {
   if (!signer || !userAddress || isTxBusy || !S) return;
@@ -2530,6 +2754,10 @@ function configurarAbas() {
         if (btcWallet) setTimeout(atualizarSaldoBTCEnvio, 200);
       }
       if (aba === "crosschain") setTimeout(atualizarHintCC, 100);
+      // ✅ v6.25.0: garante saldo BSC fresco ao abrir a aba
+      if (aba === "bnbchain") {
+        carregarSaldosBSC().then(() => renderizarSaldos()).catch(() => {});
+      }
       setTimeout(renderizarSaldos, 50);
     });
   });
@@ -2617,6 +2845,38 @@ function configurarMax() {
     const token = TOKENS.find(t => t.symbol === origem.tokenSymbol);
     if (token && (saldos[token.address] || 0n) > 0n) $("ccValor").value = ethers.utils.formatUnits(saldos[token.address], token.decimals);
   });
+
+  // ✅ v6.25.0: MAX para BNB Chain
+  const mBNB1 = $("btnMaxBNBEnvio");
+  if (mBNB1) mBNB1.addEventListener("click", () => {
+    const disponivel = calcularBNBDisponivel();
+    if (disponivel > 0n) $("valorBNBEnvio").value = ethers.utils.formatUnits(disponivel, 18);
+    else toast("Saldo insuficiente (reserva de gas BNB).", "warn");
+  });
+
+  const mBNB2 = $("btnMaxBSCEnvio");
+  if (mBNB2) mBNB2.addEventListener("click", () => {
+    const selEl = $("selTokenBSCEnvio");
+    if (!selEl || !selEl.value) return;
+    const tok = tokenPorEndereco(selEl.value);
+    const saldo = saldos[tok.address] || 0n;
+    if (saldo > 0n) $("valorBSCEnvio").value = ethers.utils.formatUnits(saldo, tok.decimals);
+  });
+
+  const mBNB3 = $("btnMaxWrapBNB");
+  if (mBNB3) mBNB3.addEventListener("click", () => {
+    const reserva = parseUnits("0.001", 18);
+    const saldo = saldos.BNB_NATIVO || 0n;
+    const disponivel = saldo > reserva ? saldo - reserva : 0n;
+    if (disponivel > 0n) $("valorWBNB").value = ethers.utils.formatUnits(disponivel, 18);
+  });
+
+  const mBNB4 = $("btnMaxUnwrapBNB");
+  if (mBNB4) mBNB4.addEventListener("click", () => {
+    const wbnb = TOKENS.find(t => t.symbol === "WBNB");
+    const saldo = saldos[wbnb.address] || 0n;
+    if (saldo > 0n) $("valorBNB").value = ethers.utils.formatUnits(saldo, 18);
+  });
 }
 
 function configurarBotoes() {
@@ -2653,6 +2913,18 @@ function configurarBotoes() {
   const mr1 = $("btnMinhasRedes");       if (mr1) mr1.addEventListener("click", abrirModalRedes);
   const mr2 = $("btnFecharModalRedes");  if (mr2) mr2.addEventListener("click", fecharModalRedes);
   const mr3 = $("btnFecharModalRedes2"); if (mr3) mr3.addEventListener("click", fecharModalRedes);
+
+  // ✅ v6.25.0: ações BNB Chain
+  const ebBNB = $("btnEnviarBNB");       if (ebBNB) ebBNB.addEventListener("click", enviarBNB);
+  const ebBSC = $("btnEnviarBSC");       if (ebBSC) ebBSC.addEventListener("click", enviarTokenBSC);
+  const wBNB  = $("btnConverterWBNB");   if (wBNB)  wBNB.addEventListener("click", wrapBNB);
+  const uBNB  = $("btnConverterBNB");    if (uBNB)  uBNB.addEventListener("click", unwrapWBNB);
+
+  const selBsc = $("selTokenBSCEnvio");
+  if (selBsc) selBsc.addEventListener("change", renderizarSaldos);
+
+  const bnbDest = $("destinoBNB");
+  if (bnbDest) bnbDest.addEventListener("keydown", e => { if (e.key === "Enter") enviarBNB(); });
 
   const modalCart = $("modalCarteiras");
   if (modalCart) {
@@ -2769,7 +3041,7 @@ function configurarEventosWallet() {
 // INIT
 // ============================================================
 async function init() {
-  console.log("🚀 BRN Exchange v6.24.3 — inicializando…");
+  console.log("🚀 BRN Exchange v6.25.0 — inicializando…");
 
   verificarIDsHTML();
   inicializarDescobertaCarteiras();
