@@ -137,6 +137,7 @@
             <button data-tab="criar">💰 Criar Ordem</button>
             <button data-tab="enviar">📤 Enviar Tokens</button>
             <button data-tab="enviarpol">💎 Enviar POL</button>
+            <button data-tab="bnbchain">🟡 BNB Chain</button>
             <button data-tab="swap">🔄 POL ↔ WPOL</button>
             <button data-tab="bitcoin">₿ Consultar BTC</button>
             <button data-tab="crosschain">🌉 Bridge Cross-Chain</button>
@@ -258,6 +259,97 @@
                 <button id="btnEnviarPOL" class="btn btn-btc" style="width:100%; margin-top:12px;">💎 Enviar POL</button>
                 <p class="source-note">
                     ⚠️ Você precisa ter saldo de POL suficiente para pagar a taxa de gas. Uma reserva de 0.05 POL é mantida automaticamente.
+                </p>
+            </div>
+        </div>
+
+        <!-- ==================== PAINEL: BNB CHAIN (v6.25.0) ==================== -->
+        <div id="panel-bnbchain" class="panel" hidden>
+            <div class="card">
+                <h2>🟡 BNB Chain (BSC)</h2>
+                <p class="dim" style="font-size:0.85rem; margin-bottom:16px;">
+                    Envie BNB nativo ou tokens BEP-20, e faça wrap/unwrap BNB ↔ WBNB.
+                    Os saldos são lidos automaticamente da rede BSC.
+                </p>
+
+                <!-- Enviar BNB nativo -->
+                <h3>💛 Enviar BNB (nativo BSC)</h3>
+                <div class="input-group">
+                    <label>Endereço de destino:</label>
+                    <input type="text" id="destinoBNB" placeholder="0x...">
+                    <small class="dim" style="display:block; margin-top:4px;">
+                        ⚠️ Confira duas vezes. Transação irreversível.
+                    </small>
+                </div>
+                <div class="input-group">
+                    <label>Valor a enviar:</label>
+                    <div class="row">
+                        <input type="text" id="valorBNBEnvio" placeholder="0.0">
+                        <button id="btnMaxBNBEnvio" class="btn btn-sm">MAX</button>
+                    </div>
+                    <small class="dim" style="display:block; margin-top:4px;">
+                        Disponível: <span data-hint="saldoBNBDisponivel">0.00</span> BNB
+                        <br>
+                        <span style="opacity:0.7;">(reserva 0.002 BNB para gas automaticamente)</span>
+                    </small>
+                </div>
+                <button id="btnEnviarBNB" class="btn btn-btc" style="width:100%;">💛 Enviar BNB</button>
+
+                <hr style="margin:24px 0; border-color:var(--border);">
+
+                <!-- Enviar token BEP-20 -->
+                <h3>📤 Enviar Token BEP-20</h3>
+                <div class="input-group">
+                    <label>Token:</label>
+                    <select id="selTokenBSCEnvio"></select>
+                </div>
+                <div class="input-group">
+                    <label>Endereço de destino:</label>
+                    <input type="text" id="destinoBSCEnvio" placeholder="0x...">
+                </div>
+                <div class="input-group">
+                    <label>Valor:</label>
+                    <div class="row">
+                        <input type="text" id="valorBSCEnvio" placeholder="0.0">
+                        <button id="btnMaxBSCEnvio" class="btn btn-sm">MAX</button>
+                    </div>
+                    <small id="hintBSCEnvio" data-hint="saldo:selTokenBSCEnvio" class="dim"
+                           style="display:block; margin-top:4px;">Saldo: —</small>
+                </div>
+                <button id="btnEnviarBSC" class="btn btn-primary" style="width:100%;">📤 Enviar Token BSC</button>
+
+                <hr style="margin:24px 0; border-color:var(--border);">
+
+                <!-- Wrap / Unwrap BNB ↔ WBNB -->
+                <h3>🔁 Wrap / Unwrap BNB ↔ WBNB</h3>
+                <div class="trade-forms">
+                    <div class="form-card">
+                        <h3>Embrulhar (BNB → WBNB)</h3>
+                        <div class="form-group">
+                            <small class="dim">Saldo: <span data-hint="saldoBNB">0.00</span> BNB</small>
+                            <div class="row" style="margin-top:6px;">
+                                <input type="text" id="valorWBNB" placeholder="0.0">
+                                <button id="btnMaxWrapBNB" class="btn btn-sm">MAX</button>
+                            </div>
+                        </div>
+                        <button id="btnConverterWBNB" class="btn btn-success" style="width:100%;">Converter para WBNB</button>
+                    </div>
+                    <div class="form-card">
+                        <h3>Desembrulhar (WBNB → BNB)</h3>
+                        <div class="form-group">
+                            <small class="dim">Saldo: <span data-hint="saldoWBNB">0.00</span> WBNB</small>
+                            <div class="row" style="margin-top:6px;">
+                                <input type="text" id="valorBNB" placeholder="0.0">
+                                <button id="btnMaxUnwrapBNB" class="btn btn-sm">MAX</button>
+                            </div>
+                        </div>
+                        <button id="btnConverterBNB" class="btn btn-danger" style="width:100%;">Converter para BNB</button>
+                    </div>
+                </div>
+
+                <p class="source-note" style="margin-top:16px;">
+                    ⚠️ Todas as operações desta aba requerem a rede <strong>BSC (BNB Chain)</strong>.
+                    A app troca automaticamente a rede da tua carteira antes de enviar a transação.
                 </p>
             </div>
         </div>
@@ -608,6 +700,6 @@
     <div id="toasts" class="toast-container"></div>
 
     <!-- ==================== SCRIPTS ==================== -->
-    <script src="app.js?v=6.24.3"></script>
+    <script src="app.js?v=6.25.0"></script>
 </body>
 </html>
